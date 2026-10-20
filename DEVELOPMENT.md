@@ -3,7 +3,7 @@
 > 文档版本：v1  
 > 对照快照：本地 `/workspace/wuwa-emoji/`（Asia/Shanghai，采集/构建日 2026-10-20）  
 > R2 桶：`wuwa`  
-> Account S3 兼容端点：`https://038d174b73fa2299587548b93b5775b4.r2.cloudflarestorage.com`  
+> Account S3 兼容端点：`https://<account-id>.r2.cloudflarestorage.com`  
 > **本文不含任何 Access Key / Secret Key / API Token。**
 
 ---
@@ -89,7 +89,7 @@
 | 项 | 值 |
 |----|-----|
 | Bucket | `wuwa` |
-| S3 API Endpoint | `https://038d174b73fa2299587548b93b5775b4.r2.cloudflarestorage.com` |
+| S3 API Endpoint | `https://<account-id>.r2.cloudflarestorage.com` |
 | 布局前缀 | `meta/v1/`、`assets/v1/packs/`、`sync/v1/` |
 
 凭证通过环境变量或密钥管理注入（见第 8 节），**不要**写进仓库或本文档。
