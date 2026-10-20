@@ -14,12 +14,16 @@ const DARK_QUERY = '(prefers-color-scheme: dark)'
 /** Inline boot script: set data-theme and the theme-color meta before first paint. */
 export const THEME_BOOT = `(function(){var n=false;try{var p=localStorage.getItem(${JSON.stringify(THEME_KEY)});n=p==="night"||(p!=="light"&&matchMedia(${JSON.stringify(DARK_QUERY)}).matches)}catch(e){}if(n)document.documentElement.setAttribute("data-theme","night");var m=document.createElement("meta");m.name="theme-color";m.content=n?${JSON.stringify(THEME_COLORS.night)}:${JSON.stringify(THEME_COLORS.light)};document.head.appendChild(m)})()`
 
+/** The choice made on this page when storage is blocked (it then holds for this page only). */
+let pagePref: ThemePref | null = null
+
+/** The stored preference (client snapshot for useSyncExternalStore: the /me 夜潮 control). */
 export function readPref(): ThemePref {
   try {
     const v = localStorage.getItem(THEME_KEY)
     return v === 'light' || v === 'night' ? v : 'system'
   } catch {
-    return 'system'
+    return pagePref ?? 'system'
   }
 }
 
@@ -59,6 +63,7 @@ export function setPref(pref: ThemePref) {
     else localStorage.setItem(THEME_KEY, pref)
   } catch {
     // storage blocked: the choice holds for this page only
+    pagePref = pref
   }
   apply(nightFor(pref))
   emit()

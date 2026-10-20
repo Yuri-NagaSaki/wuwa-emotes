@@ -64,7 +64,8 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink, dialo
   const animated = pack.emojis.filter((e) => e.frames > 1).length
   const bytes = pack.emojis.reduce((s, e) => s + e.bytes, 0)
   const acc = packAccent(pack)
-  const firstChar = pack.characters[0]
+  // the crumb credits the pack's character; a group pack (合集) belongs to none of its characters
+  const firstChar = pack.group ? undefined : pack.characters[0]
   const zipBusy = dl.busy === `zip:${pack.slug}`
 
   const toggle = (id: string) =>

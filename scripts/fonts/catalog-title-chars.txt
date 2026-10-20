@@ -1,0 +1,6 @@
+# Characters of the production catalog's display text: pack titles and character, artist and tag names
+# (public text, collected 2026-10-20). build.ts puts them into a few shared shards right after the
+# site's own copy (site-chars.txt), so every page that shows titles reuses the same files. Lines
+# starting with # and whitespace are ignored. Refresh it when the catalog has drifted far; a character
+# missing here still ships, in the later shards.
+·×—【】一七三下不与世个丹举么乐九也书了予二互五亚交人什仆仇今仔们优伙会伴住侣信做儿兔全八公六兰共典冬冰凌创动勒包十千华卜卡印友双变古叮可叽吃各合吉同名君吟呜周呼和咔咕咖咚咲咻品哈唱善喵嗞嗷嘉嚓四因园围国图圆圣坎坏坦城基塔声夏大天夭头奈奥女好妮妹姆娅娜婚子孔字学宁宅守安官宝宵家寸小尤尾居屋岁岸巾布师希帕常年幼庆建式弗弥弹录彩微德心忌态怡情慵懒截手扎折披拉捂捏推提放散敷斐斯新旗无日早时星春晚景暗暝曰曲月朋服机朽松板枚果枝柒校格桃梨椿榕模樽款步武比水汐河泊泠波洛海清渊漂漆演潮灯灵灼炎炽烤燃爆爱版牌特狐猫玄玩珂球琳琵琶瑚瑟瑾瓜生田男画界留白的盒相眼睡瞑瞳矩礼祈神离秋种秧稚穗空站章童第篇米精糖红纱绯维罗美群翎者耳聊联聚肉脸腐致良色节芷茶荐莉莫莱菈菲萌萝萨蕾薪蛇蜜衣表衫袍装裙西要角诞诺豚象贝货赞赤赫转辑辛辞达过这远选那配酱酸釉里鉴锁错镇长门队阳阴阵阿陆集雪雷雾霖霞露静韩颊飞饭饰饱饺饼骸鬼魔鸣鸭黎黑鼬（）

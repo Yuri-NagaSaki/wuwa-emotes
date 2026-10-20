@@ -4,6 +4,7 @@ import { CharacterPage, type CharacterTab, type EmojiTypeFilter } from '#/ui/pag
 import { emojiParam } from '#/ui/pages/search-params'
 import { characterCountText } from '#/shared/characters'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 // 角色详情. Old slugs (legacy_slug, the redirects table) answer 301; unknown ones are 404. A character
 // that only appears in group packs opens on its 合集包 (the server picks that tab when it has no 包).
@@ -29,6 +30,7 @@ export const Route = createFileRoute('/_site/characters/$slug')({
     if (r.kind === 'missing') throw notFound()
     return r
   },
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData: d }) => {
     if (!d) return {}
     const c = d.character

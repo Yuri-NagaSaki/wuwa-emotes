@@ -10,6 +10,7 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { Modal, ModalClose } from '../Modal'
 import { BulkBar, fmtDay, PackStatusPill, PageHead, Pager, Panel, SelectField, Thumb, toggled, useAction } from './bits'
+import { swatch } from './swatch'
 
 export interface PacksSearch {
   q?: string
@@ -188,7 +189,7 @@ export function PacksPage({ data, search }: { data: PackListData; search: PacksS
                   <td className="col-opt">
                     <div className="tags">
                       {p.characters.slice(0, 2).map((c) => (
-                        <Tag key={c.name} color={c.color ?? undefined}>
+                        <Tag key={c.name} color={c.color ? swatch(c.color) : undefined}>
                           {c.name}
                         </Tag>
                       ))}

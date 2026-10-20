@@ -114,12 +114,6 @@ export interface PackEmoji extends EmojiImage {
   characters: CharacterRef[]
 }
 
-export interface PackNeighbor {
-  slug: string
-  title: string
-  cover: EmojiImage | null
-}
-
 export interface PackDetail {
   id: number
   slug: string
@@ -142,6 +136,11 @@ export interface PackDetail {
   /** Every public emoji, in pack order (sort_order, created_at, id). */
   emojis: PackEmoji[]
   characters: CharacterRef[]
+  /**
+   * A group pack (合集): every tagged sticker carries the same list of two or more characters
+   * (attribution.ts rule 1) and the pack is not a single character's; its page credits none of them.
+   */
+  group: boolean
   /** pack_artists role = artist */
   artists: ArtistRef[]
   /** pack_artists role = commissioner (约稿人 with an artist page) */
@@ -150,9 +149,6 @@ export interface PackDetail {
   commissionerText: string | null
   creditsText: string | null
   tags: TagsByDimension
-  /** Publication order: prev = the pack published just before this one, next = just after. */
-  prev: PackNeighbor | null
-  next: PackNeighbor | null
 }
 
 export type PackLookup = { kind: 'pack'; pack: PackDetail } | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }

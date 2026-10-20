@@ -328,6 +328,16 @@ describe('pack pages still show who appears in a group pack', () => {
     if (d.kind !== 'pack') throw new Error('expected a pack')
     expect(d.pack.characters.map((c) => c.slug).sort()).toEqual([...ALL_PIPA].sort())
   })
+
+  test('group packs are flagged (their crumb credits no character); copied tags in a one-character pack are not', async () => {
+    const group = async (slug: string) => {
+      const d = await getPackDetail(slug)
+      if (d.kind !== 'pack') throw new Error(`expected pack ${slug}`)
+      return d.pack.group
+    }
+    for (const slug of COPIED_PACKS) expect(await group(slug), slug).toBe(true)
+    for (const slug of ['s-abu', 'g-varied', 'g-xin', 's-lupa', 'aimisi-01', 'multi-01']) expect(await group(slug), slug).toBe(false)
+  })
 })
 
 describe('portraits', () => {

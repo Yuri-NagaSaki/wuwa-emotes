@@ -176,7 +176,7 @@ wuwa/
 - **抽帧实现**：先把动图解码为 RGBA 长条，抽出保留的帧并缩放，再用 sharp 的 `raw: { width, height, channels, pageHeight }` 重新包装后编码。`webp()` 没有 `pageHeight` 参数，传了会被忽略，输出变成一张竖长的静态图。
 - **每帧都相同的动图按静态图保存**：WebP 编码器会合并相邻的相同帧。`a160` 编码后不足 2 帧，说明原图每一帧都一样，这时不保存 `a160`，`frames` 记为 1，只有 `p240`。
 - **上传限制**：单个文件 ≤ 20 MB，边长 ≤ 2048，帧数 ≤ 400，帧数 × 宽 × 高 ≤ 1.2 亿像素。超出时 ingest 失败并在上传列表里显示原因。
-- **并发与内存**：sharp 只在 worker 进程和一次性的命令行容器里运行，`sharp.cache(false)`、`sharp.concurrency(1)`，`limitInputPixels` 为 1.2 亿。`media.derive` 队列每个 worker 同时跑 6 个任务，但 `oneImageAtATime` 让同一进程里的 sharp 工作一次只做一个，内存里最多有一张解码后的动图；任务之间重叠的是 R2 读写。任务超时由 pg-boss 的 `expireInSeconds` 控制（第 12.5 节）。
+- **并发与内存**：sharp 只在 worker 进程和一次性的命令行容器里运行，`sharp.cache(false)`、`sharp.concurrency(1)`，`limitInputPixels` 为 1.2 亿。`media.derive` 队列每个 worker 同时跑 6 个任务，但 `oneImageAtATime` 让同一进程里的 sharp 工作一次只做一个，内存里最多有一张解码后的动图；任务之间重叠的是 R2 读写。等待中的工作 `media.derive`（审核预览与公开衍生图）先于 `media.full`（单张弹窗的原尺寸图），正在做的不打断，一批原尺寸图不会拖慢审核预览；`media.ingest` 只读元数据，不占这个名额。任务超时由 pg-boss 的 `expireInSeconds` 控制（第 12.5 节）。
 - **实测（生产，2026-10-20，v1 回填）**：并发 1 时每个任务 2.3 秒，worker 只用到单核的 8%；改为 6 个并发后每分钟 112 个任务，worker CPU 48%、内存 258 MB。
 
 ---
@@ -425,8 +425,8 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **包卡片高度档位**（`src/ui/pack-card-tiers.ts`）：卡片高度必须不经测量就能算出，但所有卡片一样高会让瀑布流变成网格。所以每张卡片按自己的文字估算标题（1–2 行）、简介、角色标签和统计各占几行（中日韩字符按 1em、拉丁字母约 0.56em 估算），CSS 把文字截到选定的行数；角色标签按最窄的卡片宽度排行，不会出现被切掉一半的标签行。估算略有偏差时只会留出一点空白或出现省略号。
 - **潮汐画廊**（`src/ui/pages/stream-layout.ts`、`StreamGrid.tsx`）：方形贴纸格、每第 11 张一个 2×2 焦点格、包卡片和「潮汐小记」混排在 `grid-auto-flow: dense` 网格里。服务端 HTML 由浏览器排版；挂载后脚本按同一套 dense 算法自行定位，位置不变，然后只挂载视口附近的行。
 - **圆角规则**（`src/ui/styles/components.css`）：贴纸多是方形且常有不透明底，所以圆角框里的图片不留直角。内嵌的图片取同心圆角（框的圆角 − 边框 − 内边距，至少 6 px，经 `--media-r` 传递）；贴到框边的图片由框裁切；圆框里放圆图。`tests/pages/corner-audit.ts` 检查。
-- **字体**：页面主标题、包名、角色名、画师名和卡片标题用 `TP Rounded`（寒蝉圆黑体 v3.750 的 Bold 与 Heavy，OFL-1.1）；正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，去掉 `locl` 与 `aalt`，用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
-- **白昼与夜潮**（`src/ui/shell/theme.ts`）：两套设计令牌，夜潮在 `html[data-theme="night"]`。偏好存在 `localStorage` 的 `tp-theme`，默认跟随系统，页头的月亮 / 太阳按钮切换。`<head>` 里的内联脚本在首次绘制前设置主题和 `theme-color`，夜间页面不会先闪白。贴纸底板（`--tp-well`）在两套主题里都是浅色纸面，因为很多贴纸有深色描边或不透明的白底。
+- **字体**：页面主标题、包名、角色名、画师名和卡片标题用 `TP Rounded`（寒蝉圆黑体 v3.750 的 Bold 与 Heavy，OFL-1.1）；正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，排版特性只保留浏览器默认启用的 ccmp、liga、kern，以及 Chrome 挤压相邻标点时用的 halt（`locl` 与 `aalt` 都已去掉），用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。分片按用字分层：首页、表情包、包页、角色图鉴和单张页上的站点文字（`scripts/fonts/site-chars.txt` 第一行）连同空格占一个分片；ASCII 一个分片；目录全部标题和名称的用字（`scripts/fonts/catalog-title-chars.txt`，约 400 字）在 Bold 里分成 4 个大分片，在 Heavy 里每 20 字一个分片；其余按频率自动切分。卡片标题用 Bold，一页卡片会用到大部分标题用字，之后的页面直接用缓存；Heavy 只排一页的 h1，小分片更省。用生产标题实测手机首访，字体（含 Nunito 38 KB）首页 180 KB、9 个文件，表情包 155 KB，包页 69 KB，角色图鉴 64 KB；`tests/pages/font-cost.ts` 可以给别的分片方案估价。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
+- **白昼与夜潮**（`src/ui/shell/theme.ts`）：两套设计令牌，夜潮在 `html[data-theme="night"]`。偏好存在 `localStorage` 的 `tp-theme`，默认跟随系统；页头的月亮 / 太阳按钮在白昼和夜潮之间切换，个人中心「设置」里的夜潮主题可以选跟随系统、白昼或夜潮，两处读写同一个偏好。`<head>` 里的内联脚本在首次绘制前设置主题和 `theme-color`，夜间页面不会先闪白。贴纸底板（`--tp-well`）在两套主题里都是浅色纸面，因为很多贴纸有深色描边或不透明的白底。
 - **角色颜色**（`src/ui/pages/model.ts`）：`characters.theme_color`（调色板名或 CSS 颜色）有值时用它；没有时按 slug 做 31 进制哈希，从 13 个设计色里取一个。服务端和客户端结果相同，封面、标签和描边因此不会全是同一种颜色。
 - **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
 - **页面外壳**：页头（含主题切换和「打包」按钮）、手机底部标签栏、页脚（显示目录总数）、站点公告条，模拟登录时置顶的「结束模拟」条，`Ctrl K` 命令面板（首次打开时才加载，联想来自 `suggestFn` 的进程内索引）。任何未匹配的地址都在站点外壳里渲染 404 页，并返回 404 状态码（`src/routes/_site/$.tsx`）。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
@@ -623,7 +623,6 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 | UI | `react` / `react-dom` | 19.3.1 | |
 | 无样式组件 | `@base-ui/react` | 1.9.0 | 外观按设计令牌自建 |
 | 数据获取 | `@tanstack/react-query` | 5.104.5 | 首屏由路由 loader 直出 |
-| 虚拟列表 | `@tanstack/react-virtual` | 3.14.21 | 仍在依赖里，当前代码不再使用：瀑布流改为服务端算好的布局（第 8.1 节） |
 | 认证 | `better-auth` | 1.7.11 | 内置 Drizzle 适配器与 admin 插件 |
 | ORM | `drizzle-orm` / `drizzle-kit` / `pg` | 0.45.4 / 0.31.11 / 8.23.1 | |
 | 数据库 | PostgreSQL | 18（`postgres:18-bookworm`） | `pg_trgm`；镜像内带 `postgresql-client-18` 供备份 |
@@ -908,7 +907,6 @@ v1 快照（R2 `meta/v1`）：
 - TanStack Start 部署：<https://tanstack.com/start/latest/docs/framework/react/guide/hosting>
 - Better Auth TanStack 集成：<https://www.better-auth.com/docs/integrations/tanstack>
 - Better Auth admin 插件：<https://www.better-auth.com/docs/plugins/admin>
-- TanStack Virtual：<https://tanstack.com/virtual/latest/docs/api/virtualizer>
 - pg-boss 定时任务：<https://pgboss.io/api/scheduling>
 - Drizzle 迁移：<https://orm.drizzle.team/docs/migrations>
 - sharp 构造参数：<https://sharp.pixelplumbing.com/api-constructor>

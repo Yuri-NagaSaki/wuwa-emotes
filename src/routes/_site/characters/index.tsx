@@ -2,12 +2,14 @@ import { createFileRoute } from '@tanstack/react-router'
 import { charactersFn } from '#/server/catalog/fns'
 import { type CharacterSort, CharactersPage } from '#/ui/pages/CharactersPage'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/characters/')({
   validateSearch: (s: Record<string, unknown>): { sort?: Exclude<CharacterSort, 'count'> } =>
     s.sort === 'recent' || s.sort === 'pinyin' ? { sort: s.sort } : {},
   loaderDeps: ({ search }) => ({ sort: (search.sort ?? 'count') as CharacterSort }),
   loader: ({ deps }) => charactersFn({ data: { sort: deps.sort } }),
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) =>
     pageHead(matches, {
       title: '角色图鉴',

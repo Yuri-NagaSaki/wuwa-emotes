@@ -1,0 +1,11 @@
+# Characters of the site's own copy that the public pages set in TP Rounded (logo, hero, page titles,
+# ribbons, section and footer headings, empty states), in the order the pages first use them.
+# Line 1: home, /packs, a pack page, /characters and a sticker page; build.ts ships it as the first
+# shard. Line 2: the other public pages (character, gallery, search, explore, artists, docs, account
+# forms, 打包清单, 404), in later shards. Generated with tests/pages/font-cost.ts at 390 and 1440 px:
+#   --skip-text <every pack title and character, artist, tag and user name in the database>
+#   --vocab <file> --vocab-lead 5  (ASCII is left out: build.ts ships it as one group of its own)
+# Lines starting with # and whitespace inside a line are ignored. Rerun when the display copy changes
+# much; a character missing here still ships, in a later shard.
+则区池浏潮社规览情表，色角退一上新架汐站选后官捡方枚流精长包还有没论评图鉴张第
+来画「」冲岸廊自师与·今企具再分划原型工抽按探推日机次源类索组荐设随名录么什本权里下于从关内哪字容授数是申署诉载在中友接整理链的你们使储利务商地存怎我收政服用私策隐集。了回水都到欢迎个册安家注找密码单打清也想看要许这面页

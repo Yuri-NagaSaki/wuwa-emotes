@@ -2,9 +2,13 @@
 
 usage: python3 -I prep.py <src.otf> <out.otf> <charset.txt> <style>
 
-- Layout features use an explicit allow-list. `locl` is left out on purpose: upstream registers it for
-  DFLT and ZHS and swaps 户, 令 and the digits for Japanese forms in every language. `aalt` is left out
-  because it only lists alternates and would pull every alternate glyph into the subset.
+- Layout features use an explicit allow-list: what browsers apply to horizontal text by default (ccmp,
+  liga, kern) and halt, which Chrome's text-spacing-trim uses to collapse adjacent CJK punctuation.
+  `locl` is left out on purpose: upstream registers it for DFLT and ZHS and swaps 户, 令 and the digits
+  for Japanese forms in every language. `aalt` only lists alternates and would pull every alternate glyph
+  into the subset. The site never turns on the others (frac, sups, ordn, palt, fwid, hwid, pwid, and the
+  vertical vert, vhal, vpal); their alternate glyphs only made the shards larger (the ASCII shard by
+  about a third).
 - The upstream copyright (name ID 0) declares the Reserved Font Names 'Source' and 'ChillRounded', so the
   modified font is published as "TP Rounded": every font-name record and the CFF names are rewritten.
   Copyright (0), designer/vendor credits and the license records (13, 14) are kept.
@@ -16,7 +20,7 @@ from fontTools.ttLib import TTFont
 
 FAMILY = "TP Rounded"
 PS_FAMILY = "TPRounded"
-FEATURES = ["ccmp", "liga", "kern", "frac", "sups", "ordn", "palt", "halt", "vert", "vhal", "vpal", "fwid", "hwid", "pwid"]
+FEATURES = ["ccmp", "liga", "kern", "halt"]
 FONT_NAME_IDS = {1, 2, 3, 4, 6, 16, 17, 18, 20, 21, 22, 25}
 
 

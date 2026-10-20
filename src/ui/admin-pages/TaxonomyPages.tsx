@@ -11,6 +11,7 @@ import { Modal, ModalClose } from '../Modal'
 import { Seg } from '../Seg'
 import { Sheet } from '../Sheet'
 import { Kpi, PageHead, Panel, SelectField, useAction } from './bits'
+import { swatch } from './swatch'
 
 // 角色 · 画师 · 标签: lists with counts, an edit drawer, and the merge tool (A → B: links, aliases and
 // old URLs move to B; A is deleted).
@@ -18,8 +19,6 @@ import { Kpi, PageHead, Panel, SelectField, useAction } from './bits'
 type Kind = 'character' | 'artist' | 'tag'
 const KIND_NAME: Record<Kind, string> = { character: '角色', artist: '画师', tag: '标签' }
 
-/** theme_color is a palette name (pink, yg …, the --c-* tokens) or a CSS color. */
-const swatch = (v: string) => (/^[a-z]+$/.test(v.trim()) ? `var(--c-${v.trim()}, ${v.trim()})` : v)
 export const DIMENSIONS: Record<TagDimension, string> = { group: '分组', tool: '工具', project: '企划', origin: '原设', custom: '自定义' }
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {

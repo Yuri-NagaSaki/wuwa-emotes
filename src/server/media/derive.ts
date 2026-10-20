@@ -147,17 +147,37 @@ export function configureSharp() {
   sharp.concurrency(1)
 }
 
-let imageTail: Promise<unknown> = Promise.resolve()
+/** Who goes first when sharp work waits for the image slot. */
+export type ImagePriority = 'high' | 'low'
+
+const waiting: Record<ImagePriority, (() => void)[]> = { high: [], low: [] }
+let imageBusy = false
+
+function nextImage() {
+  const start = waiting.high.shift() ?? waiting.low.shift()
+  if (start) start()
+  else imageBusy = false
+}
 
 /**
  * Run sharp work one job at a time per process: at most one decoded animation is in memory, whatever
  * the queue concurrency. The storage I/O around it (seconds per job against R2) still overlaps.
+ * Waiting work starts by priority, in call order within a level: 'high' (the default: media.derive,
+ * which makes the review previews and the public p240/a160) before 'low' (media.full, the dialog's
+ * full-size render, which can take seconds for a long animation and is rendered lazily anyway), so a
+ * batch of full renders never holds up a reviewer's previews. Running work is not interrupted.
+ * media.ingest only reads metadata (probe) and does not take the slot.
  */
-export function oneImageAtATime<T>(work: () => Promise<T>): Promise<T> {
-  const run = imageTail.then(work)
-  imageTail = run.then(
-    () => undefined,
-    () => undefined,
-  )
-  return run
+export function oneImageAtATime<T>(work: () => Promise<T>, priority: ImagePriority = 'high'): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const start = () => {
+      imageBusy = true
+      Promise.resolve()
+        .then(work)
+        .then(resolve, reject)
+        .finally(nextImage)
+    }
+    if (imageBusy) waiting[priority].push(start)
+    else start()
+  })
 }

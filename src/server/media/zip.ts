@@ -45,8 +45,8 @@ const HASH_VERSION = 'chaochi-zip-v2'
  * sha256 over what the archive contains, so any change that alters the ZIP gives a new hash:
  *  - one line per entry in archive order: `<entry name>\t<emoji id>\t<sha256 | bytes:<n>>`. Entry names
  *    come from zipEntryNames, so the pack slug, the sort order and the file extensions are covered;
- *  - the CREDITS.txt body from buildCreditsText with an empty date (title, slug, license, artists,
- *    commissioner, credits text, source URL, site name and URL).
+ *  - the CREDITS.txt body from buildCreditsText with an empty date (title, artists, commissioner,
+ *    license, this site's page for the pack, credits text, site name and URL).
  * The generation date is left out on purpose: rebuilding the same pack on another day gives the same hash.
  */
 export function packContentHash(content: PackContent): string {
