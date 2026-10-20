@@ -178,6 +178,27 @@ try {
   await clickText(page, '.adm-audit button', '查看改动')
   await page.screenshot({ path: join(outDir, 'interact-audit-diff.png'), fullPage: true })
   check(errors.length === 0, `no page errors (${errors.join(' | ')})`)
+
+  // ---- 模拟登录: 站长 becomes 海风 through the server function's Set-Cookie (own cookie jar) ----
+  const imp = await (await browser.createBrowserContext()).newPage()
+  await imp.setViewport({ width: 1280, height: 800 })
+  await imp.setCookie(...(await cookiesFor(ACCOUNTS[0].email)))
+  await imp.goto(`${base}/admin/users`, { waitUntil: 'networkidle0' })
+  const rowsU = await imp.$$('tbody tr')
+  for (const r of rowsU) {
+    if ((await r.evaluate((el) => el.textContent ?? '')).includes(ACCOUNTS[1].name)) {
+      await (await r.$('button'))!.click()
+      break
+    }
+  }
+  await imp.waitForSelector('.drawer .adm-section')
+  await shot(imp, 'user-sheet')
+  await clickText(imp, '.drawer button', '模拟登录')
+  await imp.waitForSelector('.modal')
+  await Promise.all([imp.waitForNavigation({ waitUntil: 'networkidle0' }), clickText(imp, '.modal button', '模拟登录')])
+  const me = await imp.$eval('.adm-me b', (e) => e.textContent).catch(() => null)
+  check(imp.url().endsWith('/admin') && me === ACCOUNTS[1].name, `impersonation: landed on /admin as ${me}`)
+  await shot(imp, 'impersonating')
 } finally {
   await browser.close()
 }

@@ -185,6 +185,23 @@ export async function setEmojisStatus(actor: Actor, input: { ids: string[]; stat
 
 // ---------- publish pending (staff uploads) ----------
 
+/**
+ * Pending emojis that came in through a user submission (its upload row names the submission, or an
+ * open submission lists it in payload.addEmojiIds). Those go live only through 投稿审核, which applies
+ * the declaration and the 允许下载 decision; publishing them here would leave the submission pending
+ * with its images already public.
+ */
+async function submissionEmojis(ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set()
+  const list = sql.join(ids.map((i) => sql`${i}`), sql`, `)
+  const rows = await many<{ id: string }>(sql`
+    SELECT e.id FROM emojis e WHERE e.id IN (${list}) AND (
+      EXISTS (SELECT 1 FROM upload_items u WHERE u.emoji_id = e.id AND u.submission_id IS NOT NULL)
+      OR EXISTS (SELECT 1 FROM submissions s WHERE s.status IN ('draft', 'pending', 'returned')
+                 AND jsonb_exists(coalesce(s.payload->'addEmojiIds', '[]'::jsonb), e.id)))`)
+  return new Set(rows.map((r) => r.id))
+}
+
 export interface PublishOutcome {
   published: string[]
   waiting: string[]
@@ -203,7 +220,12 @@ export async function publishPendingEmojis(actor: Actor, ids: string[], deps: Me
   const rows = (await loadEmojis(ids)).filter((r) => r.status === 'pending')
   const out: PublishOutcome = { published: [], waiting: [], failed: [] }
   const busy = await busyJobs('media.derive', rows.map((r) => r.id))
+  const submitted = await submissionEmojis(rows.map((r) => r.id))
   for (const r of rows) {
+    if (submitted.has(r.id)) {
+      out.failed.push({ id: r.id, error: '属于用户投稿，请在投稿审核里处理' })
+      continue
+    }
     if (r.p240Bytes == null || busy.has(r.id)) {
       out.waiting.push(r.id)
       continue

@@ -186,7 +186,7 @@ export function EmojisPage({ data, search, packTitle }: { data: Paged<EmojiListR
           detail ? (
             <div className="adm-row-acts">
               {detail.emoji.status === 'pending' ? (
-                <Button size="sm" icon="check" disabled={busy != null} onClick={() => run('publish1', () => adminPublishEmojisFn({ data: { ids: [detail.emoji.id] } }), (r) => (r.published.length ? '已发布' : '预览还没生成，稍后再试'))}>
+                <Button size="sm" icon="check" disabled={busy != null} onClick={() => run('publish1', () => adminPublishEmojisFn({ data: { ids: [detail.emoji.id] } }), (r) => (r.published.length ? '已发布' : r.failed[0]?.error ?? '预览还没生成，稍后再试'))}>
                   发布
                 </Button>
               ) : (

@@ -387,7 +387,9 @@ function Editor({ data }: { data: PackEditorData }) {
                     disabled={busy != null}
                     onClick={() =>
                       run('publish', () => adminPublishEmojisFn({ data: { ids: ids('pending') } }), (r) =>
-                        r.waiting.length ? `已发布 ${r.published.length} 张，${r.waiting.length} 张的预览还在生成` : `已发布 ${r.published.length} 张`,
+                        [`已发布 ${r.published.length} 张`, r.waiting.length ? `${r.waiting.length} 张的预览还在生成` : '', r.failed.length ? `${r.failed.length} 张：${r.failed[0]!.error}` : '']
+                          .filter(Boolean)
+                          .join('，'),
                       ).then(clear)
                     }
                   >
