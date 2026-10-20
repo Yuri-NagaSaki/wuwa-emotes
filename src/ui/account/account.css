@@ -1,16 +1,13 @@
-/* 登录 / 注册 / 个人中心 and the shared page header. Ported from design/prototype/src/tp-pages.css
+/* 登录 / 注册 / 个人中心. Ported from design/prototype/src/tp-pages.css
    (auth, me, list, settings) for pages inside the public layout: the auth split is a rounded panel in
    the page instead of a full-screen frame. Display font only on static headings; names, titles and
    other user content use the body font. Loaded by the routes that use it (head links). */
 
-.page-h { padding: 30px 0 6px; display: grid; gap: 10px; }
-.page-h h1 { font-size: 34px; }
-.page-h .sub { color: var(--tp-muted); font-size: 15px; }
 .dyn { font-family: var(--tp-font-body); letter-spacing: 0.01em; }
 
 /* ============ auth ============ */
 /* prototype: a full-screen split; here it fills the first screen under the site header. */
-.auth { margin: 20px 0 8px; min-height: clamp(560px, calc(100svh - var(--head-h) - 48px), 820px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-radius: var(--r-xl); overflow: hidden; border: 2px solid var(--tp-line); background: var(--tp-bg); box-shadow: var(--sh-soft); }
+.auth { margin: 0 0 8px; min-height: clamp(560px, calc(100svh - var(--head-h) - 56px), 820px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-radius: var(--r-xl); overflow: hidden; border: 2px solid var(--tp-line); background: var(--tp-bg); box-shadow: var(--sh-soft); }
 .auth-art { position: relative; background: var(--tp-deep); color: #eaf7f3; padding: 48px; display: grid; align-content: space-between; gap: 24px; overflow: hidden; }
 .auth-art.purple { background: color-mix(in srgb, var(--tp-deep) 80%, var(--c-purple)); }
 .auth-art h2 { color: #fff; font-size: 40px; line-height: 1.2; max-width: 10em; margin-top: 22px; }
@@ -51,7 +48,8 @@
 .sent.bad > svg.i { color: var(--tp-err); }
 
 /* ============ 个人中心 ============ */
-.me-h { display: flex; gap: 20px; align-items: center; padding: 26px 0 18px; flex-wrap: wrap; }
+/* the prototype's 26px above the header, less the page's own top padding */
+.me-h { display: flex; gap: 20px; align-items: center; padding: 2px 0 18px; flex-wrap: wrap; }
 .me-h .avatar { width: 84px; height: 84px; border-width: 4px; border-color: var(--c-pink); font-size: 32px; background: var(--tp-card); }
 .me-h h1 { font-size: 30px; font-family: var(--tp-font-body); font-weight: 900; }
 .me-h .meta { color: var(--tp-muted); font-size: 14px; }
@@ -125,17 +123,15 @@
 .mob-actbar { display: none; }
 
 @media (max-width: 760px) {
-  .page-h { padding-top: 18px; }
-  .page-h h1 { font-size: 26px; }
   /* edge to edge, like the prototype's phone frame */
-  .auth { grid-template-columns: 1fr; margin: 0 calc(-1 * var(--gutter)); min-height: 0; border-radius: 0; border: 0; box-shadow: none; }
+  .auth { grid-template-columns: 1fr; margin: calc(-1 * var(--page-pt)) calc(-1 * var(--gutter)) 0; min-height: 0; border-radius: 0; border: 0; box-shadow: none; }
   .auth-art { padding: 28px 20px 26px; gap: 8px; }
   .auth-art h2 { font-size: 26px; }
   .auth-art .perks, .auth-art .ring { display: none; }
   .auth-art p { margin-top: 8px; font-size: 13.5px; }
   .auth-art .logo-mark { width: 32px; height: 32px; }
   .auth-form { padding: 22px 16px 24px; align-items: start; }
-  .me-h { padding-top: 16px; gap: 14px; }
+  .me-h { padding-top: 0; gap: 14px; }
   .me-h .avatar { width: 64px; height: 64px; font-size: 24px; }
   .me-h h1 { font-size: 22px; }
   .quota { margin-left: 0; width: 100%; min-width: 0; }
