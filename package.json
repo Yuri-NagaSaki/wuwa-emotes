@@ -17,7 +17,7 @@
     "cli": "bun src/cli.ts",
     "routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
-    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:media",
+    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:downloads && bun run test:media",
     "test:unit": "bun test ./tests/unit",
     "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate",
@@ -26,7 +26,8 @@
     "dev:services": "docker compose -f compose.dev.yaml up -d && docker compose -f compose.dev.yaml run --rm s3-init",
     "dev:services:down": "docker compose -f compose.dev.yaml down",
     "docker:build": "docker build -t chaochi/app:dev --build-arg CHAOCHI_REVISION=dev .",
-    "deploy:loadcheck": "bun deploy/loadcheck.ts"
+    "deploy:loadcheck": "bun deploy/loadcheck.ts",
+    "test:downloads": "CHAOCHI_TEST_DB=chaochi_test_downloads CHAOCHI_TEST_BUCKET=chaochi-test-downloads bun test ./tests/downloads"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1153.0",
