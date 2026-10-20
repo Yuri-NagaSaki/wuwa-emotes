@@ -58,7 +58,8 @@ export function packContentHash(content: PackContent): string {
   return h.digest('hex')
 }
 
-function extension(e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
+/** File extension of an original: from its object key, else from the format (jpeg → jpg). */
+export function originalExtension(e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
   const m = /\.([a-z0-9]+)$/i.exec(e.originalKey)
   if (m) return m[1]!.toLowerCase()
   return e.format === 'jpeg' ? 'jpg' : e.format
@@ -71,7 +72,7 @@ function extension(e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
 export function zipEntryName(slug: string, index: number, total: number, e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
   const base = slug.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').trim() || 'pack'
   const width = Math.max(2, String(total).length)
-  return `${base}-${String(index + 1).padStart(width, '0')}.${extension(e)}`
+  return `${base}-${String(index + 1).padStart(width, '0')}.${originalExtension(e)}`
 }
 
 /** `<slug>-01.gif`, `<slug>-02.png`, … in pack order; two digits at least, more for big packs. */
@@ -144,7 +145,9 @@ export interface PackZipSource {
   hash: string
 }
 
-export type PackZipSourceResult = { ok: true; source: PackZipSource } | { ok: false; reason: string }
+export type PackZipSourceResult =
+  | { ok: true; source: PackZipSource }
+  | { ok: false; code: 'not_found' | 'not_downloadable' | 'empty'; reason: string }
 
 /**
  * What the pack's ZIP should contain right now, and its content hash. Shared by the builder and by
@@ -153,14 +156,14 @@ export type PackZipSourceResult = { ok: true; source: PackZipSource } | { ok: fa
 export async function loadPackZipSource(packId: number): Promise<PackZipSourceResult> {
   const { packs, emojis } = schema
   const [pack] = await db().select().from(packs).where(eq(packs.id, packId))
-  if (!pack) return { ok: false, reason: 'pack not found' }
-  if (pack.status !== 'published' || !pack.downloadable) return { ok: false, reason: 'pack is not published and downloadable' }
+  if (!pack) return { ok: false, code: 'not_found', reason: 'pack not found' }
+  if (pack.status !== 'published' || !pack.downloadable) return { ok: false, code: 'not_downloadable', reason: 'pack is not published and downloadable' }
   const rows = await db()
     .select({ id: emojis.id, sha256: emojis.sha256, bytes: emojis.bytes, originalKey: emojis.originalKey, format: emojis.format })
     .from(emojis)
     .where(and(eq(emojis.packId, packId), eq(emojis.status, 'published')))
     .orderBy(asc(emojis.sortOrder), asc(emojis.id))
-  if (!rows.length) return { ok: false, reason: 'pack has no published emojis' }
+  if (!rows.length) return { ok: false, code: 'empty', reason: 'pack has no published emojis' }
   const credits = await packCredits(pack)
   const hash = packContentHash({ slug: pack.slug, emojis: rows, credits })
   return { ok: true, source: { pack, emojis: rows, names: zipEntryNames(pack.slug, rows), credits, hash } }
