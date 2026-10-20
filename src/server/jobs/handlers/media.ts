@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../../db/client'
 import { log } from '../../log'
@@ -55,6 +56,8 @@ export async function deriveEmoji({ emojiId, target }: JobData['media.derive']) 
       durationMs: p.durationMs,
       posterFrame: poster,
       dominantColor: await dominantColor(buf, poster),
+      // v1 imports have no hash yet; the original is already in memory here
+      ...(e.sha256 ? {} : { sha256: createHash('sha256').update(buf).digest('hex') }),
       p240Bytes: p240.byteLength,
       a160Bytes: a160?.byteLength ?? null,
       ...(target === 'derived' ? { derivedReady: true } : {}),
