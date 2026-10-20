@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import type { MeSummary } from '#/server/account/service'
 import { deleteAccountFn } from '#/server/account/fn'
 import { Button } from '../Button'
+import { cx } from '../cx'
 import { Check, Field, Input } from '../Field'
 import { Icon } from '../Icon'
 import { Modal, ModalClose } from '../Modal'
@@ -89,7 +90,7 @@ function NameRow({ summary, onSaved }: { summary: MeSummary; onSaved: () => void
         <b>显示名称</b>
         <small>评论和投稿里显示的名字，2–16 个字符</small>
       </div>
-      <Input size="sm" value={name} maxLength={16} aria-label="显示名称" invalid={bad} onChange={(e) => setName(e.currentTarget.value)} wrapClassName="grow" />
+      <Input size="sm" value={name} maxLength={16} aria-label="显示名称" invalid={bad} onChange={(e) => setName(e.currentTarget.value)} />
       <Button type="submit" size="sm" disabled={busy || bad || name.trim() === summary.name}>
         保存
       </Button>
@@ -124,7 +125,7 @@ function PasswordRow() {
   }
 
   return (
-    <div className="set-row">
+    <div className={cx('set-row', open && 'is-open')}>
       <div>
         <b>修改密码</b>
         <small>至少 8 位；修改后可以顺便退出其他设备</small>
@@ -278,7 +279,7 @@ function DeleteRow({ onDeleted, isAdmin }: { onDeleted: () => void; isAdmin: boo
         <b>注销账号</b>
         <small>删除账号、收藏、通知和未通过的投稿；已发布的表情包会保留。不能恢复。</small>
       </div>
-      <Button size="sm" variant="ghost" style={{ color: 'var(--tp-err)' }} onClick={() => setOpen(true)}>
+      <Button size="sm" style={{ color: 'var(--tp-err)' }} onClick={() => setOpen(true)}>
         注销
       </Button>
       <Sheet

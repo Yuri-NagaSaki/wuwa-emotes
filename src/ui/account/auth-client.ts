@@ -2,8 +2,9 @@ import { createAuthClient } from 'better-auth/react'
 import { CAP_TOKEN_HEADER } from '../cap/load'
 
 // Better Auth in the browser (/api/auth/*). Created on first use, so server rendering never builds it.
-// Cap-protected calls (sign-in, sign-up, password reset, verification mail) send the single-use token
-// in the x-cap-token header: `authClient().signIn.email(body, withCap(token))`.
+// Cap-protected calls (sign-in, sign-up, the password-reset mail: CAP_PROTECTED_PATHS in
+// src/server/auth/policy.ts) send the single-use token in the x-cap-token header:
+// `authClient().signIn.email(body, withCap(token))`. Resending the verification mail sends none.
 
 type Client = ReturnType<typeof createAuthClient>
 let client: Client | undefined
