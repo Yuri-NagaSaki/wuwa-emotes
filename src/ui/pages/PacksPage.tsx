@@ -1,13 +1,15 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useMemo, useRef, useState, type FormEvent } from 'react'
+import { lazy, Suspense, useMemo, useRef, useState, type FormEvent } from 'react'
 import { packsFn } from '#/server/catalog/fns'
 import type { PacksPageData } from '#/server/catalog/types'
 import { Chip } from '../Chip'
+import { cx } from '../cx'
 import { Input } from '../Field'
 import { fmtN } from '../format'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { Seg } from '../Seg'
+import { PHONE_QUERY, useMediaQuery } from '../useMediaQuery'
 import {
   activeFilters,
   clearFilters,
@@ -21,20 +23,25 @@ import {
   toPackSearch,
 } from './filters'
 import { LazyFilterPopover as FilterPopover } from './LazyFilterPopover'
-import { KIND_LABEL, SOURCE_LABEL, themeColor } from './model'
+import { KIND_LABEL, SOURCE_LABEL, characterColor } from './model'
 import { PackMasonry } from './PackMasonry'
 import { useCursorList } from './useCursorList'
 
-// 表情包目录 /packs: top filter bar (search, five facet chips with content-sized panels; a bottom sheet
-// on phones), active-filter chips, sort, and an infinitely loading masonry. The URL holds the state.
+// 表情包目录 /packs: top filter bar (search, five facet chips with content-sized panels; on phones every
+// chip opens one combined 筛选 sheet), active-filter chips, sort, and an infinitely loading masonry.
+// The URL holds the state.
 
 const COMMON_CHARACTERS = 30
+const PackFiltersSheet = lazy(() => import('./PackFiltersSheet'))
 
 export function PacksPage({ data, state }: { data: PacksPageData; state: PackFilterState }) {
   const navigate = useNavigate()
   const barRef = useRef<HTMLDivElement>(null)
   const [openFacet, setOpenFacet] = useState<FilterKey | null>(null)
   const [charQuery, setCharQuery] = useState('')
+  const phone = useMediaQuery(PHONE_QUERY)
+  // phones: the combined sheet (mounted on first open, kept for its closing animation)
+  const [sheet, setSheet] = useState<'closed' | 'open' | 'mounted'>('closed')
   const f = data.facets
   const list = useCursorList(data.page, (cursor) => packsFn({ data: listInputFor(state, cursor) }))
 
@@ -95,6 +102,26 @@ export function PacksPage({ data, state }: { data: PacksPageData; state: PackFil
             <Input name="q" size="sm" icon="search" placeholder="搜索包名、角色或画师" aria-label="搜索包名、角色或画师" enterKeyHint="search" />
           </form>
           <div className="fb-facets">
+            {phone ? (
+              <>
+                {(
+                  [
+                    ['character', '角色'],
+                    ['artist', '画师'],
+                    ['kind', '类型'],
+                    ['source', '来源'],
+                    ...(f.tags.group.length ? [['group', '分组'] as const] : []),
+                  ] as const
+                ).map(([key, label]) => (
+                  <button key={key} type="button" className={cx('fchip', nameOf(key) ? 'is-set' : null)} aria-haspopup="dialog" onClick={() => setSheet('open')}>
+                    {label}
+                    {nameOf(key) ? <b>{nameOf(key)}</b> : null}
+                    <Icon name="down" size="sm" />
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
             <FilterPopover
               {...facetProps('character', '角色', nameOf('character'))}
               header={
@@ -121,7 +148,7 @@ export function PacksPage({ data, state }: { data: PacksPageData; state: PackFil
                     size="sm"
                     on={state.character === c.slug}
                     count={c.packCount}
-                    avatar={c.avatar ? { src: c.avatar, color: themeColor(c.color) } : null}
+                    avatar={c.avatar ? { src: c.avatar, color: characterColor(c) } : null}
                     onClick={() => pick('character', c.slug)}
                   >
                     {c.name}
@@ -174,6 +201,8 @@ export function PacksPage({ data, state }: { data: PacksPageData; state: PackFil
                 </div>
               </FilterPopover>
             ) : null}
+              </>
+            )}
           </div>
           <Seg size="sm" label="排序" options={SORTS} value={state.sort} onChange={(v) => apply(setSort(state, v))} />
         </div>
@@ -197,6 +226,19 @@ export function PacksPage({ data, state }: { data: PacksPageData; state: PackFil
           )}
         </div>
       </div>
+
+      {sheet !== 'closed' ? (
+        <Suspense fallback={null}>
+          <PackFiltersSheet
+            open={sheet === 'open'}
+            onOpenChange={(o) => setSheet(o ? 'open' : 'mounted')}
+            state={state}
+            facets={f}
+            onPick={(key, value) => void navigate({ to: '/packs', search: toPackSearch(setFilter(state, key, value)), resetScroll: false })}
+            onClear={() => void navigate({ to: '/packs', search: toPackSearch(clearFilters(state)), resetScroll: false })}
+          />
+        </Suspense>
+      ) : null}
 
       {list.items.length ? (
         <PackMasonry

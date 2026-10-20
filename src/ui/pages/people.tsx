@@ -4,7 +4,7 @@ import { characterCountText } from '#/shared/characters'
 import { CharacterCss, RingAvatar } from './character-art'
 import { fmtN } from '../format'
 import { AppLink } from '../link'
-import { artistHref, characterHref, themeColor } from './model'
+import { artistHref, characterColor, characterHref } from './model'
 
 // Character and artist cards shared by 画师名录, search and the character page. A character's round
 // avatar is its portrait's face, else its own sticker, else its initial (character-art.tsx).
@@ -13,7 +13,7 @@ const ARTIST_COLORS = ['purple', 'pink', 'blue', 'mint', 'yellow', 'orange', 'gr
 
 export function CharacterTile({ c, eager }: { c: CharacterCard; eager?: boolean }) {
   return (
-    <AppLink to={characterHref(c.slug)} className="ccard" style={{ '--cc': themeColor(c.color) } as CSSProperties}>
+    <AppLink to={characterHref(c.slug)} className="ccard" style={{ '--cc': characterColor(c) } as CSSProperties}>
       <CharacterCss />
       <span className="pool">
         <RingAvatar c={c} eager={eager} portraitFirst />

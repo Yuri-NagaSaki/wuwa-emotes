@@ -1,12 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { searchFn } from '#/server/catalog/fns'
 import { SearchPage } from '#/ui/pages/SearchPage'
+import { emojiParam } from '#/ui/pages/search-params'
 import { pageHead } from '#/ui/pages/seo'
 
 export const Route = createFileRoute('/_site/search')({
-  validateSearch: (s: Record<string, unknown>): { q?: string } => {
+  validateSearch: (s: Record<string, unknown>): { q?: string; e?: string } => {
     const q = typeof s.q === 'string' || typeof s.q === 'number' ? String(s.q).slice(0, 200) : ''
-    return q.trim() ? { q } : {}
+    return { ...(q.trim() ? { q } : {}), ...emojiParam(s) }
   },
   loaderDeps: ({ search }) => ({ q: search.q ?? '' }),
   loader: ({ deps }) => (deps.q.trim() ? searchFn({ data: { q: deps.q, limit: 24 } }) : null),
@@ -23,6 +24,6 @@ export const Route = createFileRoute('/_site/search')({
 
 function SearchRoute() {
   const result = Route.useLoaderData()
-  const { q } = Route.useSearch()
-  return <SearchPage result={result} q={q ?? ''} />
+  const { q, e } = Route.useSearch()
+  return <SearchPage result={result} q={q ?? ''} current={e} />
 }

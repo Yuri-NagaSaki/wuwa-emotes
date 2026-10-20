@@ -3,7 +3,7 @@ import type { CharacterRef } from '#/server/catalog/types'
 import { Tag } from '../Chip'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
-import { characterHref, themeColor } from './model'
+import { characterColor, characterHref } from './model'
 
 // 「角色 · 名字」 chips for a pack or a sticker (pack detail, the sticker dialog). Group packs list
 // every character on every sticker (24 on all-characters-pipa); more than COLLAPSE_AFTER collapse into
@@ -32,7 +32,7 @@ export function CharacterTags({ chars, max = COLLAPSE_AFTER }: { chars: Characte
     <>
       {chars.map((c) => (
         <AppLink key={c.slug} to={characterHref(c.slug)}>
-          <Tag color={themeColor(c.color)}>角色 · {c.name}</Tag>
+          <Tag color={characterColor(c)}>角色 · {c.name}</Tag>
         </AppLink>
       ))}
       {open ? (

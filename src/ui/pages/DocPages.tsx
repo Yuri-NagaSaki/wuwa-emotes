@@ -1,4 +1,4 @@
-import type { CSSProperties, ReactNode } from 'react'
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import type { CatalogStats } from '#/server/catalog/types'
 import { buttonClass } from '../Button'
 import { EmptyState } from '../EmptyState'
@@ -16,7 +16,37 @@ interface Section {
   body: ReactNode
 }
 
-function Doc({ sections, active }: { sections: Section[]; active?: string }) {
+/** The section whose heading was passed last while scrolling (the first one at the top). */
+function useActiveSection(ids: readonly string[]): string | undefined {
+  const [active, setActive] = useState(ids[0])
+  const key = ids.join(' ')
+  useEffect(() => {
+    let frame = 0
+    const read = () => {
+      frame = 0
+      const line = innerHeight * 0.3
+      let current = ids[0]
+      for (const id of ids) {
+        const el = document.getElementById(id)
+        if (el && el.getBoundingClientRect().top <= line) current = id
+      }
+      setActive(current)
+    }
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(read)
+    }
+    read()
+    addEventListener('scroll', schedule, { passive: true })
+    return () => {
+      cancelAnimationFrame(frame)
+      removeEventListener('scroll', schedule)
+    }
+  }, [key]) // ids only change with key
+  return active
+}
+
+function Doc({ sections }: { sections: Section[] }) {
+  const active = useActiveSection(sections.map((s) => s.id))
   return (
     <div className="doc">
       <nav className="toc" aria-label="目录">
@@ -125,7 +155,7 @@ export function AboutPage({ siteName, stats }: { siteName: string; stats: Catalo
         <h1>关于{siteName}</h1>
         <span className="sub">一个由潮友维护的鸣潮表情仓库</span>
       </div>
-      <Doc sections={sections} active="what" />
+      <Doc sections={sections} />
     </div>
   )
 }
