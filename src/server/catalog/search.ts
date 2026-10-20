@@ -1,4 +1,5 @@
 import { type SQL, sql } from 'drizzle-orm'
+import { characterCountText } from '#/shared/characters'
 import { artistEntries } from './artists'
 import { cached, LIST_TTL_MS } from './cache'
 import { packCardsByIds, publishedEmojiCount } from './cards'
@@ -304,7 +305,6 @@ async function loadIndex(): Promise<IndexEntry[]> {
   }
   const charAliases = aliasesOf(r?.char_aliases ?? [])
   const artistAliases = aliasesOf(r?.artist_aliases ?? [])
-  const fmt = (n: number) => n.toLocaleString('en-US')
 
   const out: IndexEntry[] = []
   for (const { id, card } of chars) {
@@ -314,7 +314,7 @@ async function loadIndex(): Promise<IndexEntry[]> {
       label: card.name,
       aliases: charAliases.get(id) ?? [],
       linked: [],
-      sub: `${fmt(card.emojiCount)} 张 · ${card.packCount} 包`,
+      sub: characterCountText(card),
       href: `/characters/${enc(card.slug)}`,
       image: card.avatar?.poster ?? null,
       color: card.color,

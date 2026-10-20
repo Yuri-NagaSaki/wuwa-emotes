@@ -169,3 +169,83 @@ describe('handleImg: bad requests', () => {
     expect(deps.gets).toEqual([])
   })
 })
+
+describe('handleImg: character portraits', () => {
+  const KEY = 'characters/v1/portraits/aimisi.0a1b2c3d-480.webp'
+  const purl = (file: string) => `${ORIGIN}/img/v1/portrait/${file}`
+
+  test('streams characters/v1/portraits/ objects with immutable caching and no database lookup', async () => {
+    const bytes = new Uint8Array([82, 73, 70, 70, 9])
+    const deps = fakeDeps({ objects: { [KEY]: { body: stream(bytes), contentLength: 5, etag: '"p"' } }, emoji: published })
+    const res = await handleImg(new Request(purl('aimisi.0a1b2c3d-480.webp')), deps)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe(IMMUTABLE)
+    expect(res.headers.get('content-type')).toBe('image/webp')
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    expect(res.headers.get('etag')).toBe('"p"')
+    expect(res.headers.get('set-cookie')).toBeNull()
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes)
+    expect(deps.gets).toEqual([{ key: KEY, ifNoneMatch: undefined }])
+    expect(deps.lookups).toEqual([])
+    expect(deps.enqueued).toEqual([])
+  })
+
+  test('If-None-Match answers 304; HEAD has no body', async () => {
+    const deps = fakeDeps({ objects: { [KEY]: { body: null, notModified: true, etag: '"p"' } } })
+    const res = await handleImg(new Request(purl('aimisi.0a1b2c3d-480.webp'), { headers: { 'if-none-match': '"p"' } }), deps)
+    expect(res.status).toBe(304)
+    expect(res.body).toBeNull()
+    expect(res.headers.get('cache-control')).toBe(IMMUTABLE)
+    expect(deps.gets[0]!.ifNoneMatch).toBe('"p"')
+    const head = fakeDeps({ objects: { [KEY]: { body: stream(new Uint8Array([1])), contentLength: 1 } } })
+    const hr = await handleImg(new Request(purl('aimisi.0a1b2c3d-480.webp'), { method: 'HEAD' }), head)
+    expect(hr.status).toBe(200)
+    expect(hr.body).toBeNull()
+    expect(hr.headers.get('content-length')).toBe('1')
+  })
+
+  test('a missing portrait is a short-lived 404 that never touches the database', async () => {
+    const deps = fakeDeps({ emoji: published })
+    const res = await handleImg(new Request(purl('aimisi.0a1b2c3d-240.webp')), deps)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(deps.gets).toEqual([{ key: 'characters/v1/portraits/aimisi.0a1b2c3d-240.webp', ifNoneMatch: undefined }])
+    expect(deps.lookups).toEqual([])
+    expect(deps.enqueued).toEqual([])
+  })
+
+  test.each([
+    'aimisi.0a1b2c3d-300.webp',
+    'aimisi.0a1b2c3d-48.webp',
+    'aimisi.0a1b2c3d-0480.webp',
+    'aimisi.0A1B2C3D-240.webp',
+    'aimisi.0a1b2c3-240.webp',
+    'Aimisi.0a1b2c3d-240.webp',
+    'aimisi.0a1b2c3d-240.png',
+    'aimisi.0a1b2c3d-240.webp.webp',
+    '..%2Fderived.0a1b2c3d-240.webp',
+    '%2E%2E.0a1b2c3d-240.webp',
+    'a%2Fb.0a1b2c3d-240.webp',
+    'x/aimisi.0a1b2c3d-240.webp',
+    '../aimisi.0a1b2c3d-240.webp',
+    '-aimisi.0a1b2c3d-240.webp',
+    'ai--misi.0a1b2c3d-240.webp',
+    `${'a'.repeat(61)}.0a1b2c3d-240.webp`,
+  ])('non-canonical portrait %s is a 404 without any read', async (file) => {
+    const deps = fakeDeps({ emoji: published })
+    const res = await handleImg(new Request(purl(file)), deps)
+    expect(res.status).toBe(404)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=60')
+    expect(deps.gets).toEqual([])
+    expect(deps.lookups).toEqual([])
+  })
+
+  test('only ever reads characters/v1/portraits/ for portrait paths', async () => {
+    const deps = fakeDeps()
+    for (const f of ['lupa.ffffffff-240.webp', 'yangyang-xuanling.12345678-480.webp']) await handleImg(new Request(purl(f)), deps)
+    expect(deps.gets.map((g) => g.key)).toEqual([
+      'characters/v1/portraits/lupa.ffffffff-240.webp',
+      'characters/v1/portraits/yangyang-xuanling.12345678-480.webp',
+    ])
+  })
+})
