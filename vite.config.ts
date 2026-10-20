@@ -14,6 +14,14 @@ export default defineConfig({
       preset: 'bun',
       // sharp is only used by the worker; keep native/optional packages out of the web bundle.
       rollupConfig: { external: ['sharp', 'pg-native'] },
+      // Fonts in public/ get no Cache-Control by default, so Cloudflare bypassed them and browsers kept
+      // revalidating. TP Rounded shards are named by content hash; the stylesheet listing them is not,
+      // and nunito keeps its name across @fontsource versions.
+      routeRules: {
+        '/fonts/tp-rounded/**': { headers: { 'cache-control': 'public, max-age=31536000, immutable' } },
+        '/fonts/tp-rounded/tp-rounded.css': { headers: { 'cache-control': 'public, max-age=3600, stale-while-revalidate=86400' } },
+        '/fonts/nunito/**': { headers: { 'cache-control': 'public, max-age=2592000' } },
+      },
     }),
     tanstackStart(),
     viteReact(),
