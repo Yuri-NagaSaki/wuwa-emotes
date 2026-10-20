@@ -6,7 +6,7 @@ import { db, schema } from '../../src/server/db/client'
 import { formatCreditsDate } from '../../src/server/media/credits'
 import { originalKey, zipKey } from '../../src/server/media/keys'
 import { deleteObjects, getObjectBytes, headObject, listKeys, putObject } from '../../src/server/media/s3'
-import { buildPackZip, packContentHash, zipEntryNames } from '../../src/server/media/zip'
+import { buildPackZip, loadPackZipSource, packContentHash, zipEntryName, zipEntryNames } from '../../src/server/media/zip'
 import { newEmojiId } from '../../src/shared/ids'
 import { emptyBucket, insertPack, makeGif, makePng, resetDb, setupTestEnv } from './helpers'
 
@@ -97,8 +97,10 @@ describe('zip.build', () => {
     const r = await buildPackZip(pack.id, { now: NOW })
     expect(r.status).toBe('built')
     const built = r as { key: string; bytes: number; hash: string }
-    const rows = await db().select().from(schema.emojis).where(eq(schema.emojis.packId, pack.id))
-    const expectedHash = packContentHash(rows.filter((x) => x.status === 'published'))
+    const source = await loadPackZipSource(pack.id)
+    if (!source.ok) throw new Error(source.reason)
+    const expectedHash = source.source.hash
+    expect(source.source.emojis.map((e) => e.id)).toEqual([...published].sort((a, b) => a.sortOrder - b.sortOrder).map((e) => e.id))
     expect(built.hash).toBe(expectedHash)
     expect(built.key).toBe(zipKey('zip-a', expectedHash.slice(0, 8)))
     firstKey = built.key
@@ -130,6 +132,41 @@ describe('zip.build', () => {
   test('an unchanged pack is skipped by content hash', async () => {
     expect(await buildPackZip(pack.id, { now: NOW })).toMatchObject({ status: 'unchanged', key: firstKey })
     expect(await listKeys('zips/v1/packs/zip-a/')).toEqual([firstKey])
+  })
+
+  test('the same data on another day keeps the hash (CREDITS.txt date is not part of it)', async () => {
+    const nextDay = new Date(NOW.getTime() + 36 * 3600_000)
+    expect(formatCreditsDate(nextDay)).not.toBe(formatCreditsDate(NOW))
+    expect(await buildPackZip(pack.id, { now: nextDay })).toMatchObject({ status: 'unchanged', key: firstKey })
+  })
+
+  test('changing the pack title changes the hash and rebuilds with the new CREDITS.txt', async () => {
+    const before = await loadPackZipSource(pack.id)
+    await db().update(schema.packs).set({ title: '改名后的表情包' }).where(eq(schema.packs.id, pack.id))
+    const after = await loadPackZipSource(pack.id)
+    if (!before.ok || !after.ok) throw new Error('pack should be zippable')
+    expect(after.source.hash).not.toBe(before.source.hash)
+
+    const r = await buildPackZip(pack.id, { now: NOW })
+    expect(r).toMatchObject({ status: 'built', hash: after.source.hash })
+    const key = (r as { key: string }).key
+    expect(key).not.toBe(firstKey)
+    expect(await listKeys('zips/v1/packs/zip-a/')).toEqual([key])
+    const credits = new TextDecoder().decode(unzip(await getObjectBytes(key)).files['CREDITS.txt'])
+    expect(credits).toContain('表情包：改名后的表情包')
+    firstKey = key
+  })
+
+  test('changing an artist credit changes the hash', async () => {
+    const before = await loadPackZipSource(pack.id)
+    const [a3] = await db().insert(schema.artists).values({ slug: 'xinhuashi', name: '新画师' }).returning()
+    await db().insert(schema.packArtists).values({ packId: pack.id, artistId: a3!.id, role: 'artist' })
+    const after = await loadPackZipSource(pack.id)
+    if (!before.ok || !after.ok) throw new Error('pack should be zippable')
+    expect(after.source.hash).not.toBe(before.source.hash)
+    const r = await buildPackZip(pack.id, { now: NOW })
+    expect(r.status).toBe('built')
+    firstKey = (r as { key: string }).key
   })
 
   test('new content gets a new object and the old ZIP is deleted', async () => {
@@ -218,12 +255,55 @@ describe('zip helpers', () => {
     expect(names[0]).toBe('big-pack-001.png')
     expect(names[119]).toBe('big-pack-120.gif')
     expect(zipEntryNames('a/b', [{ originalKey: 'k', format: 'jpeg' }])).toEqual(['a-b-01.jpg'])
+    // the single-entry form (used for /dl/e save and batch filenames) agrees with the list form
+    expect(zipEntryName('big-pack', 119, 120, many[119]!)).toBe(names[119]!)
+    expect(zipEntryName('big-pack', 4, 9, many[4]!)).toBe('big-pack-05.png')
   })
 
-  test('content hash: independent of order; byte size stands in for a missing sha256', () => {
-    const a = { id: 'r-00000000000000000001', sha256: 'aa', bytes: 1 }
-    const b = { id: 'r-00000000000000000002', sha256: null, bytes: 7 }
-    expect(packContentHash([a, b])).toBe(packContentHash([b, a]))
-    expect(packContentHash([a, b])).not.toBe(packContentHash([a, { ...b, bytes: 8 }]))
+  describe('content hash', () => {
+    const a = { id: 'r-00000000000000000001', sha256: 'aa', bytes: 1, originalKey: 'assets/v1/packs/p/emojis/r-00000000000000000001.gif', format: 'gif' }
+    const b = { id: 'r-00000000000000000002', sha256: null, bytes: 7, originalKey: 'assets/v1/packs/p/emojis/r-00000000000000000002.png', format: 'png' }
+    const credits = {
+      siteName: '潮池',
+      siteUrl: 'http://localhost:3000/',
+      packs: [{ title: '包', pageUrl: 'http://localhost:3000/packs/p', artists: ['甲'], commissioner: null, license: 'cc-by-4.0', note: null }],
+    }
+    const base = { slug: 'p', emojis: [a, b], credits }
+    const hash = packContentHash(base)
+
+    test('is deterministic', () => {
+      expect(packContentHash({ ...base, emojis: [{ ...a }, { ...b }] })).toBe(hash)
+    })
+
+    test('the order of the entries (sort order) is part of it', () => {
+      expect(packContentHash({ ...base, emojis: [b, a] })).not.toBe(hash)
+    })
+
+    test('byte size stands in for a missing sha256; a changed sha256 changes it', () => {
+      expect(packContentHash({ ...base, emojis: [a, { ...b, bytes: 8 }] })).not.toBe(hash)
+      expect(packContentHash({ ...base, emojis: [{ ...a, sha256: 'ab' }, b] })).not.toBe(hash)
+    })
+
+    test('entry names: the slug and the file extension are part of it', () => {
+      expect(packContentHash({ ...base, slug: 'q' })).not.toBe(hash)
+      expect(packContentHash({ ...base, emojis: [a, { ...b, originalKey: b.originalKey.replace('.png', '.gif') }] })).not.toBe(hash)
+    })
+
+    test('every CREDITS.txt field is part of it', () => {
+      const p = credits.packs[0]!
+      const variants = [
+        { ...credits, siteName: '别的站' },
+        { ...credits, siteUrl: 'https://example.test/' },
+        { ...credits, packs: [{ ...p, title: '新标题' }] },
+        { ...credits, packs: [{ ...p, artists: ['乙'] }] },
+        { ...credits, packs: [{ ...p, commissioner: '约稿人' }] },
+        { ...credits, packs: [{ ...p, license: 'cc-by-nc-sa-4.0' }] },
+        { ...credits, packs: [{ ...p, note: '转载请注明' }] },
+        { ...credits, packs: [{ ...p, sourceUrl: 'https://src.test/x' }] },
+      ]
+      const hashes = new Set(variants.map((c) => packContentHash({ ...base, credits: c })))
+      expect(hashes.size).toBe(variants.length)
+      expect(hashes.has(hash)).toBe(false)
+    })
   })
 })
