@@ -42,6 +42,29 @@ export const ACTION_LABELS: Record<string, string> = {
   'job.retry': '重试任务',
   'job.cancel': '取消任务',
   'settings.site': '修改站点设置',
+  'settings.comments.update': '修改评论设置',
+  'settings.downloads.update': '修改下载与风控设置',
+  'downloads.source.set': '设置来源状态',
+  'submission.create': '新建投稿',
+  'submission.upload': '投稿上传',
+  'submission.submit': '提交审核',
+  'submission.withdraw': '撤回投稿',
+  'submission.approve': '通过投稿',
+  'submission.return': '退回投稿',
+  'submission.cleanup': '清理过期投稿',
+  'comment.approve': '通过评论',
+  'comment.spam': '标记为垃圾评论',
+  'comment.delete': '删除评论',
+  'comment.restore': '恢复评论',
+  'comment.pin': '置顶评论',
+  'comment.unpin': '取消置顶',
+  'comment.badge': '设置评论徽章',
+  'comment.ban_user': '禁止评论',
+  'comment.unban_user': '解除评论禁止',
+  'comment.edit': '编辑评论',
+  'comment.delete_own': '作者删除评论',
+  'comment.autohide': '举报过多，自动隐藏',
+  'account.delete': '注销账号',
   'cli.set-role': '命令行设置角色',
 }
 
@@ -56,6 +79,7 @@ export const TARGET_LABELS: Record<string, string> = {
   setting: '设置',
   submission: '投稿',
   comment: '评论',
+  source: '下载来源',
 }
 
 export function actionLabel(action: string): string {
@@ -70,6 +94,7 @@ export function auditIcon(action: string): IconName {
   if (action.includes('delete')) return 'trash'
   if (action.startsWith('upload')) return 'upload'
   if (action.startsWith('job')) return 'layers'
+  if (action.startsWith('downloads')) return 'shield'
   if (action.startsWith('settings')) return 'sliders'
   if (action.startsWith('submission') || action.startsWith('review')) return 'inbox'
   return 'edit'
