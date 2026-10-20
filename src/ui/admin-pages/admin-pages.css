@@ -16,6 +16,8 @@ h1.adm-dyn, h3.adm-dyn { font-weight: 800; }
 .adm-select.is-plain { min-height: 46px; border-width: 2.5px; background: var(--tp-input); }
 .adm-select.is-plain select { height: 41px; font-size: 14px; }
 .filters .input.sm { min-height: 36px; }
+/* search forms take part in the filter row (and stretch to full width on phones) */
+.filters > form[role="search"] { display: contents; }
 .filters .adm-search { width: 260px; background: var(--tp-card); border-width: 2px; }
 .filters .adm-search input { height: 32px; font-size: 13.5px; }
 

@@ -154,7 +154,8 @@ try {
   check(true, 'library: emoji detail drawer')
 
   // ---- as 管理员: bulk hide + publish ----
-  const m = await browser.newPage()
+  // separate cookie jar: both accounts use the same host
+  const m = await (await browser.createBrowserContext()).newPage()
   await m.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true })
   await m.setCookie(...(await cookiesFor(ACCOUNTS[1].email)))
   await m.goto(`${base}/admin/packs?q=aimisi-01`, { waitUntil: 'networkidle0' })
