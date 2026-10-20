@@ -70,10 +70,10 @@ dc() { docker compose "$@"; }
 
 # These helpers never fail: a container can disappear between two calls while compose recreates it.
 cid_of() { { dc ps -aq "$1" 2>/dev/null || true; } | head -n1; }
-state_of() { # healthy | unhealthy | starting | running | exited | ... | missing
+state_of() { # healthy | unhealthy | starting | running | restarting | exited | ... | missing
   local id; id=$(cid_of "$1")
   [[ -n $id ]] || { echo missing; return 0; }
-  docker inspect -f '{{if and .State.Running .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
+  docker inspect -f '{{if .State.Restarting}}restarting{{else if and .State.Running .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' \
     "$id" 2>/dev/null || echo missing
 }
 image_of() { local id; id=$(cid_of "$1"); [[ -z $id ]] || docker inspect -f '{{.Image}}' "$id" 2>/dev/null || true; }
@@ -94,7 +94,7 @@ wait_healthy() {
     st=$(state_of "$svc")
     case $st in
       healthy) log "$svc: Docker health is healthy"; return 0 ;;
-      unhealthy | exited | dead | missing) break ;;
+      unhealthy | restarting | exited | dead | missing) break ;; # restarting = it crashed
     esac
     [[ $st == "$last" ]] || log "$svc: $st"
     last=$st
