@@ -13,7 +13,7 @@ export const Route = createFileRoute('/_site/characters/')({
       title: '角色图鉴',
       description: `鸣潮 ${loaderData?.length ?? ''} 位角色的表情包，按表情数量、最近更新或拼音浏览。`,
       path: '/characters',
-      image: loaderData?.[0]?.avatar?.poster,
+      image: loaderData?.[0]?.portrait?.src ?? loaderData?.[0]?.avatar?.poster,
     }),
   component: CharactersRoute,
 })

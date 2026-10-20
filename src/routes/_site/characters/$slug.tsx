@@ -39,7 +39,7 @@ export const Route = createFileRoute('/_site/characters/$slug')({
       title: `${c.name}的表情包`,
       description: `${c.name}的 ${c.emojiCount} 张表情、${c.packCount} 个表情包${c.aliases.length ? `（别名 ${c.aliases.join('、')}）` : ''}。`,
       path: `/characters/${encodeURIComponent(c.slug)}`,
-      image: c.avatar?.poster,
+      image: c.portrait?.src ?? c.avatar?.poster,
     })
   },
   component: CharacterRoute,

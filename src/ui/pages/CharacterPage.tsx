@@ -3,21 +3,24 @@ import { useState, type CSSProperties } from 'react'
 import { galleryFn, packsFn } from '#/server/catalog/fns'
 import type { CharacterDetail, EmojiTile, PackCard, Page } from '#/server/catalog/types'
 import { Button } from '../Button'
+import { cx } from '../cx'
 import { fmtN } from '../format'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { WaveLoader } from '../Section'
 import { Seg } from '../Seg'
 import { toast } from '../Toast'
+import { CharacterCss, PortraitImg, RingAvatar } from './character-art'
 import { emojiHref, themeColor } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile } from './people'
 import { StreamTiles } from './StreamTiles'
 import { useCursorList } from './useCursorList'
 
-// 角色详情 /characters/:slug: the character's color takes over the header (wave edge below), tabs for
-// its packs (masonry), all its stickers (grid, animated/static filter) and the artists who drew it.
-// 随机来一张 opens one random sticker of the character.
+// 角色详情 /characters/:slug: the character's color takes over the header (wave edge below) with its
+// official portrait (立绘) when there is one, else its own sticker in the round pool; tabs for its
+// packs (masonry), all its stickers (grid, animated/static filter) and the artists who drew it.
+// 张 and 包 follow catalog/attribution.ts. 随机来一张 opens one random sticker of the character.
 
 export type CharacterTab = 'packs' | 'emojis' | 'artists'
 export type EmojiTypeFilter = 'animated' | 'static' | undefined
@@ -114,11 +117,23 @@ export function CharacterPage({ detail, tab, type, current }: CharacterPageProps
 
   return (
     <>
-      <section className="char-hero" style={{ '--cc': themeColor(c.color) } as CSSProperties}>
+      <section className={cx('char-hero', c.portrait && 'has-portrait')} style={{ '--cc': themeColor(c.color) } as CSSProperties}>
+        <CharacterCss />
         <div className="wrap">
-          <span className="pool">
-            {c.avatar ? <img src={c.avatar.poster} width={160} height={160} alt="" fetchPriority="high" decoding="async" /> : <span className="initial">{Array.from(c.name)[0]}</span>}
-          </span>
+          {c.portrait ? (
+            <span className="char-portrait">
+              <PortraitImg p={c.portrait} sizes="(max-width: 760px) 96px, (max-width: 1100px) 150px, 186px" alt={`${c.name}的立绘`} priority />
+              {c.avatar ? (
+                <span className="badge">
+                  <RingAvatar c={c} priority />
+                </span>
+              ) : null}
+            </span>
+          ) : (
+            <span className="pool">
+              <RingAvatar c={c} priority />
+            </span>
+          )}
           <div style={{ minWidth: 0 }}>
             <nav className="crumbs" aria-label="位置">
               <AppLink to="/characters">角色图鉴</AppLink>
