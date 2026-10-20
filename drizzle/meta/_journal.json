@@ -15,6 +15,13 @@
       "when": 1792494186122,
       "tag": "0001_comment_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792502070656,
+      "tag": "0002_character_portraits",
+      "breakpoints": true
     }
   ]
 }

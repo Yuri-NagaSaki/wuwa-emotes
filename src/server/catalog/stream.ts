@@ -1,4 +1,5 @@
 import { type SQL, sql } from 'drizzle-orm'
+import { attributedEmojiIds } from './attribution'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { type RawImage, toEmojiImage } from './images'
 import { galleryInput, type GalleryInput } from './inputs'
@@ -11,7 +12,7 @@ import type { EmojiTile, EmojiType, Page, StreamSort } from './types'
 // One statement per page.
 
 export interface StreamFilters {
-  /** character slug, matched through emoji_characters (emoji-level tags) */
+  /** character slug: stickers attributed to it (attribution.ts) */
   character?: string
   type?: EmojiType
 }
@@ -58,10 +59,7 @@ export function toEmojiTile(r: TileRow): EmojiTile {
 
 function filterSql(f: StreamFilters): SQL[] {
   const out: SQL[] = []
-  if (f.character) {
-    out.push(sql`exists (select 1 from emoji_characters fc join characters c on c.id = fc.character_id
-                         where fc.emoji_id = e.id and c.slug = ${f.character})`)
-  }
+  if (f.character) out.push(sql`e.id in (${attributedEmojiIds(f.character)})`)
   if (f.type === 'animated') out.push(sql`e.frames > 1`)
   if (f.type === 'static') out.push(sql`e.frames <= 1`)
   return out

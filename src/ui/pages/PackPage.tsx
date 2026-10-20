@@ -10,6 +10,7 @@ import { setAutoplayPref, useAutoplayPref } from '../motion'
 import { tray } from '../batch/tray'
 import { Tile, TileGrid } from '../Tile'
 import { copyImage, copyLink } from './clipboard'
+import { CharacterTags } from './CharacterTags'
 import { CommentsSlot } from './CommentsSlot'
 import { EmojiDialog } from './EmojiDialog'
 import { artistHref, characterHref, dialogPack, fromPackEmoji, KIND_LABEL, licenseLabel, longDate, packHref, themeColor } from './model'
@@ -122,11 +123,7 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
             </div>
             {pack.excerpt ? <p className="pack-ex">{pack.excerpt}</p> : null}
             <Chips className="pack-chips">
-              {pack.characters.map((c) => (
-                <AppLink key={c.slug} to={characterHref(c.slug)}>
-                  <Tag color={themeColor(c.color)}>角色 · {c.name}</Tag>
-                </AppLink>
-              ))}
+              <CharacterTags chars={pack.characters} />
               {pack.artists.map((a) => (
                 <AppLink key={a.slug} to={artistHref(a.slug)}>
                   <Tag color="var(--c-purple)">画师 · {a.name}</Tag>

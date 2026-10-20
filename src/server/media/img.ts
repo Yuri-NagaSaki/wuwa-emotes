@@ -1,6 +1,7 @@
-import { derivedKey, imgUrl, parseImgPath, type ImgRef } from './keys'
+import { derivedKey, imgUrl, type ImgRef, parseImgPath, parsePortraitPath, portraitKey } from './keys'
 
-// /img: the only public path to images. Reads derived/v1/ only, for published emojis only.
+// /img: the only public path to images. Reads derived/v1/ (published emojis only) and
+// characters/v1/portraits/ (official character portraits, /img/v1/portrait/…).
 // Hits need no database lookup; a missing `full` variant is the one case that checks the database,
 // so nobody can push a pending (unreviewed) image into derived/ by guessing its URL.
 
@@ -44,23 +45,33 @@ export function canGenerateFull(ref: ImgRef, row: EmojiForFull | null): boolean 
   )
 }
 
+/** 304 / 200 for a stored WebP, or null when the object does not exist. */
+async function serveObject(request: Request, deps: ImgDeps, key: string): Promise<Response | null> {
+  const obj = await deps.getObject(key, request.headers.get('if-none-match') ?? undefined)
+  if (obj?.notModified) {
+    return new Response(null, { status: 304, headers: { ...baseHeaders, 'cache-control': IMMUTABLE, ...(obj.etag ? { etag: obj.etag } : {}) } })
+  }
+  if (!obj) return null
+  const headers: Record<string, string> = { ...baseHeaders, 'content-type': 'image/webp', 'cache-control': IMMUTABLE }
+  if (obj.etag) headers.etag = obj.etag
+  if (obj.contentLength != null) headers['content-length'] = String(obj.contentLength)
+  return new Response(request.method === 'HEAD' ? null : obj.body, { status: 200, headers })
+}
+
 export async function handleImg(request: Request, deps: ImgDeps): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Method not allowed', { status: 405, headers: { ...baseHeaders, 'content-type': 'text/plain', allow: 'GET, HEAD' } })
   }
-  const ref = parseImgPath(new URL(request.url).pathname)
-  if (!ref) return notFound()
+  const pathname = new URL(request.url).pathname
+  const ref = parseImgPath(pathname)
+  if (!ref) {
+    // character portraits: characters/v1/portraits/ only; public by nature, so no database lookup
+    const portrait = parsePortraitPath(pathname)
+    return (portrait && (await serveObject(request, deps, portraitKey(portrait)))) || notFound()
+  }
 
-  const obj = await deps.getObject(derivedKey(ref.variant, ref.packKey, ref.emojiId, ref.rev), request.headers.get('if-none-match') ?? undefined)
-  if (obj?.notModified) {
-    return new Response(null, { status: 304, headers: { ...baseHeaders, 'cache-control': IMMUTABLE, ...(obj.etag ? { etag: obj.etag } : {}) } })
-  }
-  if (obj) {
-    const headers: Record<string, string> = { ...baseHeaders, 'content-type': 'image/webp', 'cache-control': IMMUTABLE }
-    if (obj.etag) headers.etag = obj.etag
-    if (obj.contentLength != null) headers['content-length'] = String(obj.contentLength)
-    return new Response(request.method === 'HEAD' ? null : obj.body, { status: 200, headers })
-  }
+  const hit = await serveObject(request, deps, derivedKey(ref.variant, ref.packKey, ref.emojiId, ref.rev))
+  if (hit) return hit
 
   if (ref.variant === 'full') {
     const row = await deps.lookupEmoji(ref.emojiId)

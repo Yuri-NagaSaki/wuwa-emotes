@@ -17,6 +17,9 @@ import { Kpi, PageHead, Panel, SelectField, useAction } from './bits'
 
 type Kind = 'character' | 'artist' | 'tag'
 const KIND_NAME: Record<Kind, string> = { character: '角色', artist: '画师', tag: '标签' }
+
+/** theme_color is a palette name (pink, yg …, the --c-* tokens) or a CSS color. */
+const swatch = (v: string) => (/^[a-z]+$/.test(v.trim()) ? `var(--c-${v.trim()}, ${v.trim()})` : v)
 export const DIMENSIONS: Record<TagDimension, string> = { group: '分组', tool: '工具', project: '企划', origin: '原设', custom: '自定义' }
 
 function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder: string }) {
@@ -275,7 +278,7 @@ export function CharactersPage({ rows }: { rows: CharacterRow[] }) {
         />
       ) : null}
       <SearchBox value={q} onChange={setQ} placeholder="名称、slug 或别名" />
-      <Panel title="角色列表" flush acts={<span className="hint">包数含未发布的包</span>}>
+      <Panel title="角色列表" flush acts={<span className="hint">按标注计数，含未发布的包；前台按逐张归属计数</span>}>
         <div className="tbl-wrap">
           <table className="tbl">
             <thead>
@@ -284,8 +287,8 @@ export function CharactersPage({ rows }: { rows: CharacterRow[] }) {
                 <th>slug</th>
                 <th className="col-opt">别名</th>
                 <th className="col-opt">主题色</th>
-                <th className="n">包</th>
-                <th className="n col-opt">表情</th>
+                <th className="n">标注包</th>
+                <th className="n col-opt">标注表情</th>
                 <th>
                   <span className="sr">操作</span>
                 </th>
@@ -311,7 +314,7 @@ export function CharactersPage({ rows }: { rows: CharacterRow[] }) {
                     <SlugCell slug={r.slug} bad={r.hashSlug} suggested={r.suggestedSlug} />
                   </td>
                   <td className="col-opt muted">{r.aliases.length ? r.aliases.slice(0, 3).join('、') + (r.aliases.length > 3 ? ` 等 ${r.aliases.length} 个` : '') : '—'}</td>
-                  <td className="col-opt">{r.themeColor ? <i className="adm-swatch" style={{ background: r.themeColor }} aria-label="主题色" /> : <span className="muted">—</span>}</td>
+                  <td className="col-opt">{r.themeColor ? <i className="adm-swatch" style={{ background: swatch(r.themeColor) }} aria-label="主题色" title={r.themeColor} /> : <span className="muted">—</span>}</td>
                   <td className="n">
                     {fmtN(r.packCount)}
                     {r.publishedPackCount !== r.packCount ? <span className="sub">已发布 {r.publishedPackCount}</span> : null}

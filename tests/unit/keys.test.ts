@@ -3,9 +3,14 @@ import {
   backupKey,
   derivedKey,
   imgUrl,
+  isPortraitName,
   originalKey,
   parseImgPath,
+  parsePortraitKey,
+  parsePortraitPath,
   parseReviewImgPath,
+  portraitKey,
+  portraitUrl,
   reviewImgUrl,
   reviewKey,
   uploadTmpKey,
@@ -93,5 +98,48 @@ describe('/review-img paths', () => {
     ['img prefix', `/img/v1/p240/${PACK}/${EMOJI}.webp`],
   ])('rejects %s', (_name, path) => {
     expect(parseReviewImgPath(path)).toBeNull()
+  })
+})
+
+describe('portrait keys and /img/v1/portrait paths', () => {
+  test('round trip', () => {
+    for (const width of [240, 480] as const) {
+      const ref = { name: 'yangyang-xuanling', hash8: '0a1b2c3d', width }
+      expect(portraitKey(ref)).toBe(`characters/v1/portraits/yangyang-xuanling.0a1b2c3d-${width}.webp`)
+      expect(portraitUrl(ref)).toBe(`/img/v1/portrait/yangyang-xuanling.0a1b2c3d-${width}.webp`)
+      expect(parsePortraitKey(portraitKey(ref))).toEqual(ref)
+      expect(parsePortraitPath(portraitUrl(ref))).toEqual(ref)
+    }
+  })
+
+  test.each([
+    ['other width', '/img/v1/portrait/a.0a1b2c3d-320.webp'],
+    ['uppercase hex', '/img/v1/portrait/a.0A1B2C3D-240.webp'],
+    ['short hash', '/img/v1/portrait/a.0a1b2c3-240.webp'],
+    ['uppercase name', '/img/v1/portrait/Aimisi.0a1b2c3d-240.webp'],
+    ['traversal', '/img/v1/portrait/../a.0a1b2c3d-240.webp'],
+    ['dot name', '/img/v1/portrait/..0a1b2c3d-240.webp'],
+    ['extra segment', '/img/v1/portrait/x/a.0a1b2c3d-240.webp'],
+    ['encoded slash', '/img/v1/portrait/x%2Fa.0a1b2c3d-240.webp'],
+    ['wrong extension', '/img/v1/portrait/a.0a1b2c3d-240.png'],
+    ['other prefix', '/img/v1/portraits/a.0a1b2c3d-240.webp'],
+    ['trailing slash', '/img/v1/portrait/a.0a1b2c3d-240.webp/'],
+  ])('rejects %s', (_name, path) => {
+    expect(parsePortraitPath(path)).toBeNull()
+  })
+
+  test('stored keys outside characters/v1/portraits/ are not portraits', () => {
+    expect(parsePortraitKey('derived/v1/portraits/a.0a1b2c3d-240.webp')).toBeNull()
+    expect(parsePortraitKey('characters/v1/portraits/a.0a1b2c3d-240.png')).toBeNull()
+    expect(parsePortraitKey('characters/v1/portraits/sub/a.0a1b2c3d-240.webp')).toBeNull()
+  })
+
+  test('names are readable slugs of at most 60 characters', () => {
+    expect(isPortraitName('x-1a2b3c4d')).toBe(true)
+    expect(isPortraitName('a'.repeat(60))).toBe(true)
+    expect(isPortraitName('a'.repeat(61))).toBe(false)
+    expect(isPortraitName('a--b')).toBe(false)
+    expect(isPortraitName('-a')).toBe(false)
+    expect(isPortraitName('')).toBe(false)
   })
 })
