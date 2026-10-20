@@ -36,13 +36,12 @@ export function BatchPage() {
             <BatchGroups view={view} divided />
           </div>
           <aside className="card sand pk-side" aria-label="打包下载">
-            <BatchSummary view={view} />
+            <BatchSummary view={view} compact />
             <div className="note-box">
               <Icon name="shield" size="sm" />
               <span>压缩包里是原图（GIF / PNG），附 CREDITS.txt：每个包的画师、约稿人、许可与本站页面。转载请保留署名，不要商用。</span>
             </div>
             <BatchAction view={view} />
-            <span className="hint">原图直接从存储读取，不经过网站服务器。只提供预览的包不会放进压缩包。</span>
             <ClearBatch count={ids.length} className="clear" />
           </aside>
         </div>

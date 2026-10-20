@@ -32,7 +32,8 @@ function useInAppBrowser(): boolean {
   return inApp
 }
 
-export function BatchSummary({ view }: { view: BatchView }) {
+/** n 张 · 来自 k 个包 | size. `compact`: the page's narrow aside (CREDITS is explained right below). */
+export function BatchSummary({ view, compact }: { view: BatchView; compact?: boolean }) {
   const n = view.packable.length
   return (
     <div className="pk-sum">
@@ -41,7 +42,7 @@ export function BatchSummary({ view }: { view: BatchView }) {
       </div>
       <div>
         <b className="num">{fmtB(view.bytes)}</b>
-        <span>原图合计 · 附 CREDITS.txt</span>
+        <span>{compact ? '原图合计' : '原图合计 · 附 CREDITS.txt'}</span>
       </div>
     </div>
   )
