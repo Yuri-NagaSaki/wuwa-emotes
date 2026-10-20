@@ -113,7 +113,7 @@ function RowActions({ item, onWithdraw }: { item: MySubmissionItem; onWithdraw: 
     case 'draft':
       return (
         <>
-          <AppLink to={edit} className={buttonClass({ size: 'xs', variant: 'primary' })}>
+          <AppLink to={edit} className={buttonClass({ size: 'xs' })}>
             继续编辑
           </AppLink>
           <Button size="xs" onClick={onWithdraw}>
@@ -134,7 +134,7 @@ function RowActions({ item, onWithdraw }: { item: MySubmissionItem; onWithdraw: 
       )
     case 'returned':
       return (
-        <AppLink to={edit} className={buttonClass({ size: 'xs', variant: 'primary' })}>
+        <AppLink to={edit} className={buttonClass({ size: 'xs' })}>
           修改后重新提交
         </AppLink>
       )
