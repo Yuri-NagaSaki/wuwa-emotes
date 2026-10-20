@@ -213,6 +213,16 @@ async function freshDb() {
   if ((await p.exited) !== 0) throw new Error(`migrate failed: ${await new Response(p.stderr).text()}`)
 }
 
+async function sql(text: string, params: unknown[] = []) {
+  const c = new pg.Client({ connectionString: ENV.DATABASE_URL })
+  await c.connect()
+  try {
+    return (await c.query(text, params)).rows
+  } finally {
+    await c.end()
+  }
+}
+
 async function bucket() {
   const s3 = new S3Client({ region: 'auto', endpoint: ENV.S3_ENDPOINT, forcePathStyle: true, credentials: { accessKeyId: 'devaccess', secretAccessKey: 'devsecret123' } })
   try {
@@ -365,6 +375,8 @@ const shots: string[] = []
 async function shot(l: Lane, state: string) {
   await l.page.evaluate(() => document.fonts.ready.then(() => undefined))
   await sleep(450)
+  // toasts (已退出登录 …) would cover the form
+  await l.page.addStyleTag({ content: '.toast-zone { display: none !important; }' })
   const problems = await inspect(l.page)
   for (const p of problems) l.issues.push(`${state}: ${p}`)
   const file = join(OUT, `app-${state}-${l.vw.tag}.png`)
@@ -467,14 +479,33 @@ async function mainFlow(browser: Browser, vw: Viewport, report: Record<string, u
     step('verified by the mailed link')
     await shot(l, 'verify-ok')
 
-    // 个人中心 and 投稿 while signed in
+    // 投稿 (the empty form), then a saved draft and two notices so the /me lists have rows
+    await page.goto(`${BASE}/submit`, { waitUntil: 'networkidle0' })
+    await shot(l, 'submit')
+    await typeInto(page, 'input[placeholder^="例如：爱弥斯"]', '爱弥斯 · 新年板牌')
+    await clickText(page, '.sub-submit button', '保存草稿')
+    for (let i = 0; ; i++) {
+      const rows = await sql(`select 1 from submissions s join users u on u.id = s.submitter_id where u.email = $1`, [email])
+      if (rows.length) break
+      if (i > 60) throw new Error('the draft was not saved')
+      await sleep(250)
+    }
+    await sql(
+      `insert into notifications (user_id, kind, payload) select id, 'submission.returned', $2::jsonb from users where email = $1`,
+      [email, JSON.stringify({ submissionId: 'none', packId: 0, slug: 'none', title: '达妮娅捏捏 · 第二弹', reason: '缺少画师授权说明' })],
+    )
+    await sql(
+      `insert into notifications (user_id, kind, payload) select id, 'comment.reply', $2::jsonb from users where email = $1`,
+      [email, JSON.stringify({ commentId: 1, parentId: 1, rootId: null, threadType: 'pack', threadId: '1', by: '漂泊者', excerpt: '这张也太可爱了吧', title: '爱弥斯动态表情包', href: null })],
+    )
+
+    // 个人中心 while signed in
     for (const [path, state] of [
       ['/me', 'me-fav'],
       ['/me/submissions', 'me-sub'],
       ['/me/comments', 'me-cm'],
       ['/me/notifications', 'me-nt'],
       ['/me/settings', 'me-set'],
-      ['/submit', 'submit'],
     ] as const) {
       await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle0' })
       await shot(l, state)

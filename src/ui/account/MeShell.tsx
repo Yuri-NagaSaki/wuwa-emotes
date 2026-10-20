@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react'
+import { useLocation } from '@tanstack/react-router'
+import { useEffect, useRef, type ReactNode } from 'react'
 import type { MeSummary } from '#/server/account/service'
 import { buttonClass } from '../Button'
 import { cx } from '../cx'
@@ -10,8 +11,18 @@ import { fullDate } from './text'
 /** 个人中心 header (avatar, name, 投稿 summary) and the tab row; the tab page goes below. */
 export function MeShell({ summary, children }: { summary: MeSummary; children: ReactNode }) {
   const s = summary.submissions
+  const tabs = useRef<HTMLElement>(null)
+  const pathname = useLocation({ select: (l) => l.pathname })
+  useEffect(() => {
+    // phones scroll the tab row: keep the current tab in view (only the row scrolls, never the page)
+    const nav = tabs.current
+    const on = nav?.querySelector<HTMLElement>('[aria-current="page"]')
+    if (!nav || !on || nav.scrollWidth <= nav.clientWidth) return
+    const left = on.getBoundingClientRect().left - nav.getBoundingClientRect().left + nav.scrollLeft
+    if (left < nav.scrollLeft || left + on.offsetWidth > nav.scrollLeft + nav.clientWidth) nav.scrollLeft = Math.max(0, left - 16)
+  }, [pathname])
   return (
-    <div className="wrap narrow">
+    <div className="wrap">
       <div className="me-h">
         <span className="avatar" aria-hidden="true">
           {[...summary.name][0] ?? '?'}
@@ -19,7 +30,7 @@ export function MeShell({ summary, children }: { summary: MeSummary; children: R
         <div>
           <h1>{summary.name}</h1>
           <span className="meta">
-            {fullDate(summary.joinedAt)} 加入 · 投稿 {s.approved + s.pending + s.returned} 个包
+            {fullDate(summary.joinedAt)} 加入 · 评论 {summary.comments} 条 · 投稿 {s.approved + s.pending + s.returned} 个包
           </span>
         </div>
         <div className="quota">
@@ -39,7 +50,7 @@ export function MeShell({ summary, children }: { summary: MeSummary; children: R
           )}
         </div>
       </div>
-      <nav className="me-tabs" aria-label="个人中心">
+      <nav ref={tabs} className="me-tabs" aria-label="个人中心">
         {sortedTabs().map((t) => {
           const n = t.count?.(summary)
           return (

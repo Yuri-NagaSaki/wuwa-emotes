@@ -388,8 +388,7 @@ export function ForgotPasswordPage() {
             </Button>
           </form>
           <AuthAlt>
-            想起来了？
-            <AppLink to="/login" className="link">
+            <AppLink to="/login" className="back-link">
               返回登录
             </AppLink>
           </AuthAlt>
@@ -435,7 +434,7 @@ export function ResetPasswordPage({ token, error: linkError }: { token?: string;
           <SentPanel icon="warn" bad title="链接无效或已过期">
             重置链接只能用一次，{RESET_TTL}后失效。请重新申请一封。
           </SentPanel>
-          <AppLink to="/forgot-password" className={buttonClass({ variant: 'primary', size: 'lg', block: true })}>
+          <AppLink to="/forgot-password" className={buttonClass({ variant: 'primary', block: true })}>
             重新申请
           </AppLink>
         </>
@@ -444,7 +443,7 @@ export function ResetPasswordPage({ token, error: linkError }: { token?: string;
           <SentPanel icon="check" title="密码已更新">
             所有设备上的登录都已退出。现在可以用新密码登录了。
           </SentPanel>
-          <AppLink to="/login" className={buttonClass({ variant: 'primary', size: 'lg', block: true })}>
+          <AppLink to="/login" className={buttonClass({ variant: 'primary', block: true })}>
             去登录
           </AppLink>
         </>
@@ -494,7 +493,7 @@ export function VerifyEmailPage({ error }: { error?: string }) {
           <SentPanel icon="warn" bad title="没有验证成功">
             {VERIFY_ERRORS[error] ?? '验证没有完成。登录后可以重新发送验证邮件。'}
           </SentPanel>
-          <AppLink to="/login" className={buttonClass({ variant: 'primary', size: 'lg', block: true })}>
+          <AppLink to="/login" className={buttonClass({ variant: 'primary', block: true })}>
             去登录
           </AppLink>
         </>
@@ -503,7 +502,7 @@ export function VerifyEmailPage({ error }: { error?: string }) {
           <SentPanel icon="check" title="邮箱已验证">
             欢迎加入。现在可以收藏喜欢的表情，也可以投稿自己的表情包。
           </SentPanel>
-          <AppLink to="/me" className={buttonClass({ variant: 'primary', size: 'lg', block: true })}>
+          <AppLink to="/me" className={buttonClass({ variant: 'primary', block: true })}>
             去个人中心
           </AppLink>
           <AppLink to="/submit" className={buttonClass({ block: true })}>
