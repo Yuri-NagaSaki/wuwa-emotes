@@ -3,16 +3,16 @@
 //
 // Everything is configured here, inline; no .env files. Overridable for other machines/lanes:
 //   CHAOCHI_TEST_PG      postgres://chaochi:chaochi@127.0.0.1:5432   (server, no database)
-//   CHAOCHI_TEST_DB      chaochi_lane_a                               (dropped and recreated per run)
+//   CHAOCHI_TEST_DB      chaochi_test                                 (dropped and recreated per run)
 //   CHAOCHI_TEST_S3      http://127.0.0.1:9000                        (RustFS / MinIO, path-style)
-//   CHAOCHI_TEST_BUCKET  chaochi-lane-a
+//   CHAOCHI_TEST_BUCKET  chaochi-test
 
 import { join } from 'node:path'
 import pg from 'pg'
 
 const PG_SERVER = (process.env.CHAOCHI_TEST_PG ?? 'postgres://chaochi:chaochi@127.0.0.1:5432').replace(/\/+$/, '')
-export const DB_NAME = process.env.CHAOCHI_TEST_DB ?? 'chaochi_lane_a'
-export const BUCKET = process.env.CHAOCHI_TEST_BUCKET ?? 'chaochi-lane-a'
+export const DB_NAME = process.env.CHAOCHI_TEST_DB ?? 'chaochi_test'
+export const BUCKET = process.env.CHAOCHI_TEST_BUCKET ?? 'chaochi-test'
 export const SITE_URL = 'http://localhost:3101'
 export const ROOT = join(import.meta.dir, '..', '..')
 

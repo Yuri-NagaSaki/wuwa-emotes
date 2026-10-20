@@ -46,7 +46,7 @@ export function canGenerateFull(ref: ImgRef, row: EmojiForFull | null): boolean 
 
 export async function handleImg(request: Request, deps: ImgDeps): Promise<Response> {
   if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Method not allowed', { status: 405, headers: { ...baseHeaders, allow: 'GET, HEAD' } })
+    return new Response('Method not allowed', { status: 405, headers: { ...baseHeaders, 'content-type': 'text/plain', allow: 'GET, HEAD' } })
   }
   const ref = parseImgPath(new URL(request.url).pathname)
   if (!ref) return notFound()
