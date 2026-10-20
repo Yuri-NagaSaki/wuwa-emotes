@@ -2,6 +2,8 @@
 
 单机 Docker Compose。访客经 Cloudflare（DNS 橙云代理）连到源站 443 端口；源站的 Caddy 只接受 Cloudflare 的连接，把请求分给两个 web 副本。发布用 `deploy/rollout.sh` 逐个替换副本，访客不会遇到中断。入口不使用 Cloudflare Tunnel。
 
+镜像由 GitHub Actions 构建并推送到 GHCR，服务器不构建镜像，源码目录是公开仓库的 git 克隆。在开发机上执行 `deploy/release.sh`：它等 CI 发布镜像，再在服务器上切换源码并执行 `rollout.sh`。CI 只用 GitHub 自动提供的 `GITHUB_TOKEN`，仓库里不配置任何密钥；镜像设为公开后，服务器也不需要 GitHub 凭据。
+
 ```text
 访客 ──HTTPS──▶ Cloudflare ──:443──▶ proxy（Caddy，主机网络；nftables 只放行 Cloudflare）
                                       ├──▶ web-a 172.30.47.11:3000 ┐ 桥接网络 app，
@@ -20,7 +22,7 @@ web-a、web-b、worker、migrate ──▶ db（PostgreSQL 18）      web、work
 ## 服务器准备
 
 - Debian 13，Docker Engine 25 或更高版本（健康检查用到 `start_interval`），Docker Compose 插件。
-- 主机工具：`curl`、`nftables`（`nft`）、`util-linux`（`nsenter`、`flock`）、`iproute2`（`ss`）。Debian 13 标准安装通常已包含；缺少时用 `apt install` 补齐。
+- 主机工具：`git`、`curl`、`nftables`（`nft`）、`util-linux`（`nsenter`、`flock`）、`iproute2`（`ss`）。缺少时补齐：`apt-get install -y git curl nftables util-linux iproute2`。
 - 以 root 执行本文命令。`rollout.sh` 需要 root：它进入副本的网络命名空间排空连接。
 - 不要启用带 `flush ruleset` 的 `nftables.service`：它会清掉 Docker 的规则。`firewall.sh install` 检测到时会提示。
 
@@ -28,7 +30,7 @@ web-a、web-b、worker、migrate ──▶ db（PostgreSQL 18）      web、work
 
 ```text
 /opt/chaochi/
-├── src/          源码（compose.yaml、deploy/），由开发机的 deploy/push-src.sh 原地更新；docker compose 命令在这里执行
+├── src/          公开仓库的 git 克隆（compose.yaml、deploy/），发布时原地检出要发布的提交；docker compose 命令在这里执行
 ├── app-env       应用配置与密钥，root 所有，权限 600
 ├── certs/        Cloudflare Origin CA 证书：origin.pem、origin-key.pem，权限 600
 ├── deploy.conf   可选：compose 层面的覆盖项，不含密钥
@@ -37,6 +39,24 @@ web-a、web-b、worker、migrate ──▶ db（PostgreSQL 18）      web、work
 ```
 
 `compose.yaml` 的默认值就是生产值，通常不需要 `deploy.conf`。只有子网 `172.30.47.0/24` 与主机上已有网络冲突时，才在 `deploy.conf` 里写 `CHAOCHI_SUBNET`、`CHAOCHI_WEB_A_IP`、`CHAOCHI_WEB_B_IP`。`rollout.sh` 会读取 `deploy.conf`；手动执行 `docker compose` 前，先执行 `set -a; . /opt/chaochi/deploy.conf; set +a`，否则 compose 会认为配置变了而重建容器。
+
+## 镜像（GHCR）
+
+推送到 `develop` 或 `main` 后，CI（`.github/workflows/ci.yml`）依次做类型检查、全部测试、构建和全历史密钥扫描，全部通过才推送镜像：
+
+| 标签 | 用途 |
+|---|---|
+| `ghcr.io/yuri-nagasaki/wuwa-emotes:<提交前 7 位>` | 发布用，`release.sh` 和 `rollout.sh` 只用这种标签 |
+| `ghcr.io/yuri-nagasaki/wuwa-emotes:develop`、`:main` | 该分支最新的镜像，只供查看 |
+
+`ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 只存在于服务器本机：compose 的应用服务都用它，只有 `rollout.sh` 移动它。CI 从不推送 `latest`，所以 `docker compose pull` 拉不到它，也就不会绕过 `rollout.sh` 换掉线上镜像。一次推送多个提交时，只有最后一个提交有镜像。
+
+GHCR 上的包第一次推送后默认是私有的，服务器拉取会失败。站长二选一，做一次即可：
+
+- 设为公开（推荐，仓库本身已公开，镜像不含密钥）：GitHub 个人主页 → Packages → `wuwa-emotes` → Package settings → Danger Zone → Change visibility → Public。
+- 保持私有：在 GitHub 创建只有 `read:packages` 权限的 classic token，在服务器上执行 `docker login ghcr.io -u <GitHub 用户名>`，按提示粘贴 token。
+
+包页面应显示关联仓库 `Yuri-NagaSaki/wuwa-emotes`（来自镜像的 `org.opencontainers.image.source` 标签）。
 
 ## 填写 app-env
 
@@ -66,12 +86,18 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 
 ## 首次部署
 
-前置条件：已完成「服务器准备」，`app-env` 已填写。证书文件可以稍后再放。
+前置条件：已完成「服务器准备」和「镜像（GHCR）」，`app-env` 已填写。证书文件可以稍后再放。
 
-1. 上传代码：服务器先安装 rsync（`apt-get install -y rsync`）。在开发机的仓库里把服务器地址写进 `deploy/.deploy-host`（一行 `root@<服务器IP>`；该文件不进仓库，也可以改用环境变量 `CHAOCHI_DEPLOY_HOST`），然后执行 `deploy/push-src.sh`。之后在服务器上 `cd /opt/chaochi/src`。
+1. 克隆源码，之后的命令都在这个目录执行。`/opt/chaochi/src` 已经存在但不是 git 克隆（旧流程上传的源码）时，不要删除重建，按「从旧流程迁移」原地转换。
+
+   ```bash
+   git clone https://github.com/Yuri-NagaSaki/wuwa-emotes.git /opt/chaochi/src
+   cd /opt/chaochi/src
+   ```
+
 2. 安装防火墙，必须在首次启动容器之前执行：`deploy/firewall.sh install`。脚本安装开机加载的服务和每周刷新 Cloudflare 网段的定时器，并关闭 systemd-resolved 的 LLMNR（5355 端口）。如果 SSH 不在 22 端口，执行 `CHAOCHI_SSH_PORT=<端口> deploy/firewall.sh install`；否则脚本会拒绝执行，避免锁死 SSH。安装时的 SSH 端口和 HTTPS 端口保存在 `/etc/default/chaochi-firewall`，开机加载和每周刷新都读取这个文件。
 3. 检查防火墙：`deploy/firewall.sh status`。从另一台机器用 `curl -k --resolve sparxie.moe:443:<服务器IP> https://sparxie.moe/` 访问应当超时。
-4. 构建并启动：`deploy/rollout.sh --build "$(cat REVISION)"`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
+4. 首次发布，在开发机的仓库里执行：把服务器地址写进 `deploy/.deploy-host`（一行 `root@<服务器地址>`；该文件不进仓库，也可以改用环境变量 `CHAOCHI_DEPLOY_HOST`），然后执行 `deploy/release.sh`（见「发布」）。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
 5. 打开 `https://sparxie.moe/` 注册账号并完成邮箱验证。
 6. 把这个账号设为站长：`docker compose exec web-a bun src/cli.ts promote-admin <邮箱>`。
 7. 导入 v1 数据（首次上线时执行）。命令在一次性的 worker 容器里运行，内存与 CPU 限制与 worker 相同：
@@ -80,18 +106,63 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
    3. 补齐原图尺寸：`docker compose run --rm --no-deps worker bun src/cli.ts backfill-dims`。
    4. 为已发布表情排队生成 `p240`、`a160`：`docker compose run --rm --no-deps worker bun src/cli.ts backfill-derived`。生成由 worker 完成。
 
+### 从旧流程迁移
+
+旧流程从开发机用 rsync 上传源码，在服务器上用 `--build` 构建 `chaochi/app` 镜像。这样部署过的服务器，第一次用 `release.sh` 发布之前做一次下面两步。之后服务器不再需要 rsync。
+
+1. 把 `/opt/chaochi/src` 原地转换成 git 克隆。目录本身保留（proxy 挂载着 `src/deploy`），已有文件由检出覆盖：
+
+   ```bash
+   cd /opt/chaochi/src
+   git init --quiet
+   git remote add origin https://github.com/Yuri-NagaSaki/wuwa-emotes.git
+   git fetch --quiet origin
+   git checkout --quiet --force --detach origin/develop
+   rm -f REVISION
+   git status --short
+   docker compose exec -T proxy /bin/sh /etc/chaochi/caddy/caddy.sh validate
+   ```
+
+   `git status --short` 应当没有输出。列出的文件是旧版本留下、仓库里已经删除的文件，确认后删掉。`validate` 必须通过。
+
+2. 给当前的镜像补上新名字，`rollout.sh` 才能认出上一个版本并打印回滚命令：
+
+   ```bash
+   tag=$(tail -n 1 /opt/chaochi/state/releases.log | cut -d' ' -f2)   # 当前线上的标签
+   docker tag chaochi/app:latest ghcr.io/yuri-nagasaki/wuwa-emotes:latest
+   docker tag "chaochi/app:$tag" "ghcr.io/yuri-nagasaki/wuwa-emotes:$tag"
+   ```
+
+仓库历史改写过，旧标签不一定还是仓库里的提交，`release.sh` 未必能回滚到它。需要时在服务器上执行 `deploy/rollout.sh <旧标签>`（镜像就在本机）。新版本运行正常后，可以用 `docker image rm` 删掉 `chaochi/app:*`。
+
 ## 发布
 
 ```bash
-deploy/push-src.sh                                                   # 开发机，上传当前提交
-cd /opt/chaochi/src && deploy/rollout.sh --build "$(cat REVISION)"   # 服务器
+git push origin develop        # 开发机：CI 通过后发布 ghcr.io/yuri-nagasaki/wuwa-emotes:<提交前 7 位>
+deploy/release.sh --probe      # 开发机：等这个镜像，然后在服务器上发布 origin/develop 的最新提交
 ```
 
-`/opt/chaochi/src` 只能原地更新，`push-src.sh` 用 `rsync --delete` 同步。不要用 `mv` 或 `rm -rf` 整体替换这个目录：proxy 通过绑定挂载读取 `src/deploy`，目录被替换后它仍然读取已删除的旧目录，平滑重载会失败，只能重建 proxy（秒级中断）。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况时停止。
+`deploy/release.sh [<提交>] [root@<服务器地址>] [--no-wait] [--probe]` 在开发机的仓库里执行，依次：
+
+1. `git fetch origin`，把提交（默认 `origin/develop`）解析成完整提交号，确认它已经在 `origin/develop` 或 `origin/main` 上。镜像标签是提交号的前 7 位。
+2. 等 CI 发布这个标签的镜像：用 `gh run list` 查这个提交的 CI（开发机需要 `gh auth login`），镜像公开时还会用 `docker manifest inspect` 直接确认。最多等 30 分钟（`CHAOCHI_RELEASE_TIMEOUT`，单位秒）。CI 失败或被取消时立即停止；2 分钟内查不到这个提交的 CI 时也停止，因为一次推送只有最后一个提交有镜像。
+3. 通过 SSH 在服务器上执行下面这条命令，实时输出 `rollout.sh` 带时间戳的日志。服务器地址取自命令行参数、`CHAOCHI_DEPLOY_HOST` 或 `deploy/.deploy-host`，密钥是 `~/.ssh/wuwa_deploy`（`CHAOCHI_SSH_KEY` 可改）。
+
+```bash
+cd /opt/chaochi/src && git fetch --quiet origin && git checkout --quiet --detach <提交> && deploy/rollout.sh <提交前 7 位>
+```
+
+- `--probe`：发布期间每 0.5 秒请求一次 `https://sparxie.moe/api/health`（`CHAOCHI_SITE_URL` 可改），结束时打印成功和失败次数，并列出失败的时间和状态码。
+- `--no-wait`：不等 CI。镜像还不存在时 `rollout.sh` 拉取失败，在改动任何服务之前停止。
+- 退出码与 `rollout.sh` 相同：0 已发布；1 上线前停止；2 已上线，但 Caddy 重载失败。SSH 失败时为 255。
+
+开发机不可用时，在服务器上直接执行上面这条命令，效果相同。
+
+`/opt/chaochi/src` 只能原地更新，也就是上面的 `git checkout`。不要用 `mv`、`rm -rf` 或重新 `git clone` 替换这个目录：proxy 通过绑定挂载读取 `src/deploy`，目录被替换后它仍然读取已删除的旧目录，平滑重载会失败，只能重建 proxy（秒级中断）。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况时停止。也不要在服务器的检出里改文件：与要发布的提交冲突时 `git checkout` 失败，发布停止。
 
 `rollout.sh` 按以下顺序执行，任何一步失败都会停止：
 
-1. 把 `chaochi/app:latest` 指向新镜像，执行迁移。迁移期间旧版本继续服务。
+1. 本机没有 `<提交前 7 位>` 镜像时先 `docker pull`，再把本机指针 `ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 指向它，执行迁移。迁移期间旧版本继续服务。
 2. 排空 web-a：在 web-a 的网络命名空间里拒绝新连接，Caddy 把新请求改发给 web-b（任何请求方法都会重试），进行中的请求继续完成。
 3. 用新镜像重建 web-a，等待 Docker 健康检查通过，并确认 Caddy 已把请求路由到 web-a。
 4. 对 web-b 重复第 2、3 步。
@@ -102,7 +173,7 @@ cd /opt/chaochi/src && deploy/rollout.sh --build "$(cat REVISION)"   # 服务器
 发布期间只有一个副本在服务，所以负载必须在单个副本的能力之内。测试机上负载提高到约 1,900 req/s 时，访客路径（`GET /`、`POST`）仍然没有失败，但 `/api/health` 的数据库检查因事件循环排队超过 2 秒，返回了 503。
 
 - 同一标签再执行一次不做任何事；加 `--force` 可以滚动重启全部副本，这也是零中断重启副本的方式。
-- 镜像也可以 `--load <镜像.tar>` 导入，或预先 `docker pull`。
+- GHCR 或 CI 不可用时，在服务器上用当前检出的源码构建：`deploy/rollout.sh --build <提交前 7 位>-local`。标签加 `-local`，避免与 CI 发布的同名标签混淆：本机已有的标签优先于拉取。镜像也可以用 `--load <镜像.tar>` 导入。
 - 镜像变化后，不要直接执行 `docker compose up -d`：它会同时重建 web-a 和 web-b，网站会中断。只用 `rollout.sh` 切换镜像。
 
 ### 迁移的兼容规则
@@ -118,14 +189,20 @@ cd /opt/chaochi/src && deploy/rollout.sh --build "$(cat REVISION)"   # 服务器
 ## 回滚
 
 ```bash
-deploy/rollout.sh <上一个标签>
+deploy/release.sh <上一个标签>     # 开发机：源码和镜像一起回到上一个发布
 ```
 
-回滚同样是逐个替换，不中断访问。上一个标签打印在每次发布的结尾，也记录在 `/opt/chaochi/state/releases.log`。回滚不撤销迁移；遵守上面的兼容规则时，上一个版本可以在新结构上运行。
+开发机不可用时，在服务器上执行同样的步骤：
 
-发布中途失败时，脚本把 `chaochi/app:latest` 指回原镜像，打印各副本状态和回滚命令。Caddy 只把请求路由给 `/api/health` 返回 2xx 的副本，所以仍然健康的副本会继续服务。
+```bash
+cd /opt/chaochi/src && git checkout --quiet --detach <上一个标签> && deploy/rollout.sh <上一个标签>
+```
 
-web-a、web-b 和 worker 都已切换、只有最后的 Caddy 重载失败时，发布已经生效：`chaochi/app:latest` 留在新镜像，发布记录照常写入，脚本以退出码 2 结束并打印校验和重载命令。Caddy 继续使用原来的配置服务。
+回滚同样是逐个替换，不中断访问。标签就是提交号的前 7 位；上一个标签打印在每次发布的结尾，也记录在 `/opt/chaochi/state/releases.log`。上一个版本的镜像通常还在本机；不在时 `rollout.sh` 从 GHCR 拉取。回滚不撤销迁移；遵守上面的兼容规则时，上一个版本可以在新结构上运行。
+
+发布中途失败时，脚本把 `ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 指回原镜像，打印各副本状态和回滚命令。Caddy 只把请求路由给 `/api/health` 返回 2xx 的副本，所以仍然健康的副本会继续服务。
+
+web-a、web-b 和 worker 都已切换、只有最后的 Caddy 重载失败时，发布已经生效：`ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 留在新镜像，发布记录照常写入，脚本以退出码 2 结束并打印校验和重载命令。Caddy 继续使用原来的配置服务。
 
 ## 证书与 TLS 模式
 
@@ -173,7 +250,7 @@ docker compose exec -T db pg_dump -U chaochi -d chaochi -Fc > /opt/chaochi/backu
 4. 启动服务：`docker compose up -d --no-deps web-a web-b worker`。`docker compose start` 在这里不可用，它要求一次性服务 `migrate` 的容器存在。
 5. 用 `docker compose ps` 确认 web-a、web-b 为 healthy。
 
-在新服务器上恢复时，先 `docker compose up -d db`，对新建的空数据库执行第 3 步，再执行 `deploy/rollout.sh --build <标签>`。
+在新服务器上恢复时，先按「首次部署」克隆源码，`docker compose up -d db`，对新建的空数据库执行第 3 步，再从开发机执行 `deploy/release.sh <标签>`。
 
 ## 防火墙维护
 
@@ -243,3 +320,4 @@ docker run --rm --init --network host --add-host sparxie.moe:127.0.0.1 \
 - 直接向 443 发送明文 HTTP 会收到 Go 内置的 400 响应（不含 IP）。防火墙生效后只有 Cloudflare 能连到 443。
 - 防火墙允许所有 Cloudflare 网段。其他 Cloudflare 账号理论上也能把流量导向这台服务器；如需排除，可另行启用 Cloudflare 的 Authenticated Origin Pulls（当前未配置）。
 - IPv6 规则只经过 `nft` 语法检查，测试环境没有 IPv6，未做连通性验证。
+- `release.sh` 在一条 SSH 连接里运行 `rollout.sh`。连接中途断开时，服务器上的 `rollout.sh` 会在下一次输出时被终止，可能停在任意一步、来不及做失败处理。之后在服务器上用 `docker compose ps` 查看状态，再执行一次「发布」里的命令（必要时加 `--force`）。网络不稳时，在服务器上的 tmux 里直接执行那条命令。

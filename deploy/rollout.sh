@@ -5,11 +5,12 @@
 #
 #   --build        docker build the current checkout as <repo>:<tag>
 #   --load <file>  docker load an image archive that contains <repo>:<tag>
-#   (neither)      use <repo>:<tag> if it exists locally, otherwise docker pull it
+#   (neither)      use <repo>:<tag> if it exists locally, otherwise docker pull it (CI publishes <sha7>)
 #   --force        roll even if every service already runs <tag>
 #
 # Steps
-#   1. point CHAOCHI_IMAGE (default chaochi/app:latest) at <repo>:<tag>
+#   1. point CHAOCHI_IMAGE (default ghcr.io/yuri-nagasaki/wuwa-emotes:latest, a tag that exists only on
+#      this host) at <repo>:<tag>
 #   2. run migrations (one-shot `migrate`); the old release keeps serving meanwhile
 #   3. web-a, then web-b: drain it (new connections refused, so the proxy sends them to the other
 #      replica; running requests finish), recreate it on the new image, wait until Docker reports it
@@ -46,10 +47,10 @@ DEPLOY_CONF=${CHAOCHI_DEPLOY_CONF:-/opt/chaochi/deploy.conf}
 # shellcheck disable=SC1090
 if [[ -f $DEPLOY_CONF ]]; then set -a; . "$DEPLOY_CONF"; set +a; fi
 
-POINTER=${CHAOCHI_IMAGE:-chaochi/app:latest}
+POINTER=${CHAOCHI_IMAGE:-ghcr.io/yuri-nagasaki/wuwa-emotes:latest}
 export CHAOCHI_IMAGE=$POINTER
 if [[ ! $POINTER =~ ^(.+):([A-Za-z0-9_][A-Za-z0-9_.-]*)$ ]]; then
-  echo "CHAOCHI_IMAGE must name a tag, e.g. chaochi/app:latest (got $POINTER)" >&2
+  echo "CHAOCHI_IMAGE must name a tag, e.g. ghcr.io/yuri-nagasaki/wuwa-emotes:latest (got $POINTER)" >&2
   exit 64
 fi
 REPO=${CHAOCHI_IMAGE_REPO:-${BASH_REMATCH[1]}}
@@ -218,7 +219,7 @@ flock -n 9 || die "another rollout holds $STATE_DIR/rollout.lock"
 if proxy_running && ! out=$(dc exec -T proxy /bin/sh /etc/chaochi/caddy/caddy.sh validate 2>&1); then
   printf '%s\n' "$out" | tail -n 5 >&2
   die "the proxy cannot validate /etc/chaochi/caddy/Caddyfile. If deploy/caddy changed, fix it. If src was \
-replaced instead of updated in place (use deploy/push-src.sh), the proxy still reads the deleted tree: \
+replaced instead of updated in place (with git, as deploy/release.sh does), the proxy still reads the deleted tree: \
 recreate it with docker compose up -d --no-deps --force-recreate proxy (a few seconds without service)"
 fi
 
@@ -232,7 +233,8 @@ elif [[ -n $LOAD_FILE ]]; then
 fi
 if ! docker image inspect "$TARGET" >/dev/null 2>&1; then
   log "$TARGET is not local; pulling"
-  docker pull "$TARGET" || die "image $TARGET not found (use --build or --load)"
+  docker pull "$TARGET" || die "cannot pull $TARGET: CI has not published it (yet), or the GHCR package is \
+private (make it public, or docker login ghcr.io with a read:packages token); or use --build / --load"
 fi
 TARGET_ID=$(docker image inspect -f '{{.Id}}' "$TARGET")
 PREV_ID=$(docker image inspect -f '{{.Id}}' "$POINTER" 2>/dev/null || true)
