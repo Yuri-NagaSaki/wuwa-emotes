@@ -41,6 +41,11 @@ export type ListPacksInput = z.input<typeof listPacksInput>
 export const packSlugInput = z.object({ slug })
 export const emojiIdInput = z.object({ emojiId: z.string().regex(EMOJI_ID_RE) })
 
+/** Ids per batchItemsFn call (the 打包清单 holds up to 2000; the page asks in pages of this size). */
+export const BATCH_ITEMS_MAX = 500
+export const batchItemsInput = z.object({ ids: z.array(z.string().regex(EMOJI_ID_RE)).max(BATCH_ITEMS_MAX) })
+export type BatchItemsInput = z.infer<typeof batchItemsInput>
+
 export const charactersInput = z
   .object({ sort: z.enum(['count', 'recent', 'pinyin']).default('count') })
   .default({ sort: 'count' })
