@@ -136,6 +136,11 @@ export interface PackDetail {
   /** Every public emoji, in pack order (sort_order, created_at, id). */
   emojis: PackEmoji[]
   characters: CharacterRef[]
+  /**
+   * A group pack (合集): every tagged sticker carries the same list of two or more characters
+   * (attribution.ts rule 1) and the pack is not a single character's; its page credits none of them.
+   */
+  group: boolean
   /** pack_artists role = artist */
   artists: ArtistRef[]
   /** pack_artists role = commissioner (约稿人 with an artist page) */

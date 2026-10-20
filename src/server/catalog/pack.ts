@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { copiedTagsPack } from './attribution'
 import { packArtistsJson, packCharactersJson, type RawCharacter, splitArtists, toCharacterRef } from './cards'
 import { type RawImage, toEmojiImage } from './images'
 import { emojiIdInput, packSlugInput } from './inputs'
@@ -41,6 +42,7 @@ interface DetailRow {
   cover_emoji_id: string | null
   chars: RawCharacter[]
   arts: { slug: string; name: string; role: ArtistRole }[]
+  group_pack: boolean
   tags: TagRef[]
 }
 
@@ -69,6 +71,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
         p.download_count as downloads, p.favorite_count as favorites, ${PUB_AT} as pub_at, p.updated_at, p.cover_emoji_id,
         ${packCharactersJson('p')} as chars,
         ${packArtistsJson('p')} as arts,
+        ${copiedTagsPack('p')} as group_pack,
         (select coalesce(json_agg(json_build_object('dimension', t.dimension, 'slug', t.slug, 'name', t.name)
                                   order by t.dimension, t.name, t.id), '[]'::json)
            from pack_tags pt join tags t on t.id = pt.tag_id where pt.pack_id = p.id) as tags
@@ -129,6 +132,8 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
       : null,
     emojis,
     characters,
+    // copied tags in a single-character pack still make it that character's (attribution rule 2)
+    group: !!p.group_pack && characters.length !== 1,
     artists,
     commissioners,
     commissionerText: p.commissioner ?? null,

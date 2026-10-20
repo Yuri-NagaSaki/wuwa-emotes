@@ -29,6 +29,19 @@ const COPIED_PACKS =
   `select ce.pack_id from tagsets ct join emojis ce on ce.id = ct.emoji_id ` +
   `group by ce.pack_id having count(*) >= 2 and min(ct.s) = max(ct.s) and min(cardinality(ct.s)) >= 2`
 
+/**
+ * Whether pack `pa` is a group pack (合集): its sticker tags are a copy of one character list (rule 1:
+ * at least two tagged stickers, all with the same set of two or more characters). The pack belongs to
+ * none of those characters in particular, so its page credits no single one.
+ */
+export function copiedTagsPack(pa = 'p'): SQL {
+  return sql.raw(
+    `coalesce((select count(*) >= 2 and min(gt.s) = max(gt.s) and min(cardinality(gt.s)) >= 2 from (` +
+      `select array_agg(gx.character_id order by gx.character_id) as s from emoji_characters gx ` +
+      `join emojis ge on ge.id = gx.emoji_id where ge.pack_id = ${pa}.id group by gx.emoji_id) gt), false)`,
+  )
+}
+
 /** Packs with exactly one character, and that character (rule 2). */
 const SOLO_PACKS = `select pack_id, min(character_id) as character_id from pack_characters group by pack_id having count(*) = 1`
 
