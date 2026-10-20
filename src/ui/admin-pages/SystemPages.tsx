@@ -226,7 +226,7 @@ export function JobsPage({ data }: { data: JobsData }) {
     <>
       <PageHead
         title="任务队列"
-        sub={`pg-boss · 计数直接取自任务表 · 更新于 ${fmtDateTime(data.generatedAt)}`}
+        sub={`队列在 PostgreSQL 里（pgboss.job），计数直接取自任务表 · 更新于 ${fmtDateTime(data.generatedAt)}`}
         actions={
           <Button size="sm" icon="refresh" onClick={() => void router.invalidate()}>
             刷新
