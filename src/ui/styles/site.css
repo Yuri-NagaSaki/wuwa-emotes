@@ -1,0 +1,85 @@
+/* Public shell: announcement bar, header, footer, phone tab bar, floating 打包 button.
+   Ported from design/prototype/src/tp-base.css ("public shell"). Loaded by the _site layout only. */
+
+.skip-link { position: absolute; left: 12px; top: -60px; z-index: 70; background: var(--tp-ink); color: var(--tp-bg); padding: 8px 14px; border-radius: var(--pill); font-weight: 800; }
+.skip-link:focus { top: calc(8px + var(--safe-top)); }
+
+.announce { background: var(--tp-deep); color: #e9f7f3; font-size: 13px; padding-top: var(--safe-top); }
+.announce .wrap { display: flex; align-items: center; gap: 10px; min-height: 38px; }
+.announce .wave-ico { color: var(--tp-teal); }
+.announce .txt { min-width: 0; }
+.announce a { color: #fff; font-weight: 700; text-decoration: underline; text-decoration-color: rgba(255, 255, 255, 0.4); text-underline-offset: 3px; }
+.announce .x { margin-left: auto; border: 0; background: none; color: #b8d7d1; padding: 6px; border-radius: 8px; display: inline-flex; }
+.announce + .head { --safe-top: 0px; }
+.ann-off .announce { display: none; }
+.ann-off .announce + .head { --safe-top: env(safe-area-inset-top, 0px); }
+
+.head { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--tp-bg) 92%, transparent); border-bottom: 1.5px solid var(--tp-line); padding-top: var(--safe-top); }
+.head .wrap { display: flex; align-items: center; gap: 22px; height: var(--head-h); }
+.nav { display: flex; gap: 4px; }
+.nav a { padding: 8px 14px; border-radius: var(--pill); font-weight: 700; color: var(--tp-body); font-size: 15px; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.nav a:hover { background: var(--tp-sand); color: var(--tp-ink); }
+.nav a[aria-current="page"] { background: var(--tp-ink); color: var(--tp-bg); }
+.head-search { flex: 1; max-width: 360px; margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--tp-input); border: 2px solid var(--tp-line-2); border-radius: var(--pill); padding: 0 8px 0 14px; height: 42px; color: var(--tp-faint); font-size: 14px; cursor: text; text-align: left; transition: border-color var(--t-fast) var(--ease); }
+.head-search:hover { border-color: var(--tp-teal); }
+.head-search span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.head-search .kbd { flex: none; }
+.head-actions { display: flex; align-items: center; gap: 10px; }
+.icon-btn.m-search { display: none; }
+.bottle-btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px 0 10px; border-radius: var(--pill); border: 2px solid var(--tp-line-2); background: var(--tp-card); color: var(--tp-ink); font-weight: 800; }
+.bottle-btn:hover { border-color: var(--tp-teal); }
+.bottle-btn svg.i { width: 20px; height: 20px; }
+.bottle-btn .count { min-width: 22px; height: 22px; border-radius: 11px; background: var(--tp-teal); color: var(--tp-on-teal); font: 900 12px/22px var(--tp-font-num); text-align: center; padding: 0 6px; }
+.bottle-btn.is-bump { animation: tp-bump 0.5s var(--spring); }
+@keyframes tp-bump { 0% { transform: scale(1); } 35% { transform: scale(1.14, 0.9); } 70% { transform: scale(0.96, 1.05); } 100% { transform: scale(1); } }
+.head .user-slot { flex: none; }
+
+/* footer with the tide line */
+.foot { margin-top: 56px; background: var(--tp-deep); color: #cfe6e1; position: relative; padding-bottom: calc(28px + var(--safe-bottom)); }
+.foot-wave { position: absolute; left: 0; right: 0; top: -38px; height: 40px; overflow: hidden; pointer-events: none; }
+.foot-wave svg { width: 200%; height: 40px; display: block; animation: tp-tide 14s linear infinite; }
+.foot-wave path { fill: var(--tp-deep); }
+.foot-wave path.back { fill: color-mix(in srgb, var(--tp-deep) 55%, var(--tp-teal)); opacity: 0.5; }
+@keyframes tp-tide { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.foot .wrap { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 32px; padding-top: 30px; }
+.foot h4 { color: #fff; font-size: 15px; margin-bottom: 10px; }
+.foot ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 7px; font-size: 14px; }
+.foot a:hover { color: #fff; text-decoration: underline; text-underline-offset: 3px; }
+.foot .about p { font-size: 13.5px; line-height: 1.7; color: #b3d1cb; max-width: 40ch; }
+.foot .logo { color: #fff; margin-bottom: 12px; }
+.foot .logo small { color: #9cc4bd; }
+.foot-base { grid-column: 1 / -1; border-top: 1px solid rgba(255, 255, 255, 0.12); padding-top: 16px; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 12.5px; color: #93b9b2; }
+.foot-base .lic { display: inline-flex; gap: 6px; align-items: center; }
+
+/* phone tab bar */
+.tabbar { position: fixed; left: 0; right: 0; bottom: 0; display: none; grid-template-columns: repeat(5, 1fr); background: color-mix(in srgb, var(--tp-card) 96%, transparent); border-top: 1.5px solid var(--tp-line); padding: 6px 6px calc(6px + var(--safe-bottom)); z-index: 35; }
+.tabbar a { display: grid; justify-items: center; gap: 2px; font-size: 11px; font-weight: 800; color: var(--tp-faint); padding: 4px 0; border-radius: 14px; }
+.tabbar a svg.i { width: 23px; height: 23px; }
+.tabbar a[aria-current="page"] { color: var(--tp-ink); }
+.tabbar a[aria-current="page"] svg.i { color: var(--tp-teal-press); stroke-width: 2.4; }
+
+/* floating 打包 button (phone) */
+.fab-bottle { position: fixed; right: 16px; bottom: calc(78px + var(--safe-bottom)); width: 58px; height: 58px; border-radius: 50%; background: var(--tp-sun); color: var(--tp-on-sun); border: 3px solid #fff8e1; box-shadow: 0 5px 0 0 var(--tp-shadow-3d), var(--sh-base); display: none; place-items: center; z-index: 36; padding: 0; }
+.fab-bottle .count { position: absolute; top: -6px; right: -6px; min-width: 24px; height: 24px; border-radius: 12px; background: var(--tp-teal); color: var(--tp-on-teal); font: 900 12px/24px var(--tp-font-num); text-align: center; padding: 0 6px; border: 2px solid var(--tp-bg); }
+.fab-bottle svg.i { width: 30px; height: 30px; }
+
+@media (max-width: 1100px) {
+  .nav a { padding: 8px 10px; }
+  .head-search { max-width: 260px; }
+  .foot .wrap { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 760px) {
+  .nav, .head-search, .bottle-btn .label, .head .user-slot { display: none; }
+  .head .wrap { gap: 10px; }
+  .head .logo-mark { width: 32px; height: 32px; }
+  .head .logo-word b { font-size: 20px; }
+  .head-actions { margin-left: auto; gap: 8px; }
+  .icon-btn.m-search { display: inline-grid; }
+  .head .icon-btn { width: 38px; height: 38px; }
+  .bottle-btn { height: 38px; padding: 0 10px 0 6px; }
+  .tabbar { display: grid; }
+  .fab-bottle.is-on { display: grid; }
+  .foot { margin-bottom: 0; padding-bottom: calc(96px + var(--safe-bottom)); }
+  .foot .wrap { grid-template-columns: 1fr; gap: 22px; }
+  .announce .wrap { min-height: 34px; font-size: 12.5px; }
+}
