@@ -17,7 +17,7 @@
     "cli": "bun src/cli.ts",
     "routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
-    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:downloads && bun run test:submissions && bun run test:comments && bun run test:media",
+    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:downloads && bun run test:submissions && bun run test:comments && bun run test:admin && bun run test:media",
     "test:unit": "bun test ./tests/unit",
     "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate",
@@ -29,7 +29,8 @@
     "deploy:loadcheck": "bun deploy/loadcheck.ts",
     "test:downloads": "CHAOCHI_TEST_DB=chaochi_test_downloads CHAOCHI_TEST_BUCKET=chaochi-test-downloads bun test ./tests/downloads",
     "test:submissions": "CHAOCHI_TEST_DB=chaochi_test_submissions CHAOCHI_TEST_BUCKET=chaochi-test-submissions bun test ./tests/submissions ./tests/account",
-    "test:comments": "CHAOCHI_TEST_DB=chaochi_test_comments CHAOCHI_TEST_BUCKET=chaochi-test-comments bun test ./tests/comments"
+    "test:comments": "CHAOCHI_TEST_DB=chaochi_test_comments CHAOCHI_TEST_BUCKET=chaochi-test-comments bun test ./tests/comments",
+    "test:admin": "CHAOCHI_TEST_DB=chaochi_test_admin CHAOCHI_TEST_BUCKET=chaochi-test-admin bun test ./tests/admin"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1153.0",
