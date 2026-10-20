@@ -181,67 +181,67 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
                 </div>
               ) : null}
             </div>
-            <dl className="credit-card">
-              <dt>许可</dt>
-              <dd className="lic">
-                {lic.badge ? <span className="cc-badge">{lic.badge}</span> : null}
-                {pv && pack.sourceKind === 'official' ? '版权方未开放再分发' : lic.text}
-              </dd>
-              {pack.artists.length ? (
-                <>
-                  <dt>画师</dt>
-                  <dd>
-                    {pack.artists.map((a, i) => (
-                      <span key={a.slug}>
-                        {i ? '、' : ''}
-                        <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
-                      </span>
-                    ))}
-                  </dd>
-                </>
-              ) : null}
-              {pack.commissioners.length || pack.commissionerText ? (
-                <>
-                  <dt>约稿</dt>
-                  <dd>
-                    {pack.commissioners.map((a, i) => (
-                      <span key={a.slug}>
-                        {i ? '、' : ''}
-                        <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
-                      </span>
-                    ))}
-                    {pack.commissionerText && !pack.commissioners.some((c) => c.name === pack.commissionerText)
-                      ? `${pack.commissioners.length ? '、' : ''}${pack.commissionerText}`
-                      : null}
-                  </dd>
-                </>
-              ) : null}
-              {pack.creditsText ? (
-                <>
-                  <dt>署名</dt>
-                  <dd>{pack.creditsText}</dd>
-                </>
-              ) : null}
-              {pack.sourceUrl ? (
-                <>
-                  <dt>来源</dt>
-                  <dd>
-                    <a href={pack.sourceUrl} rel="nofollow noopener noreferrer" target="_blank">
-                      {pack.sourceUrl.replace(/^https?:\/\//, '')}
-                    </a>
-                  </dd>
-                </>
-              ) : null}
-              <dt>下载</dt>
-              <dd>{pv ? <><span className="flag static">仅预览</span> 不提供原图与打包</> : '无需登录，单张或整包都可直接下载'}</dd>
-              {!pv ? (
-                <>
-                  <dt>下载包含</dt>
-                  <dd>原图 {pack.count} 张 + CREDITS.txt（署名与许可原文）</dd>
-                </>
-              ) : null}
-            </dl>
           </div>
+          <dl className="credit-card">
+            <dt>许可</dt>
+            <dd className="lic">
+              {lic.badge ? <span className="cc-badge">{lic.badge}</span> : null}
+              {pv && pack.sourceKind === 'official' ? '版权方未开放再分发' : lic.text}
+            </dd>
+            {pack.artists.length ? (
+              <>
+                <dt>画师</dt>
+                <dd>
+                  {pack.artists.map((a, i) => (
+                    <span key={a.slug}>
+                      {i ? '、' : ''}
+                      <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
+            {pack.commissioners.length || pack.commissionerText ? (
+              <>
+                <dt>约稿</dt>
+                <dd>
+                  {pack.commissioners.map((a, i) => (
+                    <span key={a.slug}>
+                      {i ? '、' : ''}
+                      <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
+                    </span>
+                  ))}
+                  {pack.commissionerText && !pack.commissioners.some((c) => c.name === pack.commissionerText)
+                    ? `${pack.commissioners.length ? '、' : ''}${pack.commissionerText}`
+                    : null}
+                </dd>
+              </>
+            ) : null}
+            {pack.creditsText ? (
+              <>
+                <dt>署名</dt>
+                <dd>{pack.creditsText}</dd>
+              </>
+            ) : null}
+            {pack.sourceUrl ? (
+              <>
+                <dt>来源</dt>
+                <dd>
+                  <a href={pack.sourceUrl} rel="nofollow noopener noreferrer" target="_blank">
+                    {pack.sourceUrl.replace(/^https?:\/\//, '')}
+                  </a>
+                </dd>
+              </>
+            ) : null}
+            <dt>下载</dt>
+            <dd>{pv ? <><span className="flag static">仅预览</span> 不提供原图与打包</> : '无需登录，单张或整包都可直接下载'}</dd>
+            {!pv ? (
+              <>
+                <dt>下载包含</dt>
+                <dd>原图 {pack.count} 张 + CREDITS.txt（署名与许可原文）</dd>
+              </>
+            ) : null}
+          </dl>
         </div>
       </div>
 

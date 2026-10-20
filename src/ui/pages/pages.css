@@ -5,8 +5,8 @@
    character and artist names) uses the body font, so pages only download the UI-vocabulary shards. */
 
 .dyn { font-family: var(--tp-font-body); }
-/* inputs inside a pill (.input) and the palette show focus on the pill, not as a box on the field */
-.input input:focus-visible, .cmdk-in .q:focus-visible { outline: none; box-shadow: none; }
+/* the palette shows focus on its row, not as a box on the field (pill inputs: components.css) */
+.cmdk-in .q:focus-visible { outline: none; box-shadow: none; }
 .cmdk-in .q { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 18px; font-weight: 700; color: var(--tp-ink); }
 .cmdk-in:focus-within { box-shadow: inset 0 -2px 0 var(--tp-teal); }
 /* Font budget (≤ 150 KB a page): every display character outside the site vocabulary costs a ~7–20 KB
@@ -73,7 +73,16 @@
 .list-end { text-align: center; padding: 26px 0 6px; color: var(--tp-faint); font-size: 13px; font-weight: 700; }
 
 /* ============ 包详情 ============ */
-.pack-h { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 30px; align-items: start; margin-top: 18px; }
+.pack-h { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 14px 30px; align-items: start; margin-top: 18px; }
+/* the 署名 card: under the info up to 1279 px, its own right-hand column from 1280 px (no empty right half) */
+.pack-h > .credit-card { grid-column: 2; }
+@media (min-width: 761px) and (max-width: 1279px) {
+  .pack-h > .pack-cover { grid-row: span 2; }
+}
+@media (min-width: 1280px) {
+  .pack-h { grid-template-columns: 236px minmax(0, 1fr) minmax(340px, 420px); column-gap: 36px; }
+  .pack-h > .credit-card { grid-column: 3; grid-row: 1; max-width: none; }
+}
 .pack-cover { aspect-ratio: 1; border-radius: var(--r-xl); background-color: color-mix(in srgb, var(--acc, var(--c-pink)) 26%, var(--tp-input)); background-image: radial-gradient(color-mix(in srgb, var(--acc, var(--c-pink)) 55%, transparent) 2px, transparent 2.2px); background-size: 16px 16px; border: 3px solid color-mix(in srgb, var(--acc, var(--c-pink)) 70%, var(--tp-card)); display: grid; place-items: center; position: relative; transform: rotate(-2deg); box-shadow: 0 8px 0 0 color-mix(in srgb, var(--acc, var(--c-pink)) 40%, var(--tp-shadow-3d)); }
 .pack-cover img { width: 84%; height: 84%; object-fit: contain; }
 .pack-cover .flag { position: absolute; top: -10px; right: -10px; transform: rotate(6deg); }
@@ -244,7 +253,7 @@ html.em-lock { overflow: hidden; }
   .pack-cover { border-radius: 24px; border-width: 2px; box-shadow: 0 5px 0 0 color-mix(in srgb, var(--acc, var(--c-pink)) 40%, var(--tp-shadow-3d)); }
   .pack-info { display: contents; }
   .pack-info h1 { font-size: 21px; align-self: center; }
-  .pack-meta, .pack-ex, .pack-acts, .credit-card, .pack-chips, .pack-info > .note-box { grid-column: 1 / -1; }
+  .pack-meta, .pack-ex, .pack-acts, .pack-h > .credit-card, .pack-chips, .pack-info > .note-box { grid-column: 1 / -1; }
   .pack-acts .hide-sm { display: none; }
   .credit-card { grid-template-columns: 1fr; gap: 2px; }
   .credit-card dd { margin-bottom: 6px; }

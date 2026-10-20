@@ -101,7 +101,7 @@ export function AdminShell({ siteName, viewer, pathname, crumbs, badges, onSearc
           </AppLink>
         }
       >
-        用户、存储、任务、审计和系统设置只对站长开放。需要调整时请联系站长。
+        用户、下载与风控、存储、任务、审计和系统设置只对站长开放。需要调整时请联系站长。
       </EmptyState>
     )
   }

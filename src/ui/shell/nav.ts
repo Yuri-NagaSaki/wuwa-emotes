@@ -37,7 +37,6 @@ export const FOOTER_NAV: readonly FooterGroup[] = [
       { to: '/packs', label: '全部表情包' },
       { to: '/characters', label: '角色图鉴' },
       { to: '/gallery', label: '潮汐画廊' },
-      { to: '/collections', label: '精选合集' },
     ],
   },
   {
@@ -45,7 +44,6 @@ export const FOOTER_NAV: readonly FooterGroup[] = [
     links: [
       { to: '/about', label: '关于{site}' },
       { to: '/links', label: '友情链接' },
-      { to: '/api', label: 'API 接入' },
       { to: '/artists', label: '画师名录' },
     ],
   },
