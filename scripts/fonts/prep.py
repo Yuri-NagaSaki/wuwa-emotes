@@ -75,7 +75,8 @@ def rename(font, style):
 
 
 def main(src, out, charset_path, style):
-    font = TTFont(src)
+    # keep the upstream head.modified so a rebuild produces byte-identical files
+    font = TTFont(src, recalcTimestamp=False)
     subset_font(font, read_unicodes(charset_path))
     rename(font, style)
     font.flavor = None
