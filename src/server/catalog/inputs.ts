@@ -22,6 +22,8 @@ export const emojiTypeSchema = z.enum(['animated', 'static'])
 export const listPacksInput = z.object({
   /** character slug: packs holding a sticker attributed to it (attribution.ts) */
   character: slug.optional(),
+  /** character slug: 合集包, packs it appears on without stickers of its own (attribution.ts) */
+  groupOf: slug.optional(),
   /** artist slug, any role (artist or commissioner) */
   artist: slug.optional(),
   kind: z.enum(['animated', 'static', 'mixed']).optional(),
@@ -53,8 +55,9 @@ export type CharactersInput = z.input<typeof charactersInput>
 
 export const characterDetailInput = z.object({
   slug,
-  tab: z.enum(['packs', 'emojis']).default('packs'),
-  /** tab = packs */
+  /** packs = its 包, emojis = its stickers, groups = its 合集包 */
+  tab: z.enum(['packs', 'emojis', 'groups']).default('packs'),
+  /** tab = packs or groups */
   sort: packSortSchema.default('new'),
   /** tab = emojis */
   emojiSort: streamSortSchema.default('new'),

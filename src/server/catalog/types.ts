@@ -196,9 +196,10 @@ export interface CharacterPortrait {
 }
 
 /**
- * A listed character. 张 and 包 follow the attribution rule in catalog/attribution.ts: a sticker
- * belongs to a character through its own tags, or through its pack when the pack has exactly one
- * character. Characters without attributed public stickers are not listed anywhere.
+ * A listed character: one with a public pack (包 or 合集) or an official portrait. 张, 包 and 合集
+ * follow catalog/attribution.ts: a sticker belongs to a character through its own tags, or through its
+ * pack when the pack has exactly one character; group packs whose stickers all carry the same list of
+ * characters attribute nothing. Text for the counts: characterCountText() in src/shared/characters.ts.
  */
 export interface CharacterCard extends CharacterRef {
   /**
@@ -213,7 +214,9 @@ export interface CharacterCard extends CharacterRef {
   packCount: number
   /** Public stickers attributed to the character (张). */
   emojiCount: number
-  /** Newest publication among those packs. */
+  /** Public packs the character appears on without stickers of its own (合集包). */
+  groupCount: number
+  /** Newest publication among its 包 and 合集包. */
   latestAt: IsoDate | null
 }
 
@@ -252,31 +255,28 @@ export interface CountedRef {
 }
 
 export interface CharacterArtist extends ArtistRef {
-  /** Published packs of this character drawn by the artist. */
+  /** Public packs the character appears on (包 or 合集包) drawn by the artist. */
   packCount: number
 }
 
 interface CharacterDetailBase {
   kind: 'character'
   character: CharacterProfile
-  /** Artists of this character's packs, most packs first. */
+  /** Artists of the packs it appears on (包 and 合集包), most packs first. */
   artists: CharacterArtist[]
 }
 
+/** tab packs: its 包; groups: its 合集包 (also what a character without 包 opens on). */
 export type CharacterDetail =
-  | (CharacterDetailBase & { tab: 'packs'; page: Page<PackCard> })
+  | (CharacterDetailBase & { tab: 'packs' | 'groups'; page: Page<PackCard> })
   | (CharacterDetailBase & { tab: 'emojis'; page: Page<EmojiTile> })
 
-/**
- * redirect: an old slug (permanent), or a character that appears in public packs without stickers of
- * its own (temporary, to a search for its name: it is not listed, but links to it keep working).
- */
-export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: string; temporary?: true } | { kind: 'missing' }
+export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }
 
 export interface ArtistDetail {
   kind: 'artist'
   artist: ArtistProfile
-  /** Characters across the artist's published packs, most packs first. */
+  /** Characters with stickers of their own in the artist's public packs; packCount counts those packs. */
   characters: (CharacterRef & { packCount: number })[]
   page: Page<PackCard>
 }
@@ -288,7 +288,7 @@ export type ArtistLookup = ArtistDetail | { kind: 'redirect'; redirectTo: string
 export interface CatalogStats {
   packs: number
   emojis: number
-  /** Listed characters (with attributed public stickers, see CharacterCard). */
+  /** Listed characters (see CharacterCard). */
   characters: number
   /** Published emojis that went public today (Asia/Shanghai day). See home.ts for the rule. */
   todayEmojis: number
@@ -311,7 +311,7 @@ export interface HomeData {
   featuredCollection: CollectionRef | null
   /** Its packs in collection order. */
   featured: PackCard[]
-  /** Top characters by attributed sticker count that have an avatar (角色潮汐). */
+  /** Top characters by sticker count (张) that have a sticker avatar (角色潮汐). */
   characters: CharacterCard[]
   stats: CatalogStats
 }

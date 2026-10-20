@@ -1,8 +1,9 @@
 import { type SQL, sql } from 'drizzle-orm'
+import { emojiVisible } from './sql'
 
 // Which stickers belong to which character: the one place that decides it. 角色图鉴, the character
 // page (counts, 「全部表情」, 随机来一张, its packs tab and artists), /packs?character=, the home strip,
-// search and the facets all go through here, so 张 and 包 agree everywhere.
+// search, the facets and the artist page all go through here, so 张 and 包 agree everywhere.
 //
 // v1 tagged stickers with characters (emoji_characters), but in packs with several characters it put
 // the same list on every sticker (all-characters-pipa: 31 stickers × 24 characters; frolova-…-gift:
@@ -14,10 +15,11 @@ import { type SQL, sql } from 'drizzle-orm'
 //   3. Otherwise (a multi-character pack without per-sticker tags) the sticker is not attributed.
 // A sticker can belong to several characters (rule 1 with a set that varies inside the pack).
 //
-//   张 = public stickers attributed to the character
-//   包 = public packs holding at least one of them
-// A character is listed only when 张 > 0. The rules ignore visibility; callers filter for public
-// emojis (sql.ts).
+//   张   = public stickers attributed to the character
+//   包   = public packs holding at least one of them
+//   合集 = public packs the character appears on (pack-level or sticker tags) that are not its 包
+// A character is listed when it has a public pack (包 or 合集) or a portrait. The rules ignore
+// visibility; callers filter for public emojis and packs (sql.ts).
 
 /** Each tagged sticker's character set. */
 const TAGSETS = `select cx.emoji_id, array_agg(cx.character_id order by cx.character_id) as s from emoji_characters cx group by cx.emoji_id`
@@ -30,36 +32,38 @@ const COPIED_PACKS =
 /** Packs with exactly one character, and that character (rule 2). */
 const SOLO_PACKS = `select pack_id, min(character_id) as character_id from pack_characters group by pack_id having count(*) = 1`
 
-const WITH = `with tagsets as (${TAGSETS}), copied as (${COPIED_PACKS}), solo as (${SOLO_PACKS})`
-
 /**
  * Every attribution as a derived table `(emoji_id, character_id, shared)`, unique per pair, for all
  * emojis whatever their status; `shared` is how many characters the sticker belongs to (1 = this
- * character alone). Use as `(${attributionTable()}) alias`.
+ * character alone). `packScope` (a subquery of pack ids) limits the work to those packs: a pack's
+ * attributions depend on that pack only. Use as `(${attributionTable()}) alias`.
  */
-export function attributionTable(): SQL {
-  return sql.raw(
-    `${WITH} ` +
-      // rule 1: own tags, outside copied packs (every tag of such a sticker counts)
-      `select t.emoji_id, unnest(t.s) as character_id, cardinality(t.s) as shared ` +
-      `from tagsets t join emojis ae on ae.id = t.emoji_id ` +
-      `where ae.pack_id not in (select pack_id from copied) ` +
-      `union all ` +
-      // rule 2: untagged, or tags that are a copy, in a single-character pack (two disjoint branches;
-      // `not in` over the tagged ids is one hashed lookup instead of an index probe per sticker)
-      `select ae.id, sp.character_id, 1 from emojis ae join solo sp on sp.pack_id = ae.pack_id ` +
-      `where ae.id not in (select emoji_id from tagsets) ` +
-      `union all ` +
-      `select ae.id, sp.character_id, 1 from emojis ae join solo sp on sp.pack_id = ae.pack_id ` +
-      `where ae.pack_id in (select pack_id from copied)`,
-  )
+export function attributionTable(packScope?: SQL): SQL {
+  // scoped: ids are ASCII, so group them bytewise rather than by the database's locale
+  const tagsets = packScope
+    ? sql`select cx.emoji_id collate "C" as emoji_id, array_agg(cx.character_id order by cx.character_id) as s
+          from emoji_characters cx join emojis ce on ce.id = cx.emoji_id where ce.pack_id in (${packScope}) group by 1`
+    : sql.raw(TAGSETS)
+  const scoped = packScope ? sql` and ae.pack_id in (${packScope})` : sql``
+  // rule 1: own tags outside copied packs (every tag of such a sticker counts); rule 2 in two disjoint
+  // branches (untagged; copied tags), `not in` over the tagged ids being one hashed lookup
+  return sql`with tagsets as (${tagsets}), copied as (${sql.raw(COPIED_PACKS)}), solo as (${sql.raw(SOLO_PACKS)})
+    select t.emoji_id, unnest(t.s) as character_id, cardinality(t.s) as shared
+    from tagsets t join emojis ae on ae.id = t.emoji_id
+    where ae.pack_id not in (select pack_id from copied)
+    union all
+    select ae.id, sp.character_id, 1 from emojis ae join solo sp on sp.pack_id = ae.pack_id
+    where ae.id not in (select emoji_id from tagsets)${scoped}
+    union all
+    select ae.id, sp.character_id, 1 from emojis ae join solo sp on sp.pack_id = ae.pack_id
+    where ae.pack_id in (select pack_id from copied)${scoped}`
 }
 
 /**
  * Ids of the emojis attributed to the character with this slug (any status): `e.id in (${…})`.
  * The same rules as attributionTable(), evaluated only over the packs that can matter (those with a
- * sticker tagged with the character, and its single-character packs): a pack's tags are a copy or
- * not on their own, so this keeps per-request filters cheap.
+ * sticker tagged with the character, and its single-character packs), which keeps per-request
+ * filters cheap.
  */
 export function attributedEmojiIds(slug: string): SQL {
   return sql`with
@@ -85,4 +89,21 @@ export function attributedEmojiIds(slug: string): SQL {
     select ae.id from emojis ae
     where ae.pack_id in (select pack_id from solo)
       and (ae.id not in (select emoji_id from tagsets) or ae.pack_id in (select pack_id from copied))`
+}
+
+/** Packs holding a public sticker of the character with this slug: its 包 (before pack visibility). */
+export function ownPackIds(slug: string): SQL {
+  return sql`select fe.pack_id from emojis fe where fe.id in (${attributedEmojiIds(slug)}) and ${emojiVisible('fe')}`
+}
+
+/**
+ * Packs the character with this slug appears on, through pack-level tags or a public sticker's tags
+ * (before pack visibility). Those that are not its 包 are its 合集包.
+ */
+export function appearsInPackIds(slug: string): SQL {
+  return sql`select ax.pack_id from pack_characters ax join characters ac on ac.id = ax.character_id and ac.slug = ${slug}
+    union
+    select ae.pack_id from emoji_characters ex join characters ac on ac.id = ex.character_id and ac.slug = ${slug}
+      join emojis ae on ae.id = ex.emoji_id
+    where ${emojiVisible('ae')}`
 }

@@ -70,12 +70,13 @@ export function coverJson(pa = 'p'): SQL {
 }
 
 /**
- * A character's page resolves: it is on a public pack or tagged on a public emoji. Being listed (角色图鉴,
- * counts) is stricter, see attribution.ts; a visible character that is not listed redirects to search.
+ * A character is listed and its page resolves: it is on a public pack, tagged on a public emoji, or
+ * has an official portrait (characters.ts; which stickers count as its own is attribution.ts).
  */
 export function characterVisible(alias = 'c'): SQL {
   return sql.raw(
-    `(exists (select 1 from pack_characters vx join packs vp on vp.id = vx.pack_id ` +
+    `(${alias}.portrait_key is not null ` +
+      `or exists (select 1 from pack_characters vx join packs vp on vp.id = vx.pack_id ` +
       `where vx.character_id = ${alias}.id and ${packVisibleText('vp')}) ` +
       `or exists (select 1 from emoji_characters vy join emojis ve on ve.id = vy.emoji_id join packs vq on vq.id = ve.pack_id ` +
       `where vy.character_id = ${alias}.id and ${emojiVisibleText('ve')} and ${packPublishedText('vq')}))`,

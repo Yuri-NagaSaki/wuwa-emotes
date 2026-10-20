@@ -1,6 +1,7 @@
 import { DATABASE_URL, withClient } from '../integration/setup'
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { clearCatalogCache } from '#/server/catalog/cache'
+import { getArtistDetail } from '#/server/catalog/artists'
 import { assignAvatars, getCharacterDetail, listCharacters, toPortrait } from '#/server/catalog/characters'
 import { getFacets, getPackFacets } from '#/server/catalog/explore'
 import { getHome } from '#/server/catalog/home'
@@ -9,6 +10,7 @@ import { listPacks } from '#/server/catalog/packs'
 import { searchCatalog, suggestCatalog } from '#/server/catalog/search'
 import { getGallery } from '#/server/catalog/stream'
 import type { CharacterCard } from '#/server/catalog/types'
+import { characterCountText } from '#/shared/characters'
 import { allPages } from './helpers'
 import { PACK_BY_SLUG, seedCatalog } from './seed'
 
@@ -69,14 +71,22 @@ const X_PACKS: XPack[] = [
 const xId = (pack: number, i: number) => `r-f${pack.toString(16).padStart(3, '0')}${i.toString(16).padStart(16, '0')}`
 const idOf = (slug: string, i: number) => xId(X_PACKS.findIndex((p) => p.slug === slug) + 1, i)
 
-/** Expected 张 / 包 / avatar for the added characters (and changes to the fixture's). */
-const EXPECTED: Record<string, { emojis: number; packs: string[]; avatar: string | null }> = {
-  lupa: { emojis: 7, packs: ['g-varied', 's-lupa'], avatar: idOf('g-varied', 3) },
-  abu: { emojis: 6, packs: ['g-varied', 's-abu', 's-lupa'], avatar: idOf('g-varied', 0) },
-  guguhetun: { emojis: 2, packs: ['s-gugu'], avatar: idOf('s-gugu', 1) },
-  kakaluo: { emojis: 1, packs: ['g-varied'], avatar: null },
+/** Expected 张 / 包 / 合集包 / avatar for the added characters (and changes to the fixture's). */
+const EXPECTED: Record<string, { emojis: number; packs: string[]; groups: string[]; avatar?: string | null }> = {
+  lupa: { emojis: 7, packs: ['g-varied', 's-lupa'], groups: ['g-duo', 'g-pipa'], avatar: idOf('g-varied', 3) },
+  abu: { emojis: 6, packs: ['g-varied', 's-abu', 's-lupa'], groups: ['g-abby', 'g-duo'], avatar: idOf('g-varied', 0) },
+  // appears on 阿布's pack through its copied tags
+  guguhetun: { emojis: 2, packs: ['s-gugu'], groups: ['g-abby', 's-abu'], avatar: idOf('s-gugu', 1) },
+  kakaluo: { emojis: 1, packs: ['g-varied'], groups: [], avatar: null },
+  aimisi: { emojis: 7 + 7 + 3, packs: ['aimisi-01', 'aimisi-02', 'multi-01'], groups: ['g-pipa'] },
+  xin: { emojis: 6 + 5, packs: ['g-xin', 'xin-01'], groups: [] },
+  // only in group packs whose stickers carry them all: listed, with 合集包 only
+  danjin: { emojis: 0, packs: [], groups: ['g-pipa'], avatar: null },
+  jiyan: { emojis: 0, packs: [], groups: ['g-pipa'], avatar: null },
+  tunzai: { emojis: 0, packs: [], groups: ['g-abby'], avatar: null },
+  yuehu: { emojis: 0, packs: [], groups: ['g-xin'], avatar: null },
 }
-const UNLISTED = ['danjin', 'jiyan', 'tunzai', 'yuehu']
+const GROUP_ONLY = ['danjin', 'jiyan', 'tunzai', 'yuehu']
 const COPIED_PACKS = ['g-pipa', 'g-abby', 'g-duo']
 
 beforeAll(async () => {
@@ -106,6 +116,11 @@ beforeAll(async () => {
         for (const t of e.tags) await c.query(`insert into emoji_characters (emoji_id, character_id) values ($1, $2)`, [id, charId.get(t)])
       }
     }
+    // an artist who drew the group pack and 露帕's own pack
+    const art = await c.query(`insert into artists (slug, name) values ('pipahua', '琵琶画师') returning id`)
+    for (const slug of ['g-pipa', 's-lupa']) {
+      await c.query(`insert into pack_artists (pack_id, artist_id, role) select id, $1, 'artist' from packs where slug = $2`, [art.rows[0].id, slug])
+    }
     // admin override: 阿布's avatar is 露帕's best sticker, so 露帕 has to take its next one
     await c.query(`update characters set avatar_emoji_id = $1 where slug = 'abu'`, [idOf('g-varied', 0)])
     await c.query('commit')
@@ -117,41 +132,65 @@ async function card(slug: string): Promise<CharacterCard | undefined> {
   return (await listCharacters()).find((c) => c.slug === slug)
 }
 
-describe('attribution: 张 and 包', () => {
+describe('attribution: 张, 包 and 合集包', () => {
   test('stickers of copied-tag group packs belong to nobody; varied tags and single-character packs count', async () => {
     for (const [slug, want] of Object.entries(EXPECTED)) {
       const c = await card(slug)
       expect(c, slug).toBeDefined()
-      expect({ slug, emojis: c!.emojiCount, packs: c!.packCount }).toEqual({ slug, emojis: want.emojis, packs: want.packs.length })
+      expect({ slug, emojis: c!.emojiCount, packs: c!.packCount, groups: c!.groupCount }).toEqual({
+        slug,
+        emojis: want.emojis,
+        packs: want.packs.length,
+        groups: want.groups.length,
+      })
     }
-    // the fixture's characters are untouched by g-pipa (copied tags), 心 gains g-xin (a single tag)
-    expect(await card('aimisi')).toMatchObject({ emojiCount: 7 + 7 + 3, packCount: 3 })
-    expect(await card('xin')).toMatchObject({ emojiCount: 6 + 5, packCount: 2 })
   })
 
-  test('characters only in copied-tag packs are not listed anywhere; their page goes to a search', async () => {
-    const listed = (await listCharacters()).map((c) => c.slug)
+  test('characters only in group packs are listed with their 合集包 and get a normal page', async () => {
+    const list = await listCharacters()
     const home = await getHome()
     const facets = await getFacets()
     const packFacets = await getPackFacets()
-    for (const slug of UNLISTED) {
-      expect(listed).not.toContain(slug)
-      expect(home.characters.map((c) => c.slug)).not.toContain(slug)
-      expect(facets.characters.map((c) => c.slug)).not.toContain(slug)
-      expect(packFacets.characters.map((c) => c.slug)).not.toContain(slug)
+    for (const slug of GROUP_ONLY) {
+      const c = list.find((x) => x.slug === slug)!
+      expect(characterCountText(c)).toBe('出现在 1 个合集包')
+      // no stickers of its own: not in the sticker-ordered strip, the /packs facets or the 包 filter
+      expect(home.characters.map((x) => x.slug)).not.toContain(slug)
+      expect(facets.characters.map((x) => x.slug)).not.toContain(slug)
+      expect(packFacets.characters.map((x) => x.slug)).not.toContain(slug)
       expect((await listPacks({ character: slug })).items).toEqual([])
       expect((await getGallery({ character: slug })).items).toEqual([])
+      // the page opens on its 合集包
+      const d = await getCharacterDetail({ slug })
+      if (d.kind !== 'character' || d.tab !== 'groups') throw new Error(`no 合集包 page for ${slug}`)
+      expect(d.page.items.map((p) => p.slug)).toEqual(EXPECTED[slug]!.groups)
     }
-    expect(home.stats.characters).toBe(listed.length)
-    expect(await getCharacterDetail({ slug: 'danjin' })).toEqual({ kind: 'redirect', redirectTo: `/search?q=${encodeURIComponent('丹瑾')}`, temporary: true })
-    expect(await getCharacterDetail({ slug: 'yuehu' })).toEqual({ kind: 'redirect', redirectTo: `/search?q=${encodeURIComponent('月狐')}`, temporary: true })
-    // still found through the pack it appears on
+    expect(home.stats.characters).toBe(list.length)
     const r = await searchCatalog({ q: '丹瑾' })
-    expect(r.characters).toEqual([])
+    expect(r.characters.map((c) => c.slug)).toEqual(['danjin'])
     expect(r.packs.map((p) => p.slug)).toContain('g-pipa')
+    expect((await suggestCatalog({ q: '丹瑾' })).find((x) => x.slug === 'danjin')?.sub).toBe('出现在 1 个合集包')
   })
 
-  test('张 and 包 agree on every surface: list, detail tabs, gallery, /packs filter, facets, home, search', async () => {
+  test('order: most stickers, then most 合集包, then pinyin', async () => {
+    const list = await listCharacters()
+    const sorted = [...list].sort((a, b) => b.emojiCount - a.emojiCount || b.groupCount - a.groupCount || a.slug.localeCompare(b.slug))
+    expect(list.map((c) => c.slug)).toEqual(sorted.map((c) => c.slug))
+    expect(list.slice(-4).map((c) => c.slug)).toEqual(['danjin', 'jiyan', 'tunzai', 'yuehu'])
+  })
+
+  test('no two rows read the same: unique art, and never 0 张 or a group pack count', async () => {
+    const list = await listCharacters()
+    const art = list.map((c) => c.portrait?.src ?? c.avatar?.id ?? `initial:${Array.from(c.name)[0]}`)
+    expect(new Set(art).size).toBe(art.length)
+    const rows = list.map((c, i) => `${art[i]}|${characterCountText(c)}`)
+    expect(new Set(rows).size).toBe(rows.length)
+    for (const c of list) expect(characterCountText(c)).not.toMatch(/^0 张/)
+    // the copied pack's 6 stickers are nobody's count
+    for (const slug of ALL_PIPA) expect(characterCountText((await card(slug))!)).not.toMatch(/^6 张/)
+  })
+
+  test('张, 包 and 合集 agree on every surface: list, detail tabs, gallery, /packs filters, facets, home, search', async () => {
     const list = await listCharacters()
     const home = await getHome()
     const facets = await getFacets()
@@ -159,7 +198,19 @@ describe('attribution: 张 and 包', () => {
     for (const c of list) {
       const detail = await getCharacterDetail({ slug: c.slug })
       if (detail.kind !== 'character') throw new Error(`no page for ${c.slug}`)
-      expect(detail.character).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount })
+      expect(detail.character).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount, groupCount: c.groupCount })
+
+      // 合集包: the detail tab and the /packs groupOf filter
+      const groups = await allPages((cursor) => listPacks({ groupOf: c.slug, cursor, limit: 2 }))
+      const tabGroups = await allPages(async (cursor) => {
+        const d = await getCharacterDetail({ slug: c.slug, tab: 'groups', cursor, limit: 2 })
+        if (d.kind !== 'character' || d.tab !== 'groups') throw new Error('expected the groups tab')
+        return d.page
+      })
+      expect(groups.items.length).toBe(c.groupCount)
+      expect(tabGroups.items.map((p) => p.slug).sort()).toEqual(groups.items.map((p) => p.slug).sort())
+      if (EXPECTED[c.slug]) expect(groups.items.map((p) => p.slug).sort()).toEqual([...EXPECTED[c.slug]!.groups].sort())
+      if (!c.emojiCount) continue
 
       const tabEmojis = await allPages(async (cursor) => {
         const d = await getCharacterDetail({ slug: c.slug, tab: 'emojis', cursor, limit: 4 })
@@ -188,18 +239,30 @@ describe('attribution: 张 and 包', () => {
       expect(facets.characters.find((f) => f.slug === c.slug)?.packCount).toBe(c.packCount)
       expect(packFacets.characters.find((f) => f.slug === c.slug)?.packCount).toBe(c.packCount)
       const h = home.characters.find((x) => x.slug === c.slug)
-      if (h) expect(h).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount })
+      if (h) expect(h).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount, groupCount: c.groupCount })
       const hit = (await searchCatalog({ q: c.name })).characters.find((x) => x.slug === c.slug)
-      expect(hit, c.name).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount })
+      expect(hit, c.name).toMatchObject({ emojiCount: c.emojiCount, packCount: c.packCount, groupCount: c.groupCount })
     }
     const s = (await suggestCatalog({ q: '露帕' })).find((x) => x.type === 'character' && x.slug === 'lupa')
     expect(s?.sub).toBe('7 张 · 2 包')
   })
 
-  test('the character page lists the artists of its 包 only', async () => {
+  test('the character page lists the artists of the packs it appears on', async () => {
     const d = await getCharacterDetail({ slug: 'aimisi' })
     if (d.kind !== 'character') throw new Error('expected a character')
-    expect(d.artists.map((a) => a.slug)).toEqual(['maowushi'])
+    expect(d.artists.map((a) => a.slug)).toEqual(['maowushi', 'pipahua'])
+    const g = await getCharacterDetail({ slug: 'danjin' })
+    if (g.kind !== 'character') throw new Error('expected a character')
+    expect(g.artists.map((a) => a.slug)).toEqual(['pipahua'])
+  })
+
+  test('the artist page lists characters with stickers of their own in its packs, not the names on a group pack', async () => {
+    const d = await getArtistDetail({ slug: 'pipahua' })
+    if (d.kind !== 'artist') throw new Error('expected an artist')
+    expect(d.characters.map((c) => [c.slug, c.packCount])).toEqual([
+      ['lupa', 1],
+      ['abu', 1],
+    ])
   })
 })
 
@@ -218,7 +281,9 @@ describe('avatars', () => {
   })
 
   test('an avatar is a sticker of that character alone; override first, then the next free one, else null', async () => {
-    for (const [slug, want] of Object.entries(EXPECTED)) expect({ slug, avatar: (await card(slug))!.avatar?.id ?? null }).toEqual({ slug, avatar: want.avatar })
+    for (const [slug, want] of Object.entries(EXPECTED)) {
+      if (want.avatar !== undefined) expect({ slug, avatar: (await card(slug))!.avatar?.id ?? null }).toEqual({ slug, avatar: want.avatar })
+    }
     // never art from a copied-tag group pack
     for (const c of await listCharacters()) {
       for (const slug of COPIED_PACKS) expect(c.avatar?.poster ?? '').not.toContain(`/${slug}/`)

@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { attributionTable } from './attribution'
 import { cached, LIST_TTL_MS } from './cache'
 import { artistDetailInput, type ArtistDetailInput } from './inputs'
 import { resolveLegacyPath } from './legacy'
@@ -109,12 +110,13 @@ export async function getArtistDetail(input: ArtistDetailInput): Promise<ArtistL
         (select coalesce(array_agg(aa.alias order by aa.alias), '{}') from artist_aliases aa where aa.artist_id = ${entry.id}) as aliases,
         (select coalesce(json_agg(json_build_object('slug', s.slug, 'name', s.name, 'color', s.color, 'n', s.n) order by s.n desc, s.sort, s.slug), '[]'::json)
            from (
+             -- characters with stickers of their own in the artist's packs (attribution.ts), not every
+             -- name a group pack lists
              select c.slug, c.name, c.theme_color as color, c.sort, count(distinct p.id)::int as n
-             from pack_artists pa
-             join packs p on p.id = pa.pack_id and ${packVisible('p')}
-             join pack_characters pc on pc.pack_id = p.id
-             join characters c on c.id = pc.character_id
-             where pa.artist_id = ${entry.id}
+             from (${attributionTable(sql`select pa.pack_id from pack_artists pa where pa.artist_id = ${entry.id}`)}) at
+             join emojis e on e.id = at.emoji_id and ${emojiVisible('e')}
+             join packs p on p.id = e.pack_id and ${packVisible('p')}
+             join characters c on c.id = at.character_id
              group by c.id, c.slug, c.name, c.theme_color, c.sort
            ) s) as chars`),
     packPage({ artist: i.slug }, { sort: i.sort, seed: i.seed, cursor: i.cursor, limit: i.limit }),
