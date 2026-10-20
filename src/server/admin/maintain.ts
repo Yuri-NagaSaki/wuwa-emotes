@@ -3,6 +3,7 @@ import { db, schema } from '../db/client'
 import { recomputeCatalogCounts } from '../import/v1'
 import { sendJob } from '../jobs/boss'
 import { Q } from '../jobs/queues'
+import { enqueueFullAfterPublish } from '../media/publish'
 import { purgeImgUrls } from '../media/purge'
 import { deleteObjects } from '../media/s3'
 import { afterCatalogWrite, many, type Runner } from './common'
@@ -19,6 +20,8 @@ export interface MediaDeps {
   enqueueDerive(emojiId: string, target: 'review' | 'derived'): Promise<boolean>
   /** media.ingest for a finished browser upload. */
   enqueueIngest(uploadItemId: string): Promise<void>
+  /** media.full right after a publish (optional: without it the first /img view renders it). */
+  enqueueFull?(emojiId: string): Promise<void>
 }
 
 export const defaultMediaDeps: MediaDeps = {
@@ -33,6 +36,7 @@ export const defaultMediaDeps: MediaDeps = {
   async enqueueIngest(uploadItemId) {
     await sendJob(Q.ingest, { uploadItemId })
   },
+  enqueueFull: (emojiId) => enqueueFullAfterPublish(emojiId),
 }
 
 /** Counters (packs.emoji_count, character/artist pack counts), then drop the catalog list cache. */

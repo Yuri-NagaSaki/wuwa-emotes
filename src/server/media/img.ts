@@ -51,12 +51,16 @@ export async function handleImg(request: Request, deps: ImgDeps): Promise<Respon
   const ref = parseImgPath(new URL(request.url).pathname)
   if (!ref) return notFound()
 
+  const started = performance.now()
   const obj = await deps.getObject(derivedKey(ref.variant, ref.packKey, ref.emojiId, ref.rev), request.headers.get('if-none-match') ?? undefined)
+  // time to the bucket's response headers: a CDN miss shows where its time went (cached hits repeat
+  // the value of the miss that filled the cache)
+  const timing = { 'server-timing': `s3;dur=${Math.round(performance.now() - started)}` }
   if (obj?.notModified) {
-    return new Response(null, { status: 304, headers: { ...baseHeaders, 'cache-control': IMMUTABLE, ...(obj.etag ? { etag: obj.etag } : {}) } })
+    return new Response(null, { status: 304, headers: { ...baseHeaders, ...timing, 'cache-control': IMMUTABLE, ...(obj.etag ? { etag: obj.etag } : {}) } })
   }
   if (obj) {
-    const headers: Record<string, string> = { ...baseHeaders, 'content-type': 'image/webp', 'cache-control': IMMUTABLE }
+    const headers: Record<string, string> = { ...baseHeaders, ...timing, 'content-type': 'image/webp', 'cache-control': IMMUTABLE }
     if (obj.etag) headers.etag = obj.etag
     if (obj.contentLength != null) headers['content-length'] = String(obj.contentLength)
     return new Response(request.method === 'HEAD' ? null : obj.body, { status: 200, headers })

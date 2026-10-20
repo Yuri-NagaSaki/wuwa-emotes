@@ -17,12 +17,36 @@ import { copyObject, deleteObjects, headObject } from './s3'
 export interface PublishDeps {
   /** render derived/ directly when there is no review copy to promote */
   enqueueDerived(emojiId: string): Promise<void>
+  /**
+   * Render the `full` variant the single-emoji dialog shows, ahead of the first visit (otherwise the
+   * first open of every sticker is a 302 to the a160/p240 while the worker renders it). Optional:
+   * callers without it (tests) leave `full` to the lazy /img path.
+   */
+  enqueueFull?(emojiId: string): Promise<void>
+}
+
+/** Delay before the full render, so the publish (pack status, other rows) has committed by then. */
+export const FULL_AFTER_PUBLISH_DELAY_S = 30
+
+export async function enqueueFullAfterPublish(emojiId: string): Promise<void> {
+  await sendJob(Q.full, { emojiId }, { singletonKey: emojiId, startAfter: FULL_AFTER_PUBLISH_DELAY_S })
 }
 
 export const defaultPublishDeps: PublishDeps = {
   async enqueueDerived(emojiId) {
     await sendJob(Q.derive, { emojiId, target: 'derived' }, { singletonKey: emojiId })
   },
+  enqueueFull: enqueueFullAfterPublish,
+}
+
+/** Queue the full render; a failure only means the lazy path renders it on first view. */
+async function queueFull(emojiId: string, deps: PublishDeps) {
+  if (!deps.enqueueFull) return
+  try {
+    await deps.enqueueFull(emojiId)
+  } catch (err) {
+    log().warn({ emojiId, err: (err as Error).message }, 'publish: full render not queued; /img renders it on first view')
+  }
 }
 
 export type PublishResult = 'copied' | 'queued'
@@ -31,7 +55,9 @@ export type PublishResult = 'copied' | 'queued'
  * Promote review previews of a published emoji to derived/ (p240, plus a160 for animated emojis) and
  * mark it derived_ready. When the review copies are missing (derive never ran, or an animated emoji
  * lacks its a160), queue a derive job with target 'derived' instead; it sets derived_ready itself.
- * Refuses unpublished emojis: pending images must never reach derived/.
+ * Either way the `full` render is queued too (deps.enqueueFull), so newly published stickers open in
+ * the dialog without the lazy first-view render. Refuses unpublished emojis: pending images must never
+ * reach derived/.
  */
 export async function publishEmojiDerivatives(emojiId: string, deps: PublishDeps = defaultPublishDeps): Promise<PublishResult> {
   const { emojis } = schema
@@ -47,6 +73,7 @@ export async function publishEmojiDerivatives(emojiId: string, deps: PublishDeps
   if (!p240 || (e.frames > 1 && !a160)) {
     await deps.enqueueDerived(e.id)
     await deleteObjects([review.p240, review.a160])
+    await queueFull(e.id, deps)
     log().info({ emojiId }, 'publish: no review previews; derive queued')
     return 'queued'
   }
@@ -54,6 +81,7 @@ export async function publishEmojiDerivatives(emojiId: string, deps: PublishDeps
   if (a160) await copyObject(review.a160, derivedKey('a160', e.packKey, e.id, e.rev), 'image/webp', IMMUTABLE)
   await db().update(emojis).set({ derivedReady: true }).where(eq(emojis.id, e.id))
   await deleteObjects([review.p240, review.a160])
+  await queueFull(e.id, deps)
   return 'copied'
 }
 
