@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "bun --bun vite dev --port 3000",
-    "build": "bun scripts/copy-cap-assets.ts && bun --bun vite build",
+    "build": "bun scripts/copy-cap-assets.ts && bun --bun vite build && bun scripts/check-client-bundle.ts",
     "start": "bun .output/server/index.mjs",
     "worker": "bun src/worker.ts",
     "migrate": "bun src/migrate.ts",
