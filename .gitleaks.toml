@@ -1,0 +1,50 @@
+# gitleaks configuration. The repository is public: CI (.github/workflows/ci.yml, job `secrets`) scans
+# every commit on every branch with gitleaks 8.30.1, and any finding fails the job.
+#
+#   default rules + `public-ipv4`: no server address is ever committed
+#
+# Allowlists stay narrow, each one for findings that are really in the history: addresses that are not
+# public, the Cloudflare ranges the firewall needs, and pack slugs the generic rule mistakes for keys.
+# The local dev/test credentials (devaccess, devsecret123, the fake Cap secret in
+# tests/integration/setup.ts) trip no rule, so they need no entry. Add entries only for values that are
+# safe to publish, never for a real secret: remove that from the history and rotate it instead.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "public-ipv4"
+description = "Public IPv4 address"
+# A dotted quad that is not part of a longer number or name, and not a product version such as
+# Chrome/141.0.0.0 (a slash counts as a boundary only after a non-alphanumeric, as in https://).
+regex = '''(?:^|[^0-9A-Za-z./]|[^0-9A-Za-z]/)((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9]))(?:$|[^0-9A-Za-z.]|\.(?:$|[^0-9]))'''
+secretGroup = 1
+
+  [[rules.allowlists]]
+  description = "Not public (IANA special-purpose ranges), allowed anywhere: this network, private (RFC 1918), shared CGNAT, loopback, link-local, IETF and documentation (RFC 5737), benchmarking, multicast, reserved"
+  regexes = [
+    '''^0\.''',
+    '''^10\.''',
+    '''^100\.(?:6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7])\.''',
+    '''^127\.''',
+    '''^169\.254\.''',
+    '''^172\.(?:1[6-9]|2[0-9]|3[01])\.''',
+    '''^192\.0\.[02]\.''',
+    '''^192\.168\.''',
+    '''^198\.1[89]\.''',
+    '''^198\.51\.100\.''',
+    '''^203\.0\.113\.''',
+    '''^(?:22[4-9]|2[3-5][0-9])\.''',
+  ]
+
+  [[rules.allowlists]]
+  description = "Cloudflare's published ranges: deploy/firewall.sh and Caddy trust only these"
+  paths = ['''^deploy/cloudflare-ips\.txt$''']
+
+[[allowlists]]
+description = "Pack slugs in JSON key / packKey fields (design prototype data, DEVELOPMENT.md examples): lowercase words, numbers and dates joined by hyphens, with at least one letter after f, so hex ids and UUIDs are still reported"
+targetRules = ["generic-api-key"]
+regexTarget = "match"
+regexes = [
+  '''^(?:key|packKey)"\s*:\s*"(?:[a-z0-9]*[g-z][a-z0-9]*(?:-[a-z0-9]+)+|[a-z0-9]+(?:-[a-z0-9]+)*-[a-z0-9]*[g-z][a-z0-9]*(?:-[a-z0-9]+)*)"?$''',
+]

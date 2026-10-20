@@ -3,7 +3,9 @@
 #   worker   bun src/worker.ts
 #   migrate  bun src/migrate.ts
 #   cli      bun src/cli.ts <command>
-# Build: docker build -t chaochi/app:<tag> --build-arg CHAOCHI_REVISION=<tag> .
+# CI (.github/workflows/ci.yml) builds it for every push to develop and main as
+# ghcr.io/yuri-nagasaki/wuwa-emotes:<sha7>. By hand (local tests, emergencies):
+#   docker build -t ghcr.io/yuri-nagasaki/wuwa-emotes:<tag> --build-arg CHAOCHI_REVISION=<tag> .
 
 ARG BUN_IMAGE=oven/bun:1.4.3-slim
 
@@ -62,7 +64,9 @@ COPY deploy/healthcheck.ts ./deploy/healthcheck.ts
 
 ARG CHAOCHI_REVISION=dev
 ENV CHAOCHI_REVISION=${CHAOCHI_REVISION}
+# image.source links the GHCR package to the repository.
 LABEL org.opencontainers.image.title="chaochi" \
+      org.opencontainers.image.source="https://github.com/Yuri-NagaSaki/wuwa-emotes" \
       org.opencontainers.image.revision="${CHAOCHI_REVISION}"
 
 # Files stay root-owned and read-only for the app; the process runs as the base image's `bun` user.
