@@ -68,7 +68,7 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 
 前置条件：已完成「服务器准备」，`app-env` 已填写。证书文件可以稍后再放。
 
-1. 上传代码：服务器先安装 rsync（`apt-get install -y rsync`），再在开发机的仓库里执行 `deploy/push-src.sh`。之后在服务器上 `cd /opt/chaochi/src`。
+1. 上传代码：服务器先安装 rsync（`apt-get install -y rsync`）。在开发机的仓库里把服务器地址写进 `deploy/.deploy-host`（一行 `root@<服务器IP>`；该文件不进仓库，也可以改用环境变量 `CHAOCHI_DEPLOY_HOST`），然后执行 `deploy/push-src.sh`。之后在服务器上 `cd /opt/chaochi/src`。
 2. 安装防火墙，必须在首次启动容器之前执行：`deploy/firewall.sh install`。脚本安装开机加载的服务和每周刷新 Cloudflare 网段的定时器，并关闭 systemd-resolved 的 LLMNR（5355 端口）。如果 SSH 不在 22 端口，执行 `CHAOCHI_SSH_PORT=<端口> deploy/firewall.sh install`；否则脚本会拒绝执行，避免锁死 SSH。安装时的 SSH 端口和 HTTPS 端口保存在 `/etc/default/chaochi-firewall`，开机加载和每周刷新都读取这个文件。
 3. 检查防火墙：`deploy/firewall.sh status`。从另一台机器用 `curl -k --resolve sparxie.moe:443:<服务器IP> https://sparxie.moe/` 访问应当超时。
 4. 构建并启动：`deploy/rollout.sh --build "$(cat REVISION)"`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。

@@ -30,3 +30,6 @@ dist/
 /public/cap/
 /coverage/
 /.claude/worktrees/
+
+# server address for deploy/push-*.sh (kept out of the repository)
+deploy/.deploy-host

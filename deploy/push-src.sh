@@ -2,7 +2,7 @@
 # Update the server's source tree (/opt/chaochi/src) to one commit of this repository, in place.
 # Run on the DEV machine, from the repo checkout:
 #
-#   deploy/push-src.sh [<rev>] [user@host]      default HEAD and root@<server-ip>, key ~/.ssh/wuwa_deploy
+#   deploy/push-src.sh [<rev>] [user@host]      default HEAD; host from CHAOCHI_DEPLOY_HOST or deploy/.deploy-host, key ~/.ssh/wuwa_deploy
 #
 # Then on the server: cd /opt/chaochi/src && deploy/rollout.sh --build "$(cat REVISION)"
 #
@@ -15,7 +15,10 @@
 set -euo pipefail
 
 REV=$(git rev-parse --short "${1:-HEAD}")
-HOST=${2:-root@<server-ip>}
+# The server address stays out of the repository: pass it, export CHAOCHI_DEPLOY_HOST, or keep it in
+# deploy/.deploy-host (gitignored, one line: user@host).
+HOST=${2:-${CHAOCHI_DEPLOY_HOST:-$(cat "$(dirname "$0")/.deploy-host" 2>/dev/null || true)}}
+[[ -n $HOST ]] || { echo "push-src: no server; set CHAOCHI_DEPLOY_HOST=user@host or write it to deploy/.deploy-host" >&2; exit 64; }
 KEY=${CHAOCHI_SSH_KEY:-$HOME/.ssh/wuwa_deploy}
 DEST=${CHAOCHI_REMOTE_SRC:-/opt/chaochi/src}
 SSH=(ssh -i "$KEY" -o BatchMode=yes -o ConnectTimeout=15 "$HOST")

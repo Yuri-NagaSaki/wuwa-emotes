@@ -2,7 +2,7 @@
 # Create /opt/chaochi/app-env on the server from the developer machine's .env.local.
 # Run by the site owner on the DEV machine (the repo checkout that holds .env.local):
 #
-#   deploy/push-env.sh [user@host]          default root@<server-ip>, key ~/.ssh/wuwa_deploy
+#   deploy/push-env.sh [user@host]          host from CHAOCHI_DEPLOY_HOST or deploy/.deploy-host, key ~/.ssh/wuwa_deploy
 #
 # - R2 and Cap credentials come from .env.local (R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
 #   CAP_API_ENDPOINT, CAP_SITE_KEY, CAP_SECRET_KEY).
@@ -13,7 +13,10 @@
 #   server instead (see deploy/README.md「填写 app-env」).
 set -euo pipefail
 
-HOST=${1:-root@<server-ip>}
+# The server address stays out of the repository: pass it, export CHAOCHI_DEPLOY_HOST, or keep it in
+# deploy/.deploy-host (gitignored, one line: user@host).
+HOST=${1:-${CHAOCHI_DEPLOY_HOST:-$(cat "$(dirname "$0")/.deploy-host" 2>/dev/null || true)}}
+[[ -n $HOST ]] || { echo "push-env: no server; set CHAOCHI_DEPLOY_HOST=user@host or write it to deploy/.deploy-host" >&2; exit 64; }
 KEY=${CHAOCHI_SSH_KEY:-$HOME/.ssh/wuwa_deploy}
 HERE=$(cd "$(dirname "$0")" && pwd)
 ENV_LOCAL=${CHAOCHI_ENV_LOCAL:-$HERE/../.env.local}
