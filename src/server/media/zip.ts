@@ -2,13 +2,13 @@ import { createHash } from 'node:crypto'
 import { once } from 'node:events'
 import { PassThrough, type Readable } from 'node:stream'
 import { ZipArchive } from 'archiver'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import { db, schema } from '../db/client'
 import { sendJob } from '../jobs/boss'
 import { Q } from '../jobs/queues'
 import { log } from '../log'
 import { siteIdentity } from '../settings'
-import { buildCreditsText, formatCreditsDate } from './credits'
+import { buildCreditsText, type CreditsInput, type CreditsPack, formatCreditsDate } from './credits'
 import { zipKey } from './keys'
 import { siteUrl } from './publish'
 import { createUpload, deleteObjects, getObject, headObject } from './s3'
@@ -16,8 +16,10 @@ import { createUpload, deleteObjects, getObject, headObject } from './s3'
 // zip.build (docs/ARCHITECTURE.md §6.1): one ZIP per published, downloadable pack, stored at
 // zips/v1/packs/<packKey>/<packKey>.<hash8>.zip and recorded in zip_artifacts. Originals are streamed
 // one at a time into a store-mode archive (GIF/PNG do not compress) that is uploaded in parts, so
-// memory stays at a few parts however large the pack is. The content hash covers only the published
-// emojis (id + sha256, or byte size when there is no hash); a build with an unchanged hash is skipped.
+// memory stays at a few parts however large the pack is. The content hash (packContentHash) covers
+// everything that decides what the archive holds: entry names and order, each original, and the
+// CREDITS.txt text minus its date. A build with an unchanged hash is skipped, and /dl/p serves the
+// recorded ZIP only while its hash still matches.
 
 export interface ZipEmoji {
   id: string
@@ -27,10 +29,33 @@ export interface ZipEmoji {
   format: string
 }
 
-/** sha256 over the published emojis sorted by id: `<id>\t<sha256 | bytes:<n>>` per line. */
-export function packContentHash(emojis: Pick<ZipEmoji, 'id' | 'sha256' | 'bytes'>[]): string {
-  const lines = emojis.map((e) => `${e.id}\t${e.sha256 ?? `bytes:${e.bytes}`}`).sort()
-  return createHash('sha256').update(lines.join('\n')).digest('hex')
+/** CREDITS.txt input without the generation date: the date is the only part that may differ between builds. */
+export type ZipCredits = Omit<CreditsInput, 'date'>
+
+/** Everything packContentHash covers. `emojis` are the published emojis in pack order (sort_order, id). */
+export interface PackContent {
+  slug: string
+  emojis: Pick<ZipEmoji, 'id' | 'sha256' | 'bytes' | 'originalKey' | 'format'>[]
+  credits: ZipCredits
+}
+
+const HASH_VERSION = 'chaochi-zip-v2'
+
+/**
+ * sha256 over what the archive contains, so any change that alters the ZIP gives a new hash:
+ *  - one line per entry in archive order: `<entry name>\t<emoji id>\t<sha256 | bytes:<n>>`. Entry names
+ *    come from zipEntryNames, so the pack slug, the sort order and the file extensions are covered;
+ *  - the CREDITS.txt body from buildCreditsText with an empty date (title, slug, license, artists,
+ *    commissioner, credits text, source URL, site name and URL).
+ * The generation date is left out on purpose: rebuilding the same pack on another day gives the same hash.
+ */
+export function packContentHash(content: PackContent): string {
+  const names = zipEntryNames(content.slug, content.emojis)
+  const h = createHash('sha256').update(`${HASH_VERSION}\n`)
+  content.emojis.forEach((e, i) => h.update(`${names[i]}\t${e.id}\t${e.sha256 ?? `bytes:${e.bytes}`}\n`))
+  h.update('\nCREDITS.txt\n')
+  h.update(buildCreditsText({ ...content.credits, date: '' }))
+  return h.digest('hex')
 }
 
 function extension(e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
@@ -39,11 +64,19 @@ function extension(e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
   return e.format === 'jpeg' ? 'jpg' : e.format
 }
 
+/**
+ * Name of the entry at `index` (0-based) in a pack of `total` published emojis: `<slug>-01.gif`, …;
+ * two digits at least, more for big packs. Single downloads (/dl/e save, batch) use the same name.
+ */
+export function zipEntryName(slug: string, index: number, total: number, e: Pick<ZipEmoji, 'originalKey' | 'format'>): string {
+  const base = slug.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').trim() || 'pack'
+  const width = Math.max(2, String(total).length)
+  return `${base}-${String(index + 1).padStart(width, '0')}.${extension(e)}`
+}
+
 /** `<slug>-01.gif`, `<slug>-02.png`, … in pack order; two digits at least, more for big packs. */
 export function zipEntryNames(slug: string, emojis: Pick<ZipEmoji, 'originalKey' | 'format'>[]): string[] {
-  const base = slug.replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').trim() || 'pack'
-  const width = Math.max(2, String(emojis.length).length)
-  return emojis.map((e, i) => `${base}-${String(i + 1).padStart(width, '0')}.${extension(e)}`)
+  return emojis.map((e, i) => zipEntryName(slug, i, emojis.length, e))
 }
 
 export type ZipBuildResult =
@@ -56,32 +89,81 @@ export async function enqueuePackZip(packId: number) {
   await sendJob(Q.zipBuild, { packId }, { singletonKey: String(packId) })
 }
 
-async function packCredits(pack: typeof schema.packs.$inferSelect, now: Date): Promise<string> {
+type PackRow = typeof schema.packs.$inferSelect
+export type CreditsPackFields = Pick<PackRow, 'id' | 'slug' | 'title' | 'sourceUrl' | 'commissioner' | 'license' | 'creditsText'>
+
+/**
+ * The CREDITS.txt block of each pack (artists, commissioners, license, source), one query for all of
+ * them. Used for pack ZIPs here and for batch ZIPs (POST /api/batch/sign hands the blocks to the browser).
+ */
+export async function packCreditsEntries(packs: CreditsPackFields[]): Promise<Map<number, CreditsPack>> {
   const { packArtists, artists } = schema
-  const people = await db()
-    .select({ name: artists.name, role: packArtists.role })
-    .from(packArtists)
-    .innerJoin(artists, eq(artists.id, packArtists.artistId))
-    .where(eq(packArtists.packId, pack.id))
-    .orderBy(asc(artists.name))
-  const commissioners = people.filter((p) => p.role === 'commissioner').map((p) => p.name)
+  const ids = [...new Set(packs.map((p) => p.id))]
+  const people = ids.length
+    ? await db()
+        .select({ packId: packArtists.packId, name: artists.name, role: packArtists.role })
+        .from(packArtists)
+        .innerJoin(artists, eq(artists.id, packArtists.artistId))
+        .where(inArray(packArtists.packId, ids))
+        .orderBy(asc(artists.name), asc(artists.id))
+    : []
+  const out = new Map<number, CreditsPack>()
+  for (const pack of packs) {
+    const mine = people.filter((p) => p.packId === pack.id)
+    const commissioners = mine.filter((p) => p.role === 'commissioner').map((p) => p.name)
+    out.set(pack.id, {
+      title: pack.title,
+      pageUrl: siteUrl(`/packs/${encodeURIComponent(pack.slug)}`),
+      sourceUrl: pack.sourceUrl,
+      artists: mine.filter((p) => p.role === 'artist').map((p) => p.name),
+      commissioner: [pack.commissioner, ...commissioners].filter(Boolean).join('、') || null,
+      license: pack.license,
+      note: pack.creditsText,
+    })
+  }
+  return out
+}
+
+/** Site name and URL as printed in CREDITS.txt. */
+export async function creditsSite(): Promise<Omit<ZipCredits, 'packs'>> {
   const site = await siteIdentity()
-  return buildCreditsText({
-    siteName: site.name,
-    siteUrl: siteUrl('/'),
-    date: formatCreditsDate(now),
-    packs: [
-      {
-        title: pack.title,
-        pageUrl: siteUrl(`/packs/${encodeURIComponent(pack.slug)}`),
-        sourceUrl: pack.sourceUrl,
-        artists: people.filter((p) => p.role === 'artist').map((p) => p.name),
-        commissioner: [pack.commissioner, ...commissioners].filter(Boolean).join('、') || null,
-        license: pack.license,
-        note: pack.creditsText,
-      },
-    ],
-  })
+  return { siteName: site.name, siteUrl: siteUrl('/') }
+}
+
+async function packCredits(pack: PackRow): Promise<ZipCredits> {
+  const entries = await packCreditsEntries([pack])
+  return { ...(await creditsSite()), packs: [entries.get(pack.id)!] }
+}
+
+export interface PackZipSource {
+  pack: PackRow
+  /** published emojis in archive order */
+  emojis: ZipEmoji[]
+  names: string[]
+  credits: ZipCredits
+  hash: string
+}
+
+export type PackZipSourceResult = { ok: true; source: PackZipSource } | { ok: false; reason: string }
+
+/**
+ * What the pack's ZIP should contain right now, and its content hash. Shared by the builder and by
+ * /dl/p, which serves the recorded ZIP only if zip_artifacts.content_hash equals this hash.
+ */
+export async function loadPackZipSource(packId: number): Promise<PackZipSourceResult> {
+  const { packs, emojis } = schema
+  const [pack] = await db().select().from(packs).where(eq(packs.id, packId))
+  if (!pack) return { ok: false, reason: 'pack not found' }
+  if (pack.status !== 'published' || !pack.downloadable) return { ok: false, reason: 'pack is not published and downloadable' }
+  const rows = await db()
+    .select({ id: emojis.id, sha256: emojis.sha256, bytes: emojis.bytes, originalKey: emojis.originalKey, format: emojis.format })
+    .from(emojis)
+    .where(and(eq(emojis.packId, packId), eq(emojis.status, 'published')))
+    .orderBy(asc(emojis.sortOrder), asc(emojis.id))
+  if (!rows.length) return { ok: false, reason: 'pack has no published emojis' }
+  const credits = await packCredits(pack)
+  const hash = packContentHash({ slug: pack.slug, emojis: rows, credits })
+  return { ok: true, source: { pack, emojis: rows, names: zipEntryNames(pack.slug, rows), credits, hash } }
 }
 
 /** Stream the entries into a store-mode ZIP uploaded to `key`; returns the archive size in bytes. */
@@ -126,28 +208,20 @@ async function writeZip(key: string, entries: { key: string; name: string }[], c
 
 export async function buildPackZip(packId: number, opts: { now?: Date } = {}): Promise<ZipBuildResult> {
   const now = opts.now ?? new Date()
-  const { packs, emojis, zipArtifacts } = schema
-  const [pack] = await db().select().from(packs).where(eq(packs.id, packId))
-  if (!pack) return { status: 'skipped', reason: 'pack not found' }
-  if (pack.status !== 'published' || !pack.downloadable) return { status: 'skipped', reason: 'pack is not published and downloadable' }
-  const rows = await db()
-    .select({ id: emojis.id, sha256: emojis.sha256, bytes: emojis.bytes, originalKey: emojis.originalKey, format: emojis.format })
-    .from(emojis)
-    .where(and(eq(emojis.packId, packId), eq(emojis.status, 'published')))
-    .orderBy(asc(emojis.sortOrder), asc(emojis.id))
-  if (!rows.length) return { status: 'skipped', reason: 'pack has no published emojis' }
+  const { zipArtifacts } = schema
+  const loaded = await loadPackZipSource(packId)
+  if (!loaded.ok) return { status: 'skipped', reason: loaded.reason }
+  const { pack, emojis: rows, names, credits, hash } = loaded.source
 
-  const hash = packContentHash(rows)
   const [prev] = await db().select().from(zipArtifacts).where(eq(zipArtifacts.packId, packId))
   if (prev && prev.contentHash === hash && (await headObject(prev.objectKey))) return { status: 'unchanged', key: prev.objectKey, hash }
 
   const key = zipKey(pack.packKey, hash.slice(0, 8))
-  const names = zipEntryNames(pack.slug, rows)
   const started = Date.now()
   const bytes = await writeZip(
     key,
     rows.map((r, i) => ({ key: r.originalKey, name: names[i]! })),
-    await packCredits(pack, now),
+    buildCreditsText({ ...credits, date: formatCreditsDate(now) }),
     now,
   )
   await db()
