@@ -1,6 +1,10 @@
 import { createCsrfMiddleware, createMiddleware, createStart } from '@tanstack/react-start'
 import { env } from './server/env'
 import { securityConfig, withFinalHeaders, type SecurityConfig } from './server/http/security'
+import { registerShutdown } from './server/shutdown'
+
+// Close the pg pool and pg-boss sender after the server has drained on SIGTERM (see server/shutdown.ts).
+registerShutdown()
 
 // Request middleware for every request Start handles (pages, server routes, server functions).
 // A custom start.ts replaces Start's default CSRF middleware, so it is added back here.

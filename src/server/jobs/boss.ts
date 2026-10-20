@@ -26,6 +26,15 @@ export function jobSender(): Promise<PgBoss> {
   return sender
 }
 
+/** Web shutdown (src/server/shutdown.ts): stop the sender if a request ever started it; no-op otherwise. */
+export async function stopJobSender() {
+  const pending = sender
+  sender = undefined
+  if (!pending) return
+  const boss = await pending.catch(() => undefined)
+  await boss?.stop({ graceful: true, close: true, timeout: 5_000 })
+}
+
 export async function sendJob<N extends QueueName>(name: N, data: JobData[N], opts: { singletonKey?: string; startAfter?: number } = {}) {
   const boss = await jobSender()
   return boss.send(name, data as object, opts)
