@@ -8,7 +8,9 @@
 //   2. python venv with pinned fontTools / brotli / uharfbuzz (.work/fonts/venv);
 //   3. charset.py: GB2312 + ASCII + common punctuation + kana + extra-chars.txt;
 //   4. prep.py: subset, drop the `locl` and `aalt` features, rename to TP Rounded;
-//   5. cn-font-split: unicode-range woff2 shards + @font-face CSS per weight, merged into tp-rounded.css;
+//   5. cn-font-split: unicode-range woff2 shards + @font-face CSS per weight, merged into tp-rounded.css.
+//      The site vocabulary (hot-chars.txt, most frequent first) goes into small leading shards of 40
+//      characters; everything else is split automatically. Both weights use the same groups;
 //   6. verify.py: no locl/aalt, 户/令/digits shape to their nominal (Chinese) glyphs, no upstream names.
 // Nunito (latin + latin-ext, variable weight axis) is copied from @fontsource-variable/nunito.
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -39,7 +41,11 @@ const WEIGHTS = [
   { src: 'ChillRoundGothic_Bold.otf', style: 'Bold', cssWeight: '600 850' },
   { src: 'ChillRoundGothic_Heavy.otf', style: 'Heavy', cssWeight: '900' },
 ] as const
-const CHUNK_SIZE = 64 * 1024
+// Display text is sparse (titles, names), so shard granularity dominates the per-page cost. Measured on a
+// home-page sample (logo, hero, ribbons, 13 pack titles; both weights): plain 64 KB auto-split ≈ 1.16 MB
+// in 38 files; vocabulary-first with 32 KB for the rest ≈ 0.25 MB in 37 files.
+const HOT_GROUP = 40
+const CHUNK_SIZE = 32 * 1024
 
 function run(cmd: string[], opts: { cwd?: string; env?: Record<string, string> } = {}) {
   const p = Bun.spawnSync(cmd, { cwd: opts.cwd ?? root, env: { ...process.env, ...opts.env }, stdout: 'inherit', stderr: 'inherit' })
@@ -81,7 +87,7 @@ function fileList(dir: string, ext: string) {
   return existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(ext)) : []
 }
 
-async function splitWeight(input: string, dest: string, cssWeight: string, subsets?: number[][]) {
+async function splitWeight(input: string, dest: string, cssWeight: string, subsets: number[][], autoSubset: boolean) {
   const { fontSplit } = await import('cn-font-split')
   rmSync(dest, { recursive: true, force: true })
   mkdirSync(dest, { recursive: true })
@@ -90,7 +96,8 @@ async function splitWeight(input: string, dest: string, cssWeight: string, subse
     outDir: dest,
     css: { fontFamily: 'TP Rounded', fontWeight: cssWeight, fontStyle: 'normal', fontDisplay: 'swap', localFamily: [], compress: true },
     chunkSize: CHUNK_SIZE,
-    ...(subsets ? { subsets, autoSubset: false } : {}),
+    subsets,
+    autoSubset,
     testHtml: false,
     reporter: false,
     renameOutputFont: '[hash:10].[ext]',
@@ -180,15 +187,19 @@ async function main() {
   const prepDir = join(work, 'prep')
   mkdirSync(prepDir, { recursive: true })
   const parts: { dir: string; cssWeight: string }[] = []
-  // The first weight picks the shards (frequency-ordered); the others reuse the same code-point groups,
-  // so a page needs the same shard numbers in both weights and the two unicode-range lists are identical
-  // (brotli folds the second copy into a back-reference).
+  // The first weight gets the vocabulary groups and auto-splits the rest; the other weight reuses the
+  // resulting code-point groups, so the two unicode-range lists are identical (brotli folds the second
+  // copy into a back-reference) and a page needs the same groups in both weights.
+  const inCharset = new Set([...readFileSync(charset, 'utf8')].map((c) => c.codePointAt(0)!))
+  const hot = [...new Set([...readFileSync(join(here, 'hot-chars.txt'), 'utf8')].map((c) => c.codePointAt(0)!))].filter((c) => inCharset.has(c))
+  const hotGroups: number[][] = []
+  for (let i = 0; i < hot.length; i += HOT_GROUP) hotGroups.push(hot.slice(i, i + HOT_GROUP))
   let subsets: number[][] | undefined
   for (const w of WEIGHTS) {
     const prepped = join(prepDir, `TPRounded-${w.style}.otf`)
     py('prep.py', join(src, w.src), prepped, charset, w.style)
     const dir = join(work, 'split', w.style)
-    await splitWeight(prepped, dir, w.cssWeight, subsets)
+    await splitWeight(prepped, dir, w.cssWeight, subsets ?? hotGroups, !subsets)
     subsets ??= parseRules(readFileSync(join(dir, 'result.css'), 'utf8')).map((r) => expandRange(r.range))
     parts.push({ dir, cssWeight: w.cssWeight })
   }
