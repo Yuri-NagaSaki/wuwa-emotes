@@ -91,7 +91,7 @@ export async function generateFull({ emojiId }: JobData['media.full']) {
       // merged identical frames are fine; only a known animation collapsing to one frame is an error
       if (p.animated && e.frames > 1 && (await countFrames(out)) < 2) throw new Error(`full for ${emojiId} lost its animation`)
       return out
-    })
+    }, 'low')
     await putObject(key, out, 'image/webp', IMMUTABLE)
     await db().update(schema.emojis).set({ fullReady: true, fullBytes: out.byteLength }).where(eq(schema.emojis.id, e.id))
   } else if (!e.fullReady) {
