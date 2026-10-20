@@ -140,3 +140,26 @@ export function createUpload(
     leavePartsOnError: false,
   })
 }
+
+/**
+ * Whole object, but never more than maxBytes + 1 bytes (so an oversize object is detectable without
+ * reading it all). With ifMatch the read fails (412) if the object changed since it was inspected.
+ */
+export async function getObjectBytesLimited(key: string, maxBytes: number, ifMatch?: string): Promise<Uint8Array> {
+  const res = await s3().send(new GetObjectCommand({ Bucket: bucket(), Key: key, Range: `bytes=0-${maxBytes}`, IfMatch: ifMatch }))
+  const bytes = await res.Body!.transformToByteArray()
+  return bytes.byteLength > maxBytes + 1 ? bytes.subarray(0, maxBytes + 1) : bytes
+}
+
+/** CopyObject that fails (412) unless the source still has `etag`: the copy is exactly what was checked. */
+export async function copyObjectIfMatch(fromKey: string, toKey: string, etag: string, contentType?: string, cacheControl?: string) {
+  await s3().send(
+    new CopyObjectCommand({
+      Bucket: bucket(),
+      Key: toKey,
+      CopySource: `${bucket()}/${encodeURIComponent(fromKey).replace(/%2F/g, '/')}`,
+      CopySourceIfMatch: etag,
+      ...(contentType || cacheControl ? { MetadataDirective: 'REPLACE', ContentType: contentType, CacheControl: cacheControl } : {}),
+    }),
+  )
+}
