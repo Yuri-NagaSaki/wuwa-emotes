@@ -3,7 +3,7 @@ import { artistEntries } from './artists'
 import { cached, LIST_TTL_MS } from './cache'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { characterEntries } from './characters'
-import { num, rows, shanghaiDay } from './sql'
+import { num, rows, seededHash, shanghaiDay } from './sql'
 import { TILE_COLUMNS, type TileRow, toEmojiTile } from './stream'
 import type { CountedRef, EmojiTile, ExploreData, Facets, PackCard, PackKind, SourceKind, TagDimension } from './types'
 
@@ -53,26 +53,41 @@ export function getFacets(): Promise<Facets> {
   })
 }
 
+/** A uniformly random point in the emoji id space (ids are r- + 20 random hex digits). */
+function randomEmojiProbe(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(10))
+  return 'r-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
+
 export async function getExplore(now = new Date()): Promise<ExploreData> {
   const day = shanghaiDay(now)
+  const packKey = seededHash(sql.raw('p.id::text'), day)
+  const emojiKey = seededHash(sql.raw('e.id'), day)
+  const probe = randomEmojiProbe()
+  const visible = sql.raw(`e.status = 'published' and p.status = 'published'`)
   const cardSource = sql`
     (select p.id, 'random' as bucket, 1::bigint as ord from packs p where p.status = 'published' order by random() limit 1)
     union all
-    (select p.id, 'today', row_number() over (order by md5(${day}::text || ':' || p.id::text), p.id)
+    (select p.id, 'today', row_number() over (order by ${packKey}, p.id)
        from packs p where p.status = 'published'
-       order by md5(${day}::text || ':' || p.id::text), p.id limit ${TODAY_PACKS})`
+       order by ${packKey}, p.id limit ${TODAY_PACKS})`
   const [cardRows, tileRows, facets] = await Promise.all([
     rows<CardRow & { bucket: string }>(sql`${cardSelect(cardSource)} order by src.bucket, src.ord`),
+    // random emoji: the first visible id at or after a random probe (wrapping around), an index
+    // range scan instead of sorting the whole table by random()
     rows<TileRow & { bucket: string }>(sql`
       (select ${TILE_COLUMNS}, 'random' as bucket, 1::bigint as ord
          from emojis e join packs p on p.id = e.pack_id
-         where e.status = 'published' and p.status = 'published'
-         order by random() limit 1)
+         where ${visible} and e.id >= ${probe} order by e.id limit 1)
       union all
-      (select ${TILE_COLUMNS}, 'today', row_number() over (order by md5(${day}::text || ':' || e.id), e.id)
+      (select ${TILE_COLUMNS}, 'random', 2
          from emojis e join packs p on p.id = e.pack_id
-         where e.status = 'published' and p.status = 'published'
-         order by md5(${day}::text || ':' || e.id), e.id limit ${TODAY_EMOJIS})
+         where ${visible} order by e.id limit 1)
+      union all
+      (select ${TILE_COLUMNS}, 'today', row_number() over (order by ${emojiKey}, e.id)
+         from emojis e join packs p on p.id = e.pack_id
+         where ${visible}
+         order by ${emojiKey}, e.id limit ${TODAY_EMOJIS})
       order by bucket, ord`),
     getFacets(),
   ])
@@ -86,7 +101,7 @@ export async function getExplore(now = new Date()): Promise<ExploreData> {
   let randomEmoji: EmojiTile | null = null
   const todayEmojis: EmojiTile[] = []
   for (const r of tileRows) {
-    if (r.bucket === 'random') randomEmoji = toEmojiTile(r)
+    if (r.bucket === 'random') randomEmoji ??= toEmojiTile(r)
     else todayEmojis.push(toEmojiTile(r))
   }
   return { randomPack, randomEmoji, today: { day, packs: todayPacks, emojis: todayEmojis }, facets }

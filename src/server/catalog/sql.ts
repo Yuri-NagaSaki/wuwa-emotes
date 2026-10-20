@@ -64,6 +64,14 @@ export function tagVisible(alias = 't'): SQL {
   )
 }
 
+/**
+ * Seeded pseudo-random sort key (bigint) for a text expression: the same seed gives the same order.
+ * hashtextextended is ~3× cheaper than md5 over the 15k-emoji table.
+ */
+export function seededHash(text: SQL, seed: string): SQL {
+  return sql`hashtextextended(${text}, hashtext(${seed}::text)::bigint)`
+}
+
 /** Escape LIKE/ILIKE metacharacters (default escape character is backslash). */
 export function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (m) => '\\' + m)

@@ -1,8 +1,9 @@
 import { DATABASE_URL, mainDatabase, withClient } from '../integration/setup'
 import { clearCatalogCache } from '#/server/catalog/cache'
 
-// A realistic catalog fixture in a fresh, migrated database (CHAOCHI_TEST_DB). Import this module
-// after ../integration/setup and call seedCatalog() in beforeAll; the seed runs once per process.
+// A realistic catalog fixture in the migrated test database (CHAOCHI_TEST_DB, recreated once per
+// process by setup.ts). Import this module after ../integration/setup and call seedCatalog() in
+// each file's beforeAll: it empties the catalog tables and inserts the fixture again.
 //
 // Published: 10 packs. Never visible: a draft pack (with published + pending emojis), a hidden pack
 // (with published emojis), pending/hidden emojis inside published packs, a character / artist / tag
@@ -436,11 +437,31 @@ export const FORBIDDEN_STRINGS = [
 
 const ts = (v: string) => (v === 'now' ? 'now()' : `'${v}'::timestamptz`)
 
+// Catalog tables are emptied first: a bare `bun test` runs other integration files in the same
+// process and database, and the assertions here count exact rows. (Files run one after another.)
+const CATALOG_TABLES = [
+  'redirects',
+  'collection_packs',
+  'collections',
+  'pack_tags',
+  'tags',
+  'pack_artists',
+  'artist_aliases',
+  'artists',
+  'emoji_characters',
+  'pack_characters',
+  'character_aliases',
+  'characters',
+  'emojis',
+  'packs',
+]
+
 async function doSeed(): Promise<void> {
   const run = await mainDatabase()
   if (run.exitCode !== 0) throw new Error(`migrate failed:\n${run.output}`)
   await withClient(DATABASE_URL, async (c) => {
     await c.query('begin')
+    await c.query(`truncate ${CATALOG_TABLES.join(', ')} restart identity cascade`)
     const charId = new Map<string, number>()
     for (const ch of CHARACTERS) {
       const r = await c.query(
@@ -546,8 +567,7 @@ async function doSeed(): Promise<void> {
   clearCatalogCache()
 }
 
-let seeded: Promise<void> | undefined
+/** Reset the catalog tables to the fixture (call in each test file's beforeAll). */
 export function seedCatalog(): Promise<void> {
-  seeded ??= doSeed()
-  return seeded
+  return doSeed()
 }

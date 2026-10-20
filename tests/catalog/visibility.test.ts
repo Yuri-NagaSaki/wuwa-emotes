@@ -29,10 +29,11 @@ async function everything(): Promise<unknown[]> {
   for (const sort of ['count', 'recent', 'pinyin'] as const) out.push(await listCharacters({ sort }))
   for (const ch of CHARACTERS) {
     out.push(await getCharacterDetail({ slug: ch.slug }))
-    out.push((await allPages(async (cursor) => {
+    const emojiTab = await allPages<unknown>(async (cursor) => {
       const d = await getCharacterDetail({ slug: ch.slug, tab: 'emojis', cursor, limit: 5 })
       return d.kind === 'character' ? d.page : { items: [], nextCursor: null, seed: null }
-    })).items)
+    })
+    out.push(emojiTab.items)
   }
   out.push(await listArtists())
   for (const slug of ['maowushi', '爱秧斯坦', 'kuroba', 'ghost']) out.push(await getArtistDetail({ slug }))

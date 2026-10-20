@@ -47,18 +47,28 @@ function safeLinks(raw: unknown): ArtistLink[] {
 
 async function loadArtists(): Promise<ArtistEntry[]> {
   const list = await rows<ArtistRow>(sql`
+    with ap as (
+      select pa.artist_id, pa.pack_id,
+        bool_or(pa.role = 'artist') as drew, bool_or(pa.role = 'commissioner') as commissioned,
+        max(coalesce(p.published_at, p.created_at)) as pub
+      from pack_artists pa join packs p on p.id = pa.pack_id
+      where p.status = 'published'
+      group by pa.artist_id, pa.pack_id
+    ),
+    pe as (
+      select e.pack_id, count(*)::int as n from emojis e
+      where e.status = 'published' and e.pack_id in (select pack_id from ap)
+      group by e.pack_id
+    )
     select a.id, a.slug, a.name, a.links,
-      count(distinct p.id)::int as pack_count,
-      count(distinct p.id) filter (where pa.role = 'artist')::int as drawn,
-      count(distinct p.id) filter (where pa.role = 'commissioner')::int as commissioned,
-      (select count(*)::int from emojis e
-        where e.status = 'published'
-          and e.pack_id in (select x.pack_id from pack_artists x join packs q on q.id = x.pack_id
-                            where x.artist_id = a.id and q.status = 'published')) as emoji_count,
-      max(coalesce(p.published_at, p.created_at)) as latest
+      count(*)::int as pack_count,
+      (count(*) filter (where ap.drew))::int as drawn,
+      (count(*) filter (where ap.commissioned))::int as commissioned,
+      coalesce(sum(pe.n), 0)::int as emoji_count,
+      max(ap.pub) as latest
     from artists a
-    join pack_artists pa on pa.artist_id = a.id
-    join packs p on p.id = pa.pack_id and p.status = 'published'
+    join ap on ap.artist_id = a.id
+    left join pe on pe.pack_id = ap.pack_id
     group by a.id
     order by pack_count desc, a.name, a.id`)
   return list.map((r) => ({

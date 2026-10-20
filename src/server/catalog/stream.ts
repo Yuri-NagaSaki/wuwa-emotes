@@ -2,12 +2,12 @@ import { type SQL, sql } from 'drizzle-orm'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { type RawImage, toEmojiImage } from './images'
 import { galleryInput, type GalleryInput } from './inputs'
-import { type KeyCol, keysetAfter, keyTextSql, keyValues, num, orderBySql, PUB_AT, rows } from './sql'
+import { type KeyCol, keysetAfter, keyTextSql, keyValues, num, orderBySql, PUB_AT, rows, seededHash } from './sql'
 import type { EmojiTile, EmojiType, Page, StreamSort } from './types'
 
 // Cross-pack emoji streams: 潮汐画廊 and the 「全部表情」 tab of a character page.
 //   new:    newest packs first, each pack in its own order
-//   random: md5(seed:emoji id), seed carried in the cursor
+//   random: seeded hash of the emoji id, seed carried in the cursor
 // One statement per page.
 
 export interface StreamFilters {
@@ -19,7 +19,7 @@ export interface StreamFilters {
 export function streamKeyCols(sort: StreamSort, seed: string): KeyCol[] {
   if (sort === 'random') {
     return [
-      { expr: sql`md5(${seed}::text || ':' || e.id)`, desc: false, type: 'text' },
+      { expr: seededHash(sql.raw('e.id'), seed), desc: false, type: 'bigint' },
       { expr: sql.raw('e.id'), desc: false, type: 'text' },
     ]
   }

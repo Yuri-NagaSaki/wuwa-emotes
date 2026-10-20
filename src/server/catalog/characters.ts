@@ -5,7 +5,7 @@ import { characterDetailInput, type CharacterDetailInput, charactersInput, type 
 import { resolveLegacyPath } from './legacy'
 import { packPage } from './packs'
 import { emojiPage } from './stream'
-import { isoOrNull, num, rows } from './sql'
+import { emojiJson, emojiOrder, isoOrNull, num, rows } from './sql'
 import type { CharacterArtist, CharacterCard, CharacterLookup } from './types'
 
 // 角色图鉴 and 角色详情. Counts are computed live over published rows (the denormalized
@@ -37,35 +37,46 @@ export interface CharacterEntry {
  * tagged with the character, else any emoji of its packs — from the most downloaded pack, in pack order.
  */
 async function loadCharacters(): Promise<CharacterEntry[]> {
+  // set-based (one pass over emoji_characters for counts and tagged avatars); the per-character
+  // pack fallback only runs for characters without a tagged emoji
   const list = await rows<CharacterRow>(sql`
-    select c.id, c.slug, c.name, c.theme_color as color, c.sort, pc.n as pack_count, ec.n as emoji_count, pc.latest, av.j as avatar
-    from characters c
-    cross join lateral (
-      select count(*)::int as n, max(coalesce(p.published_at, p.created_at)) as latest
+    with pc as (
+      select x.character_id as cid, count(*)::int as n, max(coalesce(p.published_at, p.created_at)) as latest
       from pack_characters x join packs p on p.id = x.pack_id
-      where x.character_id = c.id and p.status = 'published'
-    ) pc
-    cross join lateral (
-      select count(*)::int as n
+      where p.status = 'published'
+      group by x.character_id
+    ),
+    tagged as (
+      select x.character_id as cid, e.id, p.download_count, p.id as pack_id, e.sort_order, e.created_at
       from emoji_characters x join emojis e on e.id = x.emoji_id join packs p on p.id = e.pack_id
-      where x.character_id = c.id and e.status = 'published' and p.status = 'published'
-    ) ec
-    left join lateral (
-      select json_build_object('id', e.id, 'k', e.storage_pack_key, 'r', e.variant_rev, 'w', e.width, 'h', e.height, 'f', e.frames) as j
-      from (
-        select e1.*, 0 as pri from emojis e1 where e1.id = c.avatar_emoji_id
-        union all
-        select e2.*, 1 from emoji_characters x2 join emojis e2 on e2.id = x2.emoji_id where x2.character_id = c.id
-        union all
-        select e3.*, 2 from pack_characters x3 join emojis e3 on e3.pack_id = x3.pack_id where x3.character_id = c.id
-      ) e
-      join packs p on p.id = e.pack_id
       where e.status = 'published' and p.status = 'published'
-      order by e.pri, p.download_count desc, p.id, e.sort_order, e.created_at, e.id
+    ),
+    ec as (select cid, count(*)::int as n from tagged group by cid),
+    best as (
+      select distinct on (cid) cid, id from tagged
+      order by cid, download_count desc, pack_id, sort_order, created_at, id
+    )
+    select c.id, c.slug, c.name, c.theme_color as color, c.sort,
+      coalesce(pc.n, 0) as pack_count, coalesce(ec.n, 0) as emoji_count, pc.latest,
+      (case when av.id is null then null else ${emojiJson('av')} end) as avatar
+    from characters c
+    left join pc on pc.cid = c.id
+    left join ec on ec.cid = c.id
+    left join best on best.cid = c.id
+    left join lateral (
+      select e.id from emojis e join packs p on p.id = e.pack_id
+      where e.id = c.avatar_emoji_id and e.status = 'published' and p.status = 'published'
+    ) own on true
+    left join lateral (
+      select e.id from pack_characters x join packs p on p.id = x.pack_id join emojis e on e.pack_id = p.id
+      where best.id is null and own.id is null
+        and x.character_id = c.id and p.status = 'published' and e.status = 'published'
+      order by p.download_count desc, p.id, ${emojiOrder('e')}
       limit 1
-    ) av on true
+    ) fallback on true
+    left join emojis av on av.id = coalesce(own.id, best.id, fallback.id)
     where pc.n > 0 or ec.n > 0
-    order by ec.n desc, pc.n desc, c.sort, c.id`)
+    order by coalesce(ec.n, 0) desc, coalesce(pc.n, 0) desc, c.sort, c.id`)
   return list.map((r) => ({
     id: num(r.id),
     sort: num(r.sort),

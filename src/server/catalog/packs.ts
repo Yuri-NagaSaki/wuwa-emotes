@@ -2,11 +2,12 @@ import { type SQL, sql } from 'drizzle-orm'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { listPacksInput, type ListPacksInput, TAG_FILTER_RE } from './inputs'
-import { type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, PUB_AT, rows } from './sql'
+import { type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, PUB_AT, rows, seededHash } from './sql'
 import type { PackCard, PackKind, PackSort, Page, SourceKind, TagDimension } from './types'
 
 // /packs 目录: keyset pagination over published packs. Every order ends in the pack id, so it is
-// total and stable; random uses md5(seed:id), and the seed travels in the cursor so pages never repeat.
+// total and stable; random orders by a seeded hash of the id, and the seed travels in the cursor so
+// pages never repeat.
 
 export interface PackFilters {
   character?: string
@@ -29,7 +30,7 @@ export function packKeyCols(sort: PackSort, seed: string): KeyCol[] {
       return [{ expr: sql.raw('p.favorite_count'), desc: true, type: 'int' }, ID_DESC]
     case 'random':
       return [
-        { expr: sql`md5(${seed}::text || ':' || p.id::text)`, desc: false, type: 'text' },
+        { expr: seededHash(sql.raw('p.id::text'), seed), desc: false, type: 'bigint' },
         { expr: sql.raw('p.id'), desc: false, type: 'int' },
       ]
   }
