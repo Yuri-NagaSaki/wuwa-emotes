@@ -98,8 +98,10 @@
 .set-row b { color: var(--tp-ink); display: block; font-size: 14.5px; }
 .set-row small { color: var(--tp-muted); font-size: 12.5px; }
 .set-row.danger b { color: var(--tp-err); }
-/* an opened form (修改密码) gets its own line, one column of fields */
-.set-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; flex: 1 0 100%; max-width: 480px; padding-top: 4px; }
+/* an opened form (修改密码) goes under the row's title: one column of fields, left edges with the title */
+.set-row.is-open { flex-direction: column; align-items: stretch; }
+.set-row.is-open > div:first-child { flex: none; }
+.set-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; width: 100%; max-width: 480px; }
 .set-form > * { min-width: 0; }
 .set-form .acts { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .sessions { display: grid; gap: 8px; width: 100%; }

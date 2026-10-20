@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import type { MeSummary } from '#/server/account/service'
 import { deleteAccountFn } from '#/server/account/fn'
 import { Button } from '../Button'
+import { cx } from '../cx'
 import { Check, Field, Input } from '../Field'
 import { Icon } from '../Icon'
 import { Modal, ModalClose } from '../Modal'
@@ -124,7 +125,7 @@ function PasswordRow() {
   }
 
   return (
-    <div className="set-row">
+    <div className={cx('set-row', open && 'is-open')}>
       <div>
         <b>修改密码</b>
         <small>至少 8 位；修改后可以顺便退出其他设备</small>

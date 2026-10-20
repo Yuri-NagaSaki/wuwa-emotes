@@ -37,7 +37,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 // ---------- Cap Standalone stand-in ----------
 
-const cap = { challenge: 0, redeem: 0, siteverify: 0, verified: 0, fail: false }
+const cap = { challenge: 0, redeem: 0, siteverify: 0, verified: 0, fail: false, delayMs: 0 }
 const issued = new Set<string>()
 const capServer = Bun.serve({
   hostname: '127.0.0.1',
@@ -53,6 +53,7 @@ const capServer = Bun.serve({
     const random = () => crypto.randomUUID().replace(/-/g, '')
     if (path === '/ua/challenge') {
       cap.challenge++
+      if (cap.delayMs) await sleep(cap.delayMs)
       if (cap.fail) return new Response('unavailable', { status: 503, headers: cors })
       return Response.json({ challenge: { c: 8, s: 32, d: 3 }, token: random(), expires: Date.now() + 10 * 60_000 }, { headers: cors })
     }
@@ -367,6 +368,11 @@ async function inspect(page: Page): Promise<string[]> {
       const box = form.getBoundingClientRect()
       for (const el of form.querySelectorAll(':scope > *')) same(box, el, '/submit column')
     }
+    // opened settings forms (修改密码) and the 注销 sheet: one column each
+    for (const f of document.querySelectorAll('.set-form, .sheet-form')) {
+      const box = f.getBoundingClientRect()
+      for (const el of f.querySelectorAll(':scope > *, :scope > .field > *')) same(box, el, 'settings form')
+    }
     return issues
   })
 }
@@ -419,6 +425,18 @@ async function counted(fn: () => Promise<void>): Promise<{ verified: number; cal
     return { verified: cap.verified - v, calls: cap.siteverify - c }
   })
 }
+
+/** Record every label the form's submit button shows from now on (it is replaced on navigation). */
+async function watchSubmitLabels(page: Page) {
+  await page.evaluate(() => {
+    const w = window as unknown as { __labels: string[] }
+    w.__labels = []
+    const btn = document.querySelector('form button[type="submit"]')!
+    w.__labels.push(btn.textContent ?? '')
+    new MutationObserver(() => w.__labels.push(btn.textContent ?? '')).observe(btn, { childList: true, characterData: true, subtree: true })
+  })
+}
+const submitLabels = (page: Page) => page.evaluate(() => (window as unknown as { __labels: string[] }).__labels)
 
 async function logout(l: Lane) {
   await l.page.goto(`${BASE}/me/settings`, { waitUntil: 'networkidle0' })
@@ -510,24 +528,44 @@ async function mainFlow(browser: Browser, vw: Viewport, report: Record<string, u
       await page.goto(`${BASE}${path}`, { waitUntil: 'networkidle0' })
       await shot(l, state)
     }
+    // the settings forms, opened
+    await clickText(page, '.set-row button', '修改')
+    await page.waitForSelector('.set-form')
+    await shot(l, 'me-set-password')
+    await clickText(page, '.set-row button', '注销')
+    await page.waitForSelector('.sheet-form')
+    await shot(l, 'me-set-delete')
+    await page.keyboard.press('Escape')
+    // the saved draft in the 投稿 editor
+    const [draft] = await sql(`select s.id from submissions s join users u on u.id = s.submitter_id where u.email = $1`, [email])
+    await page.goto(`${BASE}/me/submissions/${draft.id}`, { waitUntil: 'networkidle0' })
+    await shot(l, 'me-sub-edit')
 
     // 退出 → 登录
     await logout(l)
     await shot(l, 'login')
     await typeInto(page, 'input[type="email"]', email)
     await typeInto(page, 'input[type="password"]', PASSWORD)
+    await watchSubmitLabels(page)
     const signIn = await counted(async () => {
       await clickText(page, 'form button[type="submit"]', '登录')
       await waitPath(page, '/me')
     })
     expectCap(l, '/sign-in/email', true)
     if (signIn.verified !== 1) throw new Error(`sign-in: siteverify ${JSON.stringify(signIn)}`)
+    // the token was solved in the background while the form was filled in
+    const labels = await submitLabels(page)
+    if (labels.includes('验证中…')) throw new Error(`sign-in waited for Cap: ${labels.join(' → ')}`)
+    report[`${l.name}-signin-labels`] = labels
     step('signed in')
     await logout(l)
 
     // 找回密码 → reset link → 新密码 → 登录
     await page.goto(`${BASE}/forgot-password`, { waitUntil: 'networkidle0' })
     await shot(l, 'forgot')
+    await clickText(page, 'button', '发送重置邮件')
+    await waitText(page, '请填写邮箱')
+    await shot(l, 'forgot-invalid')
     await typeInto(page, 'input[type="email"]', email)
     const reset = await counted(async () => {
       await clickText(page, 'button', '发送重置邮件')
@@ -542,6 +580,11 @@ async function mainFlow(browser: Browser, vw: Viewport, report: Record<string, u
     await shot(l, 'reset')
     const [pw1, pw2] = await page.$$('input[type="password"]')
     await pw1!.type(NEW_PASSWORD)
+    await pw2!.type(`${NEW_PASSWORD}x`)
+    await clickText(page, 'button', '保存新密码')
+    await waitText(page, '两次输入的密码不一样')
+    await shot(l, 'reset-mismatch')
+    await pw2!.click({ count: 3 })
     await pw2!.type(NEW_PASSWORD)
     await clickText(page, 'button', '保存新密码')
     await waitText(page, '密码已更新')
@@ -620,6 +663,39 @@ async function errorFlow(browser: Browser, vw: Viewport, verifiedEmail: string, 
   }
 }
 
+/** A slow Cap server: submitting before the proof of work is done shows 验证中…, then signs in. */
+async function slowCapFlow(browser: Browser, vw: Viewport, email: string, report: Record<string, unknown>) {
+  const l = await lane(browser, `slowcap-${vw.tag}`, vw)
+  const { page } = l
+  try {
+    cap.delayMs = 4000
+    const before = cap.challenge
+    await page.goto(`${BASE}/login`, { waitUntil: 'load' })
+    // hydrated: the background solve has asked for its challenge (answered 4 s later)
+    for (let i = 0; cap.challenge === before; i++) {
+      if (i > 100) throw new Error('no background challenge')
+      await sleep(50)
+    }
+    await typeInto(page, 'input[type="email"]', email)
+    await typeInto(page, 'input[type="password"]', NEW_PASSWORD)
+    await watchSubmitLabels(page)
+    await clickText(page, 'form button[type="submit"]', '登录')
+    await page.waitForFunction(() => document.querySelector('form button[type="submit"]')?.textContent === '验证中…', { timeout: 3000 })
+    await shot(l, 'login-verifying')
+    await waitPath(page, '/me', 30_000)
+    const labels = await submitLabels(page)
+    expectCap(l, '/sign-in/email', true)
+    report[l.name] = { result: 'PASS', labels, issues: l.issues, consoleErrors: l.consoleErrors }
+  } catch (err) {
+    await page.screenshot({ path: join(OUT, `fail-${l.name}.png`) as `${string}.png`, fullPage: true }).catch(() => {})
+    report[l.name] = { result: 'FAIL', error: err instanceof Error ? err.stack : String(err), issues: l.issues, consoleErrors: l.consoleErrors }
+    throw err
+  } finally {
+    cap.delayMs = 0
+    await l.ctx.close()
+  }
+}
+
 /** The Cap server fails: submit shows 验证中…, then one line with 重试; once it is back, 重试 signs in. */
 async function capFailFlow(browser: Browser, vw: Viewport, email: string, report: Record<string, unknown>) {
   const l = await lane(browser, `capfail-${vw.tag}`, vw)
@@ -664,13 +740,19 @@ try {
   const [desk, phone] = await Promise.all([mainFlow(browser, DESKTOP, report), mainFlow(browser, PHONE, report)])
   await errorFlow(browser, DESKTOP, desk.email, report)
   await errorFlow(browser, PHONE, phone.email, report)
+  await slowCapFlow(browser, DESKTOP, desk.email, report)
+  await slowCapFlow(browser, PHONE, phone.email, report)
   await capFailFlow(browser, DESKTOP, desk.email, report)
   await capFailFlow(browser, PHONE, phone.email, report)
-  const main = [report['main-1440'], report['main-390']] as { consoleErrors: string[]; issues: string[] }[]
-  const others = Object.entries(report).filter(([k]) => !k.startsWith('main-')).map(([, v]) => v as { issues: string[] })
+  // contexts whose every response is a success: no console errors allowed
+  const clean = ['main-1440', 'main-390', 'slowcap-1440', 'slowcap-390'].map((k) => report[k]) as { consoleErrors: string[]; issues: string[] }[]
+  const others = Object.entries(report)
+    .filter(([, v]) => !clean.includes(v as never) && typeof v === 'object' && v !== null && 'issues' in v)
+    .map(([, v]) => v as { issues: string[] })
+  const main = clean
   const consoleErrors = main.flatMap((r) => r.consoleErrors)
   const issues = [...main, ...others].flatMap((r) => r.issues)
-  report.summary = { consoleErrorsInMainFlows: consoleErrors.length, layoutAndCapIssues: issues.length, cap, mails: mails.length }
+  report.summary = { consoleErrorsInCleanFlows: consoleErrors.length, layoutAndCapIssues: issues.length, cap, mails: mails.length }
   if (consoleErrors.length || issues.length) exitCode = 1
 } catch (err) {
   report.error = err instanceof Error ? err.stack : String(err)
