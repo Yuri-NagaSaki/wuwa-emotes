@@ -146,3 +146,18 @@ export function configureSharp() {
   sharp.cache(false)
   sharp.concurrency(1)
 }
+
+let imageTail: Promise<unknown> = Promise.resolve()
+
+/**
+ * Run sharp work one job at a time per process: at most one decoded animation is in memory, whatever
+ * the queue concurrency. The storage I/O around it (seconds per job against R2) still overlaps.
+ */
+export function oneImageAtATime<T>(work: () => Promise<T>): Promise<T> {
+  const run = imageTail.then(work)
+  imageTail = run.then(
+    () => undefined,
+    () => undefined,
+  )
+  return run
+}

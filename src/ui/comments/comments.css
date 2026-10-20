@@ -1,0 +1,107 @@
+/* Comments section, sticker picker, 我的评论 and the 评论审核 queue: the rules the shared kit
+   (components.css .cm/.cmt/.picker/.composer, admin.css .qcard/.rule-row) does not have yet.
+   Loaded by the components themselves (<link precedence>), so pages need no extra stylesheet. */
+
+/* stickers rendered from :s[...] markers */
+.cmt-b img.cmt-stk { display: inline-block; width: 92px; height: 92px; object-fit: contain; background: var(--tp-input); border-radius: 14px; padding: 6px; border: 2px solid var(--tp-line); vertical-align: bottom; margin: 2px 6px 2px 0; }
+.cmt-b img.cmt-stk.is-inline { width: 30px; height: 30px; padding: 0; border: 0; background: none; border-radius: 6px; vertical-align: -8px; margin: 0 2px; }
+.cmt-b p { margin: 0; }
+.cmt-b p + p, .cmt-b ul, .cmt-b ol, .cmt-b pre, .cmt-b blockquote { margin-top: 6px; }
+.cmt-b ul, .cmt-b ol { padding-left: 1.4em; margin-bottom: 0; }
+.cmt-b pre { background: var(--tp-sand); border-radius: 10px; padding: 8px 12px; overflow-x: auto; font-size: 13px; scrollbar-width: none; }
+.cmt-b pre code { background: none; padding: 0; }
+.cmt-b a { color: var(--tp-teal-ink); font-weight: 700; text-decoration: underline; text-underline-offset: 3px; overflow-wrap: anywhere; }
+.cmt-b blockquote p { margin: 0; }
+
+/* header extras */
+.role.guest { background: var(--tp-sunk); color: var(--tp-muted); }
+.role.pend { background: var(--tp-warn-bg); color: var(--tp-warn); }
+.cmt-h .reply-to { color: var(--tp-muted); font-size: 12.5px; }
+.cmt-h .reply-to b { font-size: 12.5px; color: var(--tp-teal-ink); }
+.cmt-h .edited { color: var(--tp-faint); font-size: 12px; }
+.cmt.is-pending > div > .cmt-b { opacity: 0.78; }
+.cmt.is-flash { animation: cm-flash 1.6s var(--ease) 1; border-radius: var(--r); }
+@keyframes cm-flash { 0%, 40% { background: color-mix(in srgb, var(--tp-teal-bg) 90%, transparent); } 100% { background: transparent; } }
+.cmt .avatar.gone { border-style: dashed; background: var(--tp-sand); }
+.cmt-replies > .cmt-composer { margin: 10px 0 4px; }
+
+/* reactions */
+.react { cursor: pointer; }
+.react .lbl { font-family: var(--tp-font-body); font-weight: 800; font-size: 12px; padding-left: 5px; }
+.react-pop { display: flex; gap: 6px; flex-wrap: wrap; padding: 8px; max-width: 300px; }
+.react-pop .react { padding: 0 9px 0 3px; }
+.react-pop .react:not(:has(img)) { padding: 0 10px; }
+
+/* composer */
+.composer .md-hint { font-size: 12px; color: var(--tp-faint); }
+.composer .md-hint code { font-family: var(--tp-font-mono); background: var(--tp-sand); border-radius: 5px; padding: 0 4px; font-size: 11.5px; }
+.composer .preview { border: 2px dashed var(--tp-line-2); border-radius: var(--r); padding: 10px 14px; min-height: 64px; }
+.composer .preview .cmt-b { margin-top: 0; }
+.composer .problems { color: var(--tp-err); font-size: 12.5px; font-weight: 700; display: grid; gap: 2px; }
+.composer .hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+.composer .cap-box { display: inline-flex; }
+.composer .who .avatar { font-size: 12px; }
+.composer.is-compact { padding: 10px; gap: 10px; }
+.composer.is-compact .textarea { min-height: 72px; }
+.composer .reply-head { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--tp-muted); }
+.composer .reply-head b { color: var(--tp-ink); }
+.composer .reply-head .x { margin-left: auto; }
+.composer .banned { font-size: 13px; color: var(--tp-err); font-weight: 700; }
+.pending-stk .bthumb { padding: 4px; }
+
+/* picker */
+.picker.is-pop { position: absolute; left: 14px; top: calc(100% - 6px); }
+.picker-grid:empty { display: none; }
+.picker-note { padding: 18px 12px 22px; text-align: center; color: var(--tp-muted); font-size: 13px; border-top: 2px solid var(--tp-line); }
+.picker-hits { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px; }
+.picker-hits .chip { max-width: 100%; }
+.picker-grid button.is-picked { border-color: var(--tp-teal); background: var(--tp-teal-bg); }
+.picker-grid button:disabled { opacity: 0.4; transform: none; }
+.drawer.picker-sheet { padding-bottom: var(--safe-bottom); }
+.drawer.picker-sheet .picker-grid { max-height: none; grid-template-columns: repeat(5, 1fr); }
+
+.cm-loading { display: grid; gap: 12px; }
+.cm-loading .skel { height: 72px; }
+.cm .empty { padding: 28px 16px; }
+
+/* 我的评论 */
+.cm-list { display: grid; border-radius: var(--r-lg); border: 2px solid var(--tp-line); background: var(--tp-card); overflow: hidden; }
+.cm-li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 16px; border-bottom: 1.5px solid var(--tp-line); }
+.cm-li:last-child { border-bottom: 0; }
+.cm-li .where { font-size: 13px; color: var(--tp-muted); }
+.cm-li .where a { color: var(--tp-ink); font-weight: 800; }
+.cm-li .cmt-b { margin-top: 4px; font-size: 14px; line-height: 1.6; max-height: 8.6em; overflow: hidden; }
+.cm-li .cmt-b img.cmt-stk:not(.is-inline) { width: 36px; height: 36px; padding: 2px; border-radius: 10px; margin: 2px 4px 0 0; }
+.cm-li .r { display: flex; gap: 8px; align-items: center; }
+.cm-li small { color: var(--tp-faint); font-size: 12px; }
+.cm-counts { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* 评论审核 */
+.qcard .cmt-b img.cmt-stk:not(.is-inline) { width: 64px; height: 64px; padding: 4px; }
+.qcard .sel { padding-top: 8px; }
+.qcard .where { color: var(--tp-muted); font-size: 12.5px; }
+.qcard .where a { color: var(--tp-teal-ink); font-weight: 700; }
+.qcard .why span.rep { background: var(--tp-err-bg); color: var(--tp-err); }
+.qcard .head { display: flex; gap: 10px; align-items: flex-start; }
+.q-tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.q-empty { padding: 30px 16px; }
+.rule-num { display: inline-flex; align-items: center; gap: 6px; }
+.rule-num .input { width: 92px; min-height: 36px; }
+.rule-num .input input { height: 32px; }
+.blk-add { display: flex; gap: 6px; margin-top: 8px; }
+.blk-add .input { flex: 1; min-height: 36px; }
+.blk-add .input input { height: 32px; }
+.react-cfg { display: grid; gap: 8px; margin-top: 6px; }
+.react-cfg .row { display: grid; grid-template-columns: 54px 36px minmax(0, 1fr); gap: 8px; align-items: center; font-size: 13px; }
+.react-cfg .row img { width: 32px; height: 32px; object-fit: contain; }
+.react-cfg .row .ph { width: 32px; height: 32px; border-radius: 8px; background: var(--tp-sunk); }
+.react-cfg .input { min-height: 34px; }
+.react-cfg .input input { height: 30px; font-family: var(--tp-font-mono); font-size: 12px; }
+.ban-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+
+@media (max-width: 760px) {
+  .cmt-b img.cmt-stk:not(.is-inline) { width: 76px; height: 76px; }
+  .composer .send { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
+  .composer .md-hint { display: none; }
+}
+.report-reasons { justify-content: center; margin: 4px 0 6px; }

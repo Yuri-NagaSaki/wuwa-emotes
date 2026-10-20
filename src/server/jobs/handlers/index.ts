@@ -8,14 +8,15 @@ import { zipBuildJob } from './zip'
 
 export interface Handler<N extends QueueName> {
   run(data: JobData[N]): Promise<void>
-  /** parallel jobs of this queue in one worker; image work stays at 1 (memory) */
+  /** parallel jobs of this queue in one worker. Sharp work is serialized per process (oneImageAtATime). */
   concurrency?: number
 }
 
 // One entry per queue.
 export const HANDLERS: { [N in QueueName]: Handler<N> } = {
   [Q.ingest]: { run: ingestJob },
-  [Q.derive]: { run: deriveEmoji },
+  // I/O-bound: about 2 s of R2 round trips per job around a fraction of a second of sharp work
+  [Q.derive]: { run: deriveEmoji, concurrency: 6 },
   [Q.full]: { run: generateFull },
   [Q.zipBuild]: { run: zipBuildJob },
   [Q.statsRollup]: { run: rollupStats },
