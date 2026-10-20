@@ -101,7 +101,7 @@ flowchart LR
 | `POST /api/batch/sign` | 打包清单分批签名 | `private, no-store` |
 | `/api/health` | 健康检查：`select 1`，2 秒超时 | `no-store` |
 | `/api/auth/*` | Better Auth | 没有显式缓存头时 `no-store` |
-| 服务端函数 | 页面数据与写操作 | 没有显式缓存头时 `no-store` |
+| 服务端函数 | 页面数据与写操作 | 公开目录数据（`src/server/catalog/fns.ts`，不含随机结果）的匿名 GET 成功时为 `public, s-maxage=30, stale-while-revalidate=300`（`src/server/http/edge-cache.ts`）；请求带会话 Cookie 时一律 `private, no-store`；其余没有显式缓存头时 `no-store` |
 | `/kit` | 组件样张 | 只在开发环境存在，生产返回 404 |
 
 另外两条规则：任何带 `Set-Cookie` 的响应都改为 `private, no-store`；5xx 页面和重定向没有显式缓存头时为 `no-store`。
@@ -735,7 +735,7 @@ deploy/         Caddy、防火墙、发布与环境脚本
 |---|---|
 | DNS | 站点域名与 `www` 的 A 记录指向源站，保持代理开启（橙云）；不建任何指向源站的灰云记录 |
 | SSL/TLS | 源站用 Origin CA 证书，模式「完全（严格）」；开启「始终使用 HTTPS」 |
-| Cache Rules | `/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」；`/fonts/*` 缓存一年；HTML 遵从源站头。`/assets/*` 由 Nitro 加上 `public, max-age=31536000, immutable` |
+| Cache Rules | `/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」；`/fonts/*` 与服务端函数 `/_serverFn/*` 遵从源站头（源站给字体分片一年 immutable、`tp-rounded.css` 一小时，见 `vite.config.ts` 的 `routeRules`；字体重新构建后清除 `tp-rounded.css`）；HTML 遵从源站头。`/assets/*` 由 Nitro 加上 `public, max-age=31536000, immutable` |
 | Tiered Cache | 开启 Smart Tiered Cache |
 | 缓存清除 | 令牌只给 Zone · Cache Purge 权限；只在删除时按 URL 清除，衍生图与 ZIP 都按版本或内容哈希命名 |
 | R2 令牌 | 只授权桶 `wuwa`，权限为对象读写 |
