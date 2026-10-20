@@ -539,7 +539,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 返回 /packs 现在保留全部已加载卡片和滚动位置，优化前会回到第一页顶部。
 
-性能预算（目标值）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。现状：首屏 JS 约 175 KB（框架约 119 KB），未达成；LCP 1.8–2.2 s、CLS ≤ 0.001 达标；标题改用圆体后首访字体最多约 365 KB，正在把全站标题用字集中到少数共享分片。
+性能预算（目标值）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。现状：首屏 JS 约 175 KB（框架约 119 KB），未达成；LCP 1.8–2.2 s、CLS ≤ 0.001 达标；字体：全站标题用字集中在少数共享的圆体分片里，首访字体（含 Nunito）首页 180 KB、/packs 155 KB、表情包页 69 KB、/characters 64 KB，之后的页面基本不再加载新分片（实测，手机 Slow 4G）。替换分片的发布同时保留上一版分片一个周期，避免仍缓存旧 CSS 的页面取不到字体。
 
 ---
 

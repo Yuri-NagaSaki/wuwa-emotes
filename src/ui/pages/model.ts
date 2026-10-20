@@ -15,6 +15,9 @@ export function themeColor(c: string | null | undefined, fallback = 'var(--c-min
   if (!c) return fallback
   const v = c.trim().toLowerCase()
   if (PALETTE.has(v)) return `var(--c-${v})`
+  // the admin taxonomy editor stores palette picks as their token
+  const token = /^var\(--c-([a-z]+)\)$/.exec(v)?.[1]
+  if (token && PALETTE.has(token)) return `var(--c-${token})`
   return CSS_COLOR.test(v) ? v : fallback
 }
 

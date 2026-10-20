@@ -30,6 +30,8 @@ describe('catalog DTO → UI', () => {
     expect(themeColor('pink')).toBe('var(--c-pink)')
     expect(themeColor(' Teal ')).toBe('var(--c-teal)')
     expect(themeColor('#a1b2c3')).toBe('#a1b2c3')
+    expect(themeColor('var(--c-pink)')).toBe('var(--c-pink)')
+    expect(themeColor('var(--c-nope)', 'fb')).toBe('fb')
     expect(themeColor('red; background: url(x)')).toBe('var(--c-mint)')
     expect(themeColor(null, 'var(--c-pink)')).toBe('var(--c-pink)')
   })
