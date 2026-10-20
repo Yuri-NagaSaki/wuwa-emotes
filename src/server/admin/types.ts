@@ -33,6 +33,8 @@ export interface AuditEntry {
   action: string
   targetType: string | null
   targetId: string | null
+  /** current name of the target (pack title, character, user…) when it still exists */
+  targetName: string | null
   diff: Json
 }
 

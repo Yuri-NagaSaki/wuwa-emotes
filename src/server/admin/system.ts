@@ -116,16 +116,17 @@ function jobRow(r: Record<string, unknown>): JobRow {
 export async function getJobs(): Promise<JobsData> {
   const counts = await many<{ name: string; state: string; n: number }>(sql`SELECT name, state::text AS state, count(*)::int AS n FROM pgboss.job GROUP BY name, state`)
   const policies = await many<{ name: string; policy: string | null }>(sql`SELECT name, policy FROM pgboss.queue`)
-  const names = [...new Set([...Object.values(Q), ...policies.map((p) => p.name)])]
+  // pg-boss's own internal queues (__pgboss__…) are not app work
+  const names = [...new Set([...Object.values(Q), ...policies.map((p) => p.name)])].filter((n) => !n.startsWith('__pgboss'))
   const queues: QueueRow[] = names.map((name) => {
     const c = Object.fromEntries(STATES.map((s) => [s, 0])) as QueueRow['counts']
     for (const r of counts) if (r.name === name && (STATES as readonly string[]).includes(r.state)) c[r.state as keyof QueueRow['counts']] = toNum(r.n)
     return { name, policy: policies.find((p) => p.name === name)?.policy ?? null, counts: c }
   })
   const cols = sql`id, name, state::text AS state, data, output, retry_count, retry_limit, singleton_key, created_on, started_on, completed_on`
-  const failed = await many<Record<string, unknown>>(sql`SELECT ${cols} FROM pgboss.job WHERE state = 'failed' ORDER BY completed_on DESC NULLS LAST LIMIT 30`)
+  const failed = await many<Record<string, unknown>>(sql`SELECT ${cols} FROM pgboss.job WHERE state = 'failed' AND NOT starts_with(name, '__pgboss') ORDER BY completed_on DESC NULLS LAST LIMIT 30`)
   const active = await many<Record<string, unknown>>(sql`
-    SELECT ${cols} FROM pgboss.job WHERE state IN ('active', 'retry', 'created') ORDER BY state = 'active' DESC, created_on LIMIT 30`)
+    SELECT ${cols} FROM pgboss.job WHERE state IN ('active', 'retry', 'created') AND NOT starts_with(name, '__pgboss') ORDER BY state = 'active' DESC, created_on LIMIT 30`)
   const boss = await jobSender()
   const stored = await boss.getSchedules().catch(() => [])
   const declared = new Map(SCHEDULES.map((s) => [s.name as string, s.cron]))
@@ -183,7 +184,14 @@ export async function listAudit(input: AuditListInput, opts: { onlyActor?: strin
   const pg = pageOf(input.page, toNum(n), opts.pageSize ?? 30)
   const rows = await many<Record<string, unknown>>(sql`
     SELECT l.id, l.created_at, l.actor_id, u.name AS actor_name, l.actor_role, l.impersonated_by, iu.name AS impersonator_name,
-      l.action, l.target_type, l.target_id, l.diff
+      l.action, l.target_type, l.target_id, l.diff,
+      CASE l.target_type
+        WHEN 'pack' THEN (SELECT p.title FROM packs p WHERE p.id::text = l.target_id)
+        WHEN 'character' THEN (SELECT c.name FROM characters c WHERE c.id::text = l.target_id)
+        WHEN 'artist' THEN (SELECT a.name FROM artists a WHERE a.id::text = l.target_id)
+        WHEN 'tag' THEN (SELECT t.name FROM tags t WHERE t.id::text = l.target_id)
+        WHEN 'user' THEN (SELECT x.name FROM users x WHERE x.id = l.target_id)
+      END AS target_name
     FROM audit_logs l LEFT JOIN users u ON u.id = l.actor_id LEFT JOIN users iu ON iu.id = l.impersonated_by
     WHERE ${where} ORDER BY l.created_at DESC, l.id DESC LIMIT ${pg.size} OFFSET ${pg.offset}`)
   return {
@@ -198,6 +206,7 @@ export async function listAudit(input: AuditListInput, opts: { onlyActor?: strin
       action: String(r.action),
       targetType: (r.target_type as string | null) ?? null,
       targetId: (r.target_id as string | null) ?? null,
+      targetName: (r.target_name as string | null) ?? null,
       diff: (r.diff ?? null) as Json,
     })),
     total: toNum(n),
