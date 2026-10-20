@@ -32,7 +32,7 @@ export function authErrorText(err: AuthFailure | null | undefined, fallback = '�
     case 'CAPTCHA_INVALID':
       return '人机验证已过期，请重试'
     case 'CAPTCHA_UNAVAILABLE':
-      return '人机验证服务暂时不可用，请稍后再试'
+      return '人机验证服务暂时不可用'
     case 'INVALID_EMAIL_OR_PASSWORD':
     case 'INVALID_PASSWORD':
     case 'CREDENTIAL_ACCOUNT_NOT_FOUND':
