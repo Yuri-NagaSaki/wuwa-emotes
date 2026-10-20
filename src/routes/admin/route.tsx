@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
+import type { ReactNode } from 'react'
 import { getAdminViewer, type PublicConfig, type ViewerSummary } from '#/server/ui/public-config'
 import { AdminShell } from '#/ui/admin/AdminShell'
 import { adminSearchTarget, isStaff } from '#/ui/admin/nav'
@@ -32,17 +33,24 @@ export const Route = createFileRoute('/admin')({
       links: [{ rel: 'stylesheet', href: adminCss }],
     }
   },
-  component: AdminLayout,
-  // unknown /admin/* paths render inside the shell (the 403 check still runs first)
+  component: () => (
+    <AdminFrame>
+      <Outlet />
+    </AdminFrame>
+  ),
+  // unknown /admin/* paths (the admin/$ splat) and pages that throw notFound() render here, in place of
+  // the layout: keep the shell (its sign-in / 403 states still come first)
   notFoundComponent: () => (
-    <EmptyState icon="info" title="这个页面不存在" className="adm-deny">
-      管理台里没有这个页面，可能是链接写错了，或者功能还没有上线。
-    </EmptyState>
+    <AdminFrame>
+      <EmptyState icon="info" title="这个页面不存在" className="adm-deny">
+        管理台里没有这个页面，可能是链接写错了，或者功能还没有上线。
+      </EmptyState>
+    </AdminFrame>
   ),
 })
 
-function AdminLayout() {
-  const { viewer } = Route.useLoaderData()
+function AdminFrame({ children }: { children: ReactNode }) {
+  const viewer = Route.useLoaderData({ select: (d) => d?.viewer ?? null })
   const { site } = useSiteConfig()
   const pathname = useLocation({ select: (l) => l.pathname })
   const router = useRouter()
@@ -72,7 +80,7 @@ function AdminLayout() {
       onSearch={isStaff(viewer?.role) ? search : undefined}
       onSignOut={viewer ? signOut : undefined}
     >
-      <Outlet />
+      {children}
     </AdminShell>
   )
 }
