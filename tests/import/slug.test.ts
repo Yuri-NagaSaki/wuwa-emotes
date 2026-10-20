@@ -31,7 +31,7 @@ describe('isHashSlug', () => {
   })
 
   test('hex ids, numeric ids and non-ASCII slugs are replaced', () => {
-    for (const s of ['c7d3e9a1f2b84c56a0e1', 'character-1e2ca573335a00cc88b0a81f', '12345', '爱秧斯坦', 'Aimisi', 'ai mi', '', null])
+    for (const s of ['c7d3e9a1f2b84c56a0e1', 'character-1e2ca573335a00cc88b0a81f', 'term-9646024ba03ca7d0a6fe2d94', 'submission-term-4117b215b685eaae18280b0d', '12345', '爱秧斯坦', 'Aimisi', 'ai mi', '', null])
       expect(isHashSlug(s)).toBe(true)
   })
 })

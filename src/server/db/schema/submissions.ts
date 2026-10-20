@@ -18,6 +18,10 @@ export interface SubmissionPayload {
   removeEmojiIds?: string[]
   coverEmojiId?: string | null
   kind?: 'animated' | 'static' | 'mixed'
+  /** Artists typed by the submitter that are not in the catalog yet; matched by name or alias, or created, on approval. */
+  artistNames?: string[]
+  /** new_pack only: 官方表情（官转）. Such packs are never downloadable. */
+  official?: boolean
 }
 
 export interface SubmissionDeclaration {

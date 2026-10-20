@@ -32,7 +32,8 @@ export function slugify(text: string): string {
 export function isHashSlug(slug: string | null | undefined): boolean {
   const s = (slug ?? '').trim()
   if (!s || !READABLE_RE.test(s)) return true
-  const tail = s.replace(/^(?:character|artist|tag|c|a|t)-/, '')
+  // v1 also uses Halo term ids such as term-9646… and submission-term-4117… as slugs
+  const tail = s.replace(/^(?:character|artist|tag|c|a|t|(?:submission-)?term)-/, '')
   if (/^[0-9a-f]{8,}$/.test(tail)) return true
   if (/^[0-9]+$/.test(tail)) return true
   return false

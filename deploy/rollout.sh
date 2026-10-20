@@ -17,6 +17,8 @@
 #   4. recreate the worker (it finishes active jobs first), then reload the proxy config gracefully
 # On failure it stops, leaves the healthy replica serving, moves CHAOCHI_IMAGE back to the previous
 # image, and prints how to roll back. Re-running with the same tag is a no-op unless --force.
+# Exit status: 0 released; 1 stopped before the release went live; 2 live on web-a, web-b and worker,
+# but the proxy config reload failed (the proxy keeps serving with its previous config).
 set -euo pipefail
 
 usage() { sed -n '3,9p' "$0" | sed 's/^# \{0,1\}//'; exit 64; }
@@ -211,6 +213,15 @@ mkdir -p "$STATE_DIR"
 exec 9>"$STATE_DIR/rollout.lock"
 flock -n 9 || die "another rollout holds $STATE_DIR/rollout.lock"
 
+# The proxy reads deploy/ through a bind mount of src/deploy. Validate that config before anything
+# changes: an invalid Caddyfile, or a mount still pointing at a replaced src directory, stops here.
+if proxy_running && ! out=$(dc exec -T proxy /bin/sh /etc/chaochi/caddy/caddy.sh validate 2>&1); then
+  printf '%s\n' "$out" | tail -n 5 >&2
+  die "the proxy cannot validate /etc/chaochi/caddy/Caddyfile. If deploy/caddy changed, fix it. If src was \
+replaced instead of updated in place (use deploy/push-src.sh), the proxy still reads the deleted tree: \
+recreate it with docker compose up -d --no-deps --force-recreate proxy (a few seconds without service)"
+fi
+
 PHASE="image"
 if ((BUILD)); then
   step "build $TARGET"
@@ -295,12 +306,21 @@ sleep 3
 [[ $(state_of worker) == running ]] || { dc logs --no-color --tail 30 worker >&2; die "worker is $(state_of worker)"; }
 log "worker: running after $((SECONDS - t0))s"
 
+# web-a, web-b and the worker run $TAG: the release is live, so the pointer stays on it from here on.
+POINTER_MOVED=0
+printf '%s %s %s previous=%s\n' "$(date -Is)" "$TAG" "${TARGET_ID:7:12}" "${PREV_TAG:-none}" >>"$STATE_DIR/releases.log"
+
 PHASE="proxy reload"
 if ((!PROXY_STARTED)); then
   step "proxy config reload (graceful; no-op when unchanged)"
-  dc exec -T proxy /bin/sh /etc/chaochi/caddy/caddy.sh reload || die "proxy reload failed; the running config is unchanged"
+  if ! dc exec -T proxy /bin/sh /etc/chaochi/caddy/caddy.sh reload; then
+    trap - EXIT
+    log "WARNING: $TAG is live on web-a, web-b and worker, but the proxy kept its previous config"
+    echo "  Check:  docker compose exec proxy /bin/sh /etc/chaochi/caddy/caddy.sh validate" >&2
+    echo "  Reload: docker compose exec proxy /bin/sh /etc/chaochi/caddy/caddy.sh reload" >&2
+    exit 2
+  fi
 fi
 
 PHASE="done"
-printf '%s %s %s previous=%s\n' "$(date -Is)" "$TAG" "${TARGET_ID:7:12}" "${PREV_TAG:-none}" >>"$STATE_DIR/releases.log"
 step "released $TAG in $((SECONDS - STARTED))s (rollback: deploy/rollout.sh ${PREV_TAG:-<previous-tag>})"
