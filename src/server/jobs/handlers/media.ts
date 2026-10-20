@@ -31,17 +31,23 @@ export async function deriveEmoji({ emojiId, target }: JobData['media.derive']) 
     return
   }
   const buf = await getObjectBytes(e.originalKey)
-  const { p, poster, p240, a160, color } = await oneImageAtATime(async () => {
+  const { p, poster, p240, a160, frames, color } = await oneImageAtATime(async () => {
     const p = await probe(buf)
     const poster = await posterFrame(buf, p)
     const p240 = await renderP240(buf, poster)
     let a160: Buffer | null = null
+    let frames = p.frames
     if (p.animated) {
       a160 = await renderA160(buf, p)
-      const frames = await countFrames(a160)
-      if (frames < 2) throw new Error(`a160 for ${emojiId} came out with ${frames} frame(s)`)
+      // The WebP encoder merges identical consecutive frames. One frame left means every frame of the
+      // original is the same picture: the sticker is static as displayed, so no a160 and frames 1.
+      if ((await countFrames(a160)) < 2) {
+        log().info({ emojiId, frames: p.frames }, 'derive: every frame is identical; stored as static')
+        a160 = null
+        frames = 1
+      }
     }
-    return { p, poster, p240, a160, color: await dominantColor(buf, poster) }
+    return { p, poster, p240, a160, frames, color: await dominantColor(buf, poster) }
   })
   if (target === 'review') {
     await putObject(reviewKey('p240', e.storagePackKey, e.id), p240, 'image/webp', 'private, no-store')
@@ -55,8 +61,8 @@ export async function deriveEmoji({ emojiId, target }: JobData['media.derive']) 
     .set({
       width: p.width,
       height: p.height,
-      frames: p.frames,
-      durationMs: p.durationMs,
+      frames,
+      durationMs: frames > 1 ? p.durationMs : null,
       posterFrame: poster,
       dominantColor: color,
       // v1 imports have no hash yet; the original is already in memory here
@@ -82,7 +88,8 @@ export async function generateFull({ emojiId }: JobData['media.full']) {
     const out = await oneImageAtATime(async () => {
       const p = await probe(buf)
       const out = await renderFull(buf, p)
-      if (p.animated && (await countFrames(out)) !== p.frames) throw new Error(`full for ${emojiId} lost frames`)
+      // merged identical frames are fine; only a known animation collapsing to one frame is an error
+      if (p.animated && e.frames > 1 && (await countFrames(out)) < 2) throw new Error(`full for ${emojiId} lost its animation`)
       return out
     })
     await putObject(key, out, 'image/webp', IMMUTABLE)
