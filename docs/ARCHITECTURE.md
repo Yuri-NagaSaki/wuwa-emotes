@@ -85,7 +85,7 @@ flowchart LR
 
 ### 2.1 路由与缓存
 
-缓存是否可共享由应用决定（`src/server/http/security.ts`，在 `src/start.ts` 的请求中间件里对所有响应生效）。Cloudflare 不认 `Vary: Cookie`，所以 HTML 的规则是：请求带会话 Cookie（`__Secure-better-auth.session_token` 或 `better-auth.session_token`）时一律 `private, no-store`；不带 Cookie 的 2xx、404、410 HTML 才返回 `public, s-maxage=60, stale-while-revalidate=600`，匿名 HTML 里不出现与身份相关的内容。
+缓存是否可共享由应用决定（`src/server/http/security.ts`，在 `src/start.ts` 的请求中间件里对所有响应生效）。Cloudflare 不认 `Vary: Cookie`，所以 HTML 的规则是：请求带会话 Cookie（`__Secure-better-auth.session_token` 或 `better-auth.session_token`）时一律 `private, no-store`；不带 Cookie 时，由目录数据渲染的页面（`/`、`/packs`、表情包页、`/characters`、`/about` 等，loader 声明可边缘缓存）返回 `public, s-maxage=30, stale-while-revalidate=300`，其余 2xx、404、410 HTML（如 `/login`、404 页）返回 `public, s-maxage=60, stale-while-revalidate=600`；匿名 HTML 里不出现与身份相关的内容。
 
 | 路由 | 用途 | 缓存 |
 |---|---|---|
