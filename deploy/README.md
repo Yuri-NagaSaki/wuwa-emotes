@@ -74,6 +74,11 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 4. 构建并启动：`deploy/rollout.sh --build <标签>`，标签建议用 `git rev-parse --short HEAD`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
 5. 打开 `https://sparxie.moe/` 注册账号并完成邮箱验证。
 6. 把这个账号设为站长：`docker compose exec web-a bun src/cli.ts promote-admin <邮箱>`。
+7. 导入 v1 数据（首次上线时执行）。命令在一次性的 worker 容器里运行，内存与 CPU 限制与 worker 相同：
+   1. 先预演：`docker compose run --rm --no-deps worker bun src/cli.ts import-v1 --dry-run`。
+   2. 导入：`docker compose run --rm --no-deps worker bun src/cli.ts import-v1`。导入可以重复执行。
+   3. 补齐原图尺寸：`docker compose run --rm --no-deps worker bun src/cli.ts backfill-dims`。
+   4. 为已发布表情排队生成 `p240`、`a160`：`docker compose run --rm --no-deps worker bun src/cli.ts backfill-derived`。生成由 worker 完成。
 
 ## 发布
 
@@ -139,12 +144,20 @@ docker compose logs -f --tail 100 worker
 
 ## 备份与恢复
 
-worker 的 `db.backup` 定时任务（每天 03:00，Asia/Shanghai）负责把数据库备份写到 R2 的 `backups/postgres/`。该任务的处理程序尚未实现（日志显示 `job handler not implemented yet`），实现之前使用手动备份：
+worker 的 `db.backup` 定时任务每天 03:00（Asia/Shanghai）执行 `pg_dump -Fc`，写到 R2 的 `backups/postgres/<年>/<月>/<日>/<时间戳>.dump`，R2 生命周期保留 30 天。成功时 worker 日志出现 `backup: database dumped`：
+
+```bash
+docker compose logs worker | grep 'backup:'
+```
+
+发布有风险的迁移前或维护前，另做一份本机备份：
 
 ```bash
 mkdir -p /opt/chaochi/backups
 docker compose exec -T db pg_dump -U chaochi -d chaochi -Fc > /opt/chaochi/backups/chaochi-$(date +%Y%m%d-%H%M).dump
 ```
+
+从 R2 恢复时，先用 Cloudflare 控制台或任意 S3 客户端把 `.dump` 文件下载到 `/opt/chaochi/backups/`，再按下面的步骤恢复。
 
 恢复会清空当前数据库并让网站停止服务。执行前确认备份文件完整，并先另做一份当前数据库的备份。
 
