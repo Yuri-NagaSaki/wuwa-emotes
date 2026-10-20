@@ -5,7 +5,7 @@ import { BlobDefs } from '#/ui/BlobDefs'
 import { setCapEndpoint } from '#/ui/cap/load'
 import { NotFoundPage } from '#/ui/NotFoundPage'
 import { ImpersonationBar } from '#/ui/shell/ImpersonationBar'
-import { THEME_BOOT, THEME_COLORS } from '#/ui/shell/theme'
+import { THEME_BOOT } from '#/ui/shell/theme'
 import { SiteConfigProvider } from '#/ui/site-config'
 import appCss from '#/ui/styles/app.css?url'
 import { Toaster } from '#/ui/Toast'
@@ -32,8 +32,6 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: loaderData?.site.name ?? '' },
       ...(loaderData?.site.subtitle ? [{ name: 'description', content: loaderData.site.subtitle }] : []),
-      // 白昼 color; THEME_BOOT switches it (and html[data-theme]) to 夜潮 before first paint
-      { name: 'theme-color', content: THEME_COLORS.light },
     ],
     links: [
       { rel: 'preload', href: DISPLAY_CSS, as: 'style' },
@@ -67,6 +65,7 @@ function RootDocument({ children }: { children: ReactNode }) {
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* data-theme and the theme-color meta (src/ui/shell/theme.ts), before first paint */}
         <ScriptOnce>{THEME_BOOT}</ScriptOnce>
         <ScriptOnce>{loadDisplayCss}</ScriptOnce>
         <noscript>

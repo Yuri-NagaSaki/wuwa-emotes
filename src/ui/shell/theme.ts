@@ -2,6 +2,7 @@
 // `tp-theme`; the effective theme is html[data-theme="night"] (tokens.css) plus the theme-color meta.
 // THEME_BOOT runs inline in <head> before first paint (src/routes/__root.tsx), so a night page never
 // flashes light; the store below keeps the attribute in sync afterwards (toggle, other tabs, system).
+// The theme-color meta is owned here, not by the route head (which would re-add the light value).
 
 export type ThemePref = 'system' | 'light' | 'night'
 
@@ -11,7 +12,7 @@ export const THEME_COLORS = { light: '#f8f8f0', night: '#0f2228' } as const
 const DARK_QUERY = '(prefers-color-scheme: dark)'
 
 /** Inline boot script: set data-theme and the theme-color meta before first paint. */
-export const THEME_BOOT = `(function(){try{var p=localStorage.getItem(${JSON.stringify(THEME_KEY)});var n=p==="night"||(p!=="light"&&matchMedia(${JSON.stringify(DARK_QUERY)}).matches);if(n){document.documentElement.setAttribute("data-theme","night");var m=document.querySelectorAll('meta[name="theme-color"]');for(var i=0;i<m.length;i++)m[i].setAttribute("content",${JSON.stringify(THEME_COLORS.night)})}}catch(e){}})()`
+export const THEME_BOOT = `(function(){var n=false;try{var p=localStorage.getItem(${JSON.stringify(THEME_KEY)});n=p==="night"||(p!=="light"&&matchMedia(${JSON.stringify(DARK_QUERY)}).matches)}catch(e){}if(n)document.documentElement.setAttribute("data-theme","night");var m=document.createElement("meta");m.name="theme-color";m.content=n?${JSON.stringify(THEME_COLORS.night)}:${JSON.stringify(THEME_COLORS.light)};document.head.appendChild(m)})()`
 
 export function readPref(): ThemePref {
   try {
@@ -35,7 +36,13 @@ function apply(night: boolean) {
   const root = document.documentElement
   if (night) root.setAttribute('data-theme', 'night')
   else root.removeAttribute('data-theme')
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', night ? THEME_COLORS.night : THEME_COLORS.light))
+  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
+  if (!meta) {
+    meta = document.createElement('meta')
+    meta.name = 'theme-color'
+    document.head.appendChild(meta)
+  }
+  meta.content = night ? THEME_COLORS.night : THEME_COLORS.light
 }
 
 const listeners = new Set<() => void>()

@@ -6,7 +6,10 @@
 // excerpt three, character tags wrap to a second row, the stats wrap the date onto its own line on
 // phones. The counts are estimated from the text (CJK glyphs are 1em wide, Latin ≈ 0.56em) at a
 // typical lane width; CSS clamps text to the chosen lines and never shows a partial tag row, so an
-// estimate that is off by a little leaves a short gap or an ellipsis, never a cut tag.
+// estimate that is off by a little leaves a short gap or an ellipsis, never a cut tag. Tag rows are
+// fitted at the narrowest card body a layout can produce, so a tag is never pushed into a hidden row.
+
+import { MASONRY_MODES } from './masonry-layout'
 
 export interface CardTierInput {
   title: string
@@ -41,8 +44,19 @@ export const TIER_TEXT = {
   desktop: { width: 232, title: 16.5, excerpt: 13, maxExcerpt: 3 },
   phone: { width: 140, title: 14.5, excerpt: 12.5, maxExcerpt: 2 },
 } as const
-/** Tag rows are fitted at the narrowest lane, so a tag row never overflows. */
-const TAG_WIDTH = { desktop: 212, phone: 130 } as const
+/** Card chrome around the body text (components.css, pack card): 2 px border, body padding per mode. */
+const CARD_SIDE = { desktop: 2 * 2 + 2 * 16, phone: 2 * 2 + 2 * 12 } as const
+/** Narrowest viewport we lay out for, and the page gutter there (tokens.css: clamp(16px, 3vw, 32px)). */
+const MIN_VIEWPORT = 320
+const MIN_GUTTER = 16
+/**
+ * Narrowest card body per mode: desktop lanes are never below MASONRY_MODES.desktop.min; phones keep
+ * minLanes lanes even when that makes them narrower than the minimum (320 px viewport: 138 px lanes).
+ */
+export const TAG_WIDTH = {
+  desktop: MASONRY_MODES.desktop.min - CARD_SIDE.desktop,
+  phone: Math.min(MASONRY_MODES.phone.min, (MIN_VIEWPORT - 2 * MIN_GUTTER - (MASONRY_MODES.phone.minLanes - 1) * MASONRY_MODES.phone.gap) / MASONRY_MODES.phone.minLanes) - CARD_SIDE.phone,
+} as const
 const TAG = { font: 12.5, pad: 23, gap: 5 } as const
 const STAT = { font: 13, icon: 20, gap: { desktop: 12, phone: 9 } } as const
 const MAX_TAG_ROWS = 2

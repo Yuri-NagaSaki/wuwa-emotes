@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { cardTiers, rowsFor, textEm } from '#/ui/pack-card-tiers'
+import { cardTiers, rowsFor, TAG_WIDTH, textEm } from '#/ui/pack-card-tiers'
 import { CARD_AT, NOTE_AT, placeDense, spanOf, STREAM_PAGE, streamEntries } from '#/ui/pages/stream-layout'
 
 describe('pack card tiers', () => {
@@ -14,6 +14,15 @@ describe('pack card tiers', () => {
     expect(rowsFor([40, 40], 100, 5)).toBe(1)
     expect(rowsFor([40, 40, 40], 100, 5)).toBe(2)
     expect(rowsFor([120], 100, 5)).toBe(1)
+  })
+
+  test('tag rows are fitted at the narrowest card body (320 px phone: 110 px; desktop: 212 px)', () => {
+    expect(TAG_WIDTH.phone).toBe(110)
+    expect(TAG_WIDTH.desktop).toBe(212)
+    // three long names cannot share two rows at 110 px: the third becomes +N
+    const t = cardTiers({ title: '标题', excerpt: null, characters: ['秧秧·玄翎', '卡提希娅', '嘉贝莉娜'], stats: [] })
+    expect(t.shownChars).toBeLessThan(3)
+    expect(t.phone.chars).toBeLessThanOrEqual(2)
   })
 
   test('tags: at most two rows on the narrowest phone lane, the rest as +N', () => {
