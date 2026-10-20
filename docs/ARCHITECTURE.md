@@ -1,49 +1,58 @@
-# 潮池 · 鸣潮表情包站架构与技术选型
+# 潮池 · 鸣潮表情包站架构
 
-> 版本：v2（2026-10-20，取代 v1）  
-> 配套交付：[UI 设计稿](https://claude.ai/artifact/HPYzpgN3CHCHeBTjDCietY)、[架构页面](https://claude.ai/artifact/ED6C8QwKmBxKBcFnLr3a36)（与本文同内容）、[源站体检报告](https://claude.ai/artifact/1JqFG2WePMywApWRuPr4bP)、`DEVELOPMENT.md`（R2 v1 数据说明）  
-> 本文不含任何密钥。
+> 版本：v3，按实现编写（2026-10-20，以 `develop` 分支的代码为准，取代 v2 设计稿）
+> 相关文档：`README.md`（本地开发与测试）、`deploy/README.md`（部署与运维）、`DEVELOPMENT.md`（R2 中的 v1 数据集）
+> 本文不含密钥、服务器地址或账号标识。文中的「实测」都注明了日期和环境。
 
 ## 一页看懂
 
-1. **应用**：一个 TanStack Start 应用提供公开站、后台和 API；同一镜像以 worker 入口跑图片处理、打包和备份；PostgreSQL 18 是唯一的数据源。Docker Compose 单机部署，经 Cloudflare Tunnel 对外，不映射任何端口。
-2. **存储**：所有文件放在 R2 桶 `wuwa`，不分公开桶和私有桶。网页图片走站点的 `/img` 路由，由 Cloudflare 长期缓存；原图和 ZIP 用 2 分钟有效的预签名链接直连 R2。
-3. **图片**：网页上只显示 WebP（海报 `p240`、预览 `a160`、弹窗 `full`）。原图只在「查看原图」「保存原图」和打包时下载，GIF 原样给出，不转码。
-4. **角色**：站长（全部权限）、管理员（表情包、上传、分类、投稿审核、评论）、用户（投稿）。每个接口在服务端检查权限，菜单只是镜像。
-5. **投稿**：所有注册用户都能投稿。草稿 → 待审核 → 已发布或已退回；已发布的包再修改，审核通过前线上保持旧版本。待审核的图片只在需要登录的预览路由里显示，不进 CDN。
-6. **下载与风控**：默认对所有人开放，不需要登录。限额、速率、人机验证全部在后台配置，留空即不限制；另有两个紧急开关。人机验证用自托管的 Cap，不依赖外部网络。
-7. **站名**：「潮池」，实现为变量：`SITE_NAME` 环境变量给默认值，后台「系统设置」可改。
-8. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
+1. **应用**：一个 TanStack Start 应用（Bun 1.4.3，Nitro `bun` 预设）提供公开站、后台和 API。同一镜像以 `bun src/worker.ts` 运行图片衍生、ZIP 打包、备份和统计。PostgreSQL 18 是唯一的数据源。
+2. **入口**：Cloudflare 代理 DNS → 源站 443（Cloudflare Origin CA 证书，SSL「完全（严格）」）→ 主机网络上的 Caddy 2.11.7 → 两个 web 副本。nftables 只允许 Cloudflare 网段连接 443，所有容器都不映射端口。不使用 Cloudflare Tunnel。
+3. **发布**：`deploy/rollout.sh` 先执行迁移，再逐个排空、重建两个副本，最后重建 worker、平滑重载 Caddy。生产上 10 次发布每次 19–52 秒，经 Cloudflare 的健康探测失败 0 次。
+4. **存储**：所有文件放在 R2 桶 `wuwa`。网页图片只走 `/img`（一年期 immutable，由 Cloudflare 缓存）；原图、ZIP 和上传用预签名链接直连 R2。下载链接 2 分钟有效；上传链接 15 分钟有效，并签入文件大小和类型。
+5. **图片**：网页只显示 WebP（海报 `p240`、动图预览 `a160`、弹窗大图 `full`）。原图只在查看、保存和打包时下载，GIF 原样给出。
+6. **角色**：站长、管理员、用户。每个服务端函数都必须声明权限中间件，单元测试检查遗漏；最后一位站长由数据库触发器保护；每次写操作都写审计日志。
+7. **投稿**：所有注册用户都能投稿：草稿 → 审核中 → 已发布或已退回。待审核的图只经需要登录的 `/review-img` 预览，不进 CDN。用户投稿的图片只能经「投稿审核」上线，后台的「发布」不会绕过。
+8. **下载与风控**：默认对所有人开放，不需要登录。限额和速率在后台「下载与风控」里配置，留空即不限制；另有两个紧急开关。可疑来源可以封禁或观察，可疑请求要先通过人机验证。
+9. **人机验证**：自托管的 Cap Standalone。服务端在注册、登录、重置密码、发送验证邮件、游客评论和被挑战的下载上校验令牌，不依赖 Cloudflare 的挑战服务。
+10. **评论**：楼中楼、贴纸 `:s[r-…]`、回应、举报。markdown-it 关闭 HTML，链接只放行白名单协议；游客评论需要人机验证；站长和管理员的评论不进审核。
+11. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
+12. **仓库公开**：仓库里没有服务器地址和密钥。密钥只在服务器的环境文件和开发机的 `.env.local` 里；GitHub secret scanning 与 push protection 已开启。
+
+公开浏览页与打包清单界面正在开发（第 8.3 节），构建与发布流水线正在调整（第 12.3 节）。
 
 ---
 
 ## 1. 范围与约束
 
-| 类别 | 要求 |
+| 类别 | 现状 |
 |---|---|
-| 技术栈 | TanStack Start、Cloudflare、R2、WebP、PostgreSQL |
-| 功能 | 登录注册、投稿与审核、后台增删改查、单张下载、整包与跨包打包、评论（可插入表情贴纸）、移动端 |
-| 体验 | 轻量、首屏快；瀑布流；不要音乐播放器等累赘；重新设计字体；不用带边框、内部滚动的菜单 |
-| 部署 | Docker |
-| 存储 | 只用 R2 桶 `wuwa`；按类别分目录，禁止全部堆在一个目录 |
+| 技术栈 | TanStack Start + Bun、PostgreSQL 18、Cloudflare（DNS、CDN、R2）、WebP |
+| 已实现 | 注册登录、投稿与审核、后台 16 个页面、单张原图下载、整包 ZIP、打包清单分批签名接口、评论与贴纸、个人中心 |
+| 开发中 | 公开浏览页、打包清单与批量下载界面（第 8.3 节） |
+| 部署 | 单机 Docker Compose，两个 web 副本滚动发布 |
+| 存储 | 只用 R2 桶 `wuwa`，按对象种类分前缀 |
 
 硬约束：
 
-- 不使用 Cloudflare Workers 运行应用，不执行 wrangler。Cloudflare 只承担 DNS、CDN、WAF、Tunnel 与 R2。人机验证用自托管的 Cap，不依赖 Cloudflare 的挑战服务。
-- 桶内已有 v1 布局（`meta/v1/`、`assets/v1/packs/`、`sync/v1/`），15,272 张原图不改键、不搬动。
-- 密钥只通过环境变量或 Docker secrets 注入，不进仓库、镜像、文档和数据库。
+- 不使用 Cloudflare Workers 运行应用，不执行 wrangler。Cloudflare 只承担 DNS、CDN、WAF 和 R2。
+- 桶内的 v1 布局（`meta/v1/`、`assets/v1/packs/`、`sync/v1/`）与 15,272 张原图不改键、不搬动。
+- 密钥只通过服务器上的环境文件注入，不进仓库、镜像、文档和数据库。
+- 开发和测试环境不能连到生产桶：`src/server/env.ts` 的 `assertSafeStorage` 在非生产环境拒绝 R2 上的桶 `wuwa`（除非显式设置 `ALLOW_PROD_BUCKET`），测试拒绝使用 `wuwa`。
 - 内容授权是项目级风险，优先级高于工程决策（第 6.4 节）。
 
-数据规模（R2 `meta/v1`，2026-10-20）：
+数据规模：
 
-| 项 | 数值 |
-|---|---|
-| 表情包 | 309 个有素材（目录 310，`linglanhuajiang-charging-20261009` 只有元数据） |
-| 表情 | 15,272 张；GIF 12,276、PNG 2,996 |
-| 原图体积 | 14.0 GiB；GIF 中位数 939 KB，P90 2.2 MB，最大 11.2 MB |
-| 尺寸 | 抽样 420 张中 97.6% 近似正方形，常见 300×300，最大边 500 |
-| 角色 / 画师 | 70 个角色（41 个哈希 slug）；结构化画师 12、分面画师名 27 |
-| 下载 | 累计 1,860,771 次；第 1 名占 16.4%，前 10 名占 43.7% |
+| 项 | 数值 | 来源 |
+|---|---|---|
+| 表情包 | 310 个：已发布 309、草稿 1、官方 40 | 生产导入 `import-v1`，2026-10-20 |
+| 表情 | 15,272 张；GIF 12,276、PNG 2,996 | 导入；格式分布取自 R2 `meta/v1` |
+| 角色 / 画师 / 标签 | 71 / 31 / 6；41 个哈希 slug 已替换为可读 slug | 生产导入，2026-10-20 |
+| 旧链接重定向 | 690 条；导入警告 0 条 | 生产导入，2026-10-20 |
+| 原图尺寸 | `backfill-dims` 更新 15,272 张、失败 0 张 | 生产，2026-10-20 |
+| 原图体积 | 14.0 GiB；GIF 中位数 939 KB，P90 2.2 MB，最大 11.2 MB | R2 `meta/v1`，2026-10-20 |
+| 尺寸分布 | 抽样 420 张中 97.6% 近似正方形，常见 300×300，最大边 500 | R2 `meta/v1`，2026-10-20 |
+| 源站下载量 | 累计 1,860,771 次；第 1 名占 16.4%，前 10 名占 43.7% | R2 `meta/v1`，2026-10-20 |
 
 ---
 
@@ -52,102 +61,115 @@
 ```mermaid
 flowchart LR
   U[浏览器 / 手机] -->|HTTPS| CF[Cloudflare<br/>CDN · WAF]
-  CF -->|Tunnel：页面、API、/img 未命中| WEB[web 容器<br/>TanStack Start]
-  WEB -->|读写| PG[(PostgreSQL 18)]
-  WEB -->|/img：只读 derived/v1/| R2[(R2 桶 wuwa)]
-  WEB -.->|签发预签名链接| U
+  CF -->|"443，仅 Cloudflare 网段"| PX[proxy<br/>Caddy 2.11.7]
+  PX --> WA[web-a]
+  PX --> WB[web-b]
+  WA & WB -->|读写| PG[(PostgreSQL 18)]
+  WA & WB -->|"/img：只读 derived/v1/"| R2[(R2 桶 wuwa)]
+  WA & WB -.->|siteverify| CAP[Cap Standalone<br/>自托管]
+  U -.->|工作量证明| CAP
   U -->|预签名直连：原图 · ZIP · 上传| R2
-  WK[worker 容器<br/>同一镜像] -->|任务与定时| PG
+  WK[worker<br/>同一镜像] -->|任务与定时| PG
   WK -->|读原图，写衍生图 · ZIP · 备份| R2
 ```
 
-- 页面、API 和 `/img` 都经 Tunnel 到达 web 容器。`/img` 命中 Cloudflare 缓存时不回源。
+- 页面、API 和未命中缓存的 `/img` 经 Cloudflare 到达 Caddy，Caddy 轮询分给 web-a 和 web-b。`/img` 命中 Cloudflare 缓存时不回源。
 - 原图、ZIP 和上传不经过应用：应用只签发链接，浏览器直连 R2 的 S3 端点。
+- 源站不监听 80 端口。`http://` 由 Cloudflare「始终使用 HTTPS」在边缘重定向。
+- Caddy 只服务 `CHAOCHI_DOMAIN`，`www.` 子域 301 到主域；其他 Host 直接断开连接，未知 SNI 和直接用 IP 访问因为没有匹配的证书而握手失败（`deploy/caddy/Caddyfile`）。
+- 客户端 IP 只取 `CF-Connecting-IP`，不读 `X-Forwarded-For`。这个头可信的前提是：nftables 只允许 Cloudflare 网段连接 443，Caddy 只信任来自这些网段的该头并原样转发，应用容器不映射任何端口。
 
 ### 2.1 路由与缓存
 
-缓存是否可共享由应用决定。Cloudflare 不认 `Vary: Cookie`，所以 HTML 的规则是：请求带会话 Cookie（`__Secure-better-auth.session_token`）时一律 `private, no-store`；不带 Cookie 才返回 `public, s-maxage=60, stale-while-revalidate=600`，且匿名 HTML 里不能出现与身份相关的内容。
+缓存是否可共享由应用决定（`src/server/http/security.ts`，在 `src/start.ts` 的请求中间件里对所有响应生效）。Cloudflare 不认 `Vary: Cookie`，所以 HTML 的规则是：请求带会话 Cookie（`__Secure-better-auth.session_token` 或 `better-auth.session_token`）时一律 `private, no-store`；不带 Cookie 的 2xx、404、410 HTML 才返回 `public, s-maxage=60, stale-while-revalidate=600`，匿名 HTML 里不出现与身份相关的内容。
 
 | 路由 | 用途 | 缓存 |
 |---|---|---|
-| `/`、`/packs`、`/packs/:slug`、`/e/:emojiId`、`/characters/:slug`、`/artists/:slug`、`/gallery`、`/explore`、`/search`、`/batch`、`/about`、`/legal` | 公开页，SSR 流式输出 | 按上面的 Cookie 规则 |
-| `/submit`、`/me/*` | 投稿与个人中心，需要登录 | `private, no-store` |
-| `/img/v1/:variant/:packKey/:file` | 已发布表情的 WebP 衍生图 | `public, max-age=31536000, immutable`，不看 Cookie（见 2.2） |
-| `/review-img/v1/:variant/:packKey/:file` | 待审核表情的预览图，只对投稿者与审核人开放 | `private, no-store` |
-| `/dl/e/:emojiId?mode=view\|save` | 查看或保存原图 | 检查后 302 到预签名链接；`private, no-store` |
-| `/dl/p/:slug.zip` | 整包 ZIP | 同上；ZIP 未生成时排队，前端轮询 |
-| `POST /api/batch/sign` | 打包清单分批签名 | `no-store` |
-| `/api/*`、`/api/auth/*`、`/admin/*` | 前台接口、Better Auth、后台 | `no-store` |
+| `/` 与公开浏览页 | `/` 目前是占位首页；其他公开页见第 8.3 节 | 按上面的 Cookie 规则 |
+| `/login`、`/register`、`/forgot-password`、`/reset-password`、`/verify-email` | 账号页面 | 按上面的 Cookie 规则 |
+| `/submit`、`/me/*`、`/admin/*` | 投稿、个人中心、后台，需要登录 | 一律 `private, no-store`（路径前缀不区分大小写） |
+| `/img/v1/:variant/:packKey/:file` | 已发布表情的 WebP 衍生图 | `public, max-age=31536000, immutable`，不看 Cookie（第 2.2 节） |
+| `/review-img/v1/:variant/:packKey/:file` | 待审核表情的预览图，只对审核人、包的所有者和上传者开放 | `private, no-store`；拒绝时一律 404 |
+| `/dl/e/:emojiId?mode=view\|save` | 查看或保存原图 | 检查后 302 到预签名链接（`Accept: application/json` 时返回 JSON）；`private, no-store` |
+| `/dl/p/:slug.zip` | 整包 ZIP | 同上；ZIP 未生成或已过期时排队并返回 202，`?poll=1` 只查询状态 |
+| `POST /api/batch/sign` | 打包清单分批签名 | `private, no-store` |
+| `/api/health` | 健康检查：`select 1`，2 秒超时 | `no-store` |
+| `/api/auth/*` | Better Auth | 没有显式缓存头时 `no-store` |
+| 服务端函数 | 页面数据与写操作 | 没有显式缓存头时 `no-store` |
+| `/kit` | 组件样张 | 只在开发环境存在，生产返回 404 |
 
-- `/e/:emojiId` 是单张表情的分享链接：服务端渲染所属包的页面并打开单张弹窗；关闭弹窗时用 `history.pushState` 回到 `/packs/:slug`，浏览器后退可关闭弹窗。
-- 源站旧地址做 301：`/archives/:slug` → `/packs/:slug`；`/tags/character-*` → `/characters/:slug`；哈希 slug 映射存在 `redirects` 表。
+另外两条规则：任何带 `Set-Cookie` 的响应都改为 `private, no-store`；5xx 页面和重定向没有显式缓存头时为 `no-store`。
 
 ### 2.2 `/img` 规则
 
-`/img` 是网页图片唯一的出口，只能读 `derived/v1/` 下已发布表情的对象：
+`/img` 是网页图片唯一的出口，只读 `derived/v1/` 下已发布表情的对象（`src/server/media/img.ts`、`src/routes/img/$.ts`）：
 
 | 项 | 规则 |
 |---|---|
 | 路径 | `/img/v1/<variant>/<packKey>/<emojiId>.r<rev>.webp`，版本号必带 |
-| 校验 | `variant` ∈ `p240`、`a160`、`full`；`packKey` 匹配 `^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$`；`emojiId` 匹配 `^r-[0-9a-f]{20}$`；`rev` 匹配 `^[1-9][0-9]*$`。现有 309 个包键与 15,272 个表情 ID 已全部验证通过；新包的包键由服务端生成，同样满足该正则 |
+| 校验 | `variant` ∈ `p240`、`a160`、`full`；`packKey` 匹配 `^[a-z0-9](?:[a-z0-9-]{0,98}[a-z0-9])?$`；`emojiId` 匹配 `^r-[0-9a-f]{20}$`；`rev` 为不以 0 开头、最多 9 位的整数。现有 309 个包键与 15,272 个表情 ID 全部符合；新包的包键由服务端生成，同样满足该正则 |
 | 映射 | 只拼成 `derived/v1/<variant>/<packKey>/<emojiId>.r<rev>.webp`，不接受其他前缀 |
-| 命中 | 流式转发 R2 对象，`Cache-Control: public, max-age=31536000, immutable`，另加 `X-Content-Type-Options: nosniff` |
-| `full` 未生成 | 只有这一步查库：表情和包都已发布、URL 的 `packKey` 等于 `storage_pack_key`、`rev` 等于 `variant_rev`，否则 404（`max-age=60`）。条件满足才入队（pg-boss 单例键为表情 ID，重复请求只排一次），并 302 到同一张图的 `a160` 地址，`Cache-Control: no-store`。worker 只按库里的字段拼对象键，不信任 URL，拒绝处理未发布的表情。这样待审核的图不会被人按 ID 请求进 `derived/` |
+| 命中 | 流式转发 R2 对象，`Cache-Control: public, max-age=31536000, immutable`，带 `ETag` 与 `X-Content-Type-Options: nosniff`；`If-None-Match` 命中时返回 304；支持 HEAD，其他方法返回 405 |
+| `full` 未生成 | 只有这一步查库：表情和包都已发布、URL 的 `packKey` 等于 `storage_pack_key`、`rev` 等于 `variant_rev`，否则 404。条件满足才入队 `media.full`（单例键为表情 ID，重复请求只排一次），并 302 到同一张图的 `a160`（动图）或 `p240`（静态图），`Cache-Control: no-store`。worker 只按库里的字段拼对象键，拒绝处理未发布的表情，所以待审核的图不会被人按 ID 请求进 `derived/` |
 | 其他缺失 | 404，`Cache-Control: public, max-age=60`，避免长期缓存 404 |
-| Cookie | 注册为独立路由，不调用会话接口，不经过认证中间件，响应不带 `Set-Cookie`。Cloudflare 不缓存带 `Set-Cookie` 的响应 |
+| Cookie | 注册为独立的服务端路由，不调用会话接口，响应不带 `Set-Cookie`。Cloudflare 不缓存带 `Set-Cookie` 的响应 |
 
-版本号必带，是因为重新生成（例如改海报帧）会递增 `variant_rev`：页面总是输出新地址，旧地址留在浏览器缓存里也不会再被引用。
+版本号必带，是因为「重新生成衍生图」会递增 `variant_rev`：页面总是输出新地址，旧地址留在缓存里也不会再被引用。
 
-Cloudflare 侧：Cache Rule 对 `/img/*` 设为「遵从源站头，源站没给缓存头就不缓存」，这样 302 和 404 不会被拉长缓存；开启 Smart Tiered Cache，冷图回源集中到上层机房。冷图仍会经过主机，但对象很小（海报约 16 KB）且只做流式转发。如果将来主机带宽成为瓶颈，可以给桶绑定自定义域，用 WAF 只放行 `/derived/v1/*`，对象键不用改。
+Cloudflare 侧：Cache Rule 对 `/img/*` 设为「如果存在 Cache-Control 标头则使用，否则绕过缓存」，这样 302 不会被缓存、404 只缓存 60 秒；开启 Smart Tiered Cache，冷图回源集中到上层机房（第 12.4 节）。冷图仍经过源站，但对象很小，应用只做流式转发。如果源站带宽成为瓶颈，备选方案是给桶绑定自定义域、用 WAF 只放行 `/derived/v1/*`，对象键不用改。
 
 ---
 
 ## 3. 存储：R2 桶 `wuwa`
 
+对象键由 `src/server/media/keys.ts` 统一生成：
+
 ```text
 wuwa/
-├── README.md                                          # 布局说明
 ├── meta/v1/ …  sync/v1/state.json                     # v1 快照：只读，仅作导入来源
 ├── assets/v1/packs/<packKey>/
 │   ├── pack.json                                      # v1 快照文件，只读
-│   └── emojis/<emojiId>.<gif|png|webp>                # 原图：现有 15,272 张 + 新上传
+│   └── emojis/<emojiId>.<gif|png|webp|jpg>            # 原图：v1 的 15,272 张 + 新上传
 ├── derived/v1/<p240|a160|full>/<packKey>/<emojiId>.r<rev>.webp  # 已发布表情的 WebP，经 /img 提供
 ├── review/v1/<p240|a160>/<packKey>/<emojiId>.webp     # 待审核表情的预览图，通过后复制到 derived/v1/
 ├── zips/v1/packs/<packKey>/<packKey>.<hash8>.zip      # 整包 ZIP，按内容哈希命名
-├── uploads/tmp/<yyyy>/<mm>/<dd>/<uploadId>/<文件名>    # 直传暂存 · 生命周期 7 天
-├── backups/postgres/<yyyy>/<mm>/<dd>/<时间戳>.dump     # 数据库备份 · 生命周期 30 天
-├── docs/v1/                                           # 文档归档
-└── design/v1/                                         # 设计稿归档
+├── uploads/tmp/<yyyy>/<mm>/<dd>/<uploadId>/<文件名>    # 直传暂存（UTC 日期）· 生命周期 7 天
+├── backups/postgres/<yyyy>/<mm>/<dd>/<时间戳>.dump     # 数据库备份（UTC 日期）· 生命周期 30 天
+└── design/v1/                                         # 设计稿归档（design/prototype/README.md）
 ```
 
 规则：
 
 1. **分类由数据库负责**。角色、画师、标签与表情是多对多，无法用单一目录表达；目录按「对象种类 → 规格版本 → 所属包」分层，同一层不会堆上万个对象。
-2. **对象写入后不搬动**。原图键记在 `emojis.original_key`；`storage_pack_key` 是入库时所属的包，之后表情改归属也不移动文件。
-3. **每张表情独占自己的对象，不共用**。SHA-256 只用来发现重复：同一包内的重复文件直接跳过；与其他包重复时提示审核人。这样下架一张表情时可以直接删除它的文件，不需要引用计数。
+2. **对象写入后不搬动**。原图键记在 `emojis.original_key`；`storage_pack_key` 是入库时所属的包，之后表情移到别的包也不移动文件。
+3. **每张表情独占自己的对象，不共用**。SHA-256 只用来发现重复：同一包内的重复文件直接跳过（上传记录为 `duplicate`）；与其他包重复时，在审核卡片和表情库详情里提示。v1 导入的表情在首次生成衍生图时补算 SHA-256。下架一张表情时可以直接删除它的文件，不需要引用计数。
 4. **衍生图键可直接算出**：`derived/v1/<variant>/<storagePackKey>/<emojiId>.r<variant_rev>.webp`，生成 URL 不查额外的表。`variant_rev` 从 1 开始，重新生成时递增。
-5. **待审核的图不进 `derived/`**。worker 把待审核表情的预览图写到 `review/v1/`，只经需要登录的 `/review-img` 提供；审核通过时复制到 `derived/v1/` 并删除预览图。退回的图片从未进入 CDN，删除时也无需清除缓存。
+5. **待审核的图不进 `derived/`**。worker 把待审核表情的预览图写到 `review/v1/`（对象缓存头为 `private, no-store`），只经需要登录的 `/review-img` 提供。审核通过时复制到 `derived/v1/` 并删除预览图；预览图缺失时改为排队重新生成到 `derived/`。退回的图片从未进入 CDN，删除时也无需清除缓存。
 6. **规格升级**时生成 `derived/v2/…` 并回填，切换后整体删除 v1。
-7. **会过期的对象**放在独立前缀，由 R2 生命周期规则或定时任务清理。
-8. **访问方式**：已发布的衍生图只经 `/img`；原图与 ZIP 用预签名 GET（2 分钟，「保存」带 `response-content-disposition: attachment`，「查看」为 inline）；上传用预签名 PUT，只能写 `uploads/tmp/`。R2 令牌只授权桶 `wuwa`。
+7. **会过期的对象**放在独立前缀：`uploads/tmp/` 与 `backups/` 由 R2 生命周期规则清理（第 12.4 节）；被清理的投稿由每天的定时任务删除其原图、预览图和暂存文件（第 5.2 节）。
+8. **访问方式**：已发布的衍生图只经 `/img`。原图与 ZIP 用预签名 GET，有效 120 秒，「保存」带 `attachment` 和文件名，「查看」为 `inline`。上传用预签名 PUT，有效 900 秒，只能写 `uploads/tmp/`，`Content-Length` 与 `Content-Type` 都是签名头（`X-Amz-SignedHeaders=content-length;content-type;host`），存储拒绝大小或类型不同的请求体。2026-10-20 在 R2 上用 `bun src/cli.ts presign-selftest` 实测：大小相同的 PUT 返回 200，多 1 字节的 PUT 返回 403。
 
 ---
 
 ## 4. 图片策略
 
-网页上只出现 WebP；原图只在用户明确要求时加载。
+网页上只出现 WebP；原图只在用户明确要求时加载。衍生图由 worker 生成（`src/server/media/derive.ts`、`src/server/jobs/handlers/media.ts`）。
 
-| 档位 | 规格 | 用在哪里 | 实测（300×300、28 帧、690 KB 的 GIF） |
-|---|---|---|---|
-| 原图 | GIF / PNG，原样 | 「查看原图」「保存原图」、ZIP | 690 KB |
-| `p240` 海报 | 静态 WebP q72，最长边 240 | 所有网格、卡片、评论贴纸的默认显示 | 16 KB；25 张一包合计 360 KB |
-| `a160` 预览 | 动画 WebP q40，最长边 160，抽帧到 ≤ 24 帧 | 悬停或进入可视区时播放 | 109 KB（抽到 14 帧） |
-| `full` | 动画 WebP q60，原尺寸全帧 | 单张弹窗；首次查看时生成，生成前显示 `a160` | 425 KB |
+| 档位 | 规格 | 用在哪里 |
+|---|---|---|
+| 原图 | GIF / PNG / WebP / JPEG，原样 | 「查看原图」「保存原图」、ZIP |
+| `p240` 海报 | 静态 WebP q72，最长边 240，不放大 | 所有网格、卡片、评论贴纸的默认显示 |
+| `a160` 预览 | 动画 WebP q40，最长边 160，抽帧到 ≤ 24 帧（被跳过的帧时长并入保留帧）；只为动图生成 | 悬停或进入可视区时播放 |
+| `full` | 原尺寸；动图为全帧动画 WebP q60，静态图为 WebP q80 | 单张弹窗；首次请求时生成，生成前 302 到 `a160` 或 `p240` |
 
-- 199 帧、7.0 MB 的 GIF：`a160` 为 188 KB（23 帧），`full` 约 2.9 MB。
-- 海报帧取第 0、¼、½、¾ 帧中图像熵最高的一帧。样本 130 张动图中有 76 张因此换帧；所选帧写入 `emojis.poster_frame`，后台可改。
-- 抽帧实现：先把保留的帧拼成长条并缩放，再用 sharp 的 `raw: { width, height, channels, pageHeight }` 重新包装后编码。`webp()` 没有 `pageHeight` 参数，传了会被忽略，输出变成一张竖长的静态图；生成后检查帧数。
-- sharp 只在 worker 里运行：libvips 会把所有帧解码成一张长图（500×500×199 帧约 200 MB），因此图片并发设为 1（内存上限 2 GB 时可设为 2），`sharp.cache(false)`，每个任务设超时，`limitInputPixels` 按「帧数 × 宽 × 高」设置。
+设计阶段用同样的参数对样本实测（2026-10-20）：300×300、28 帧、690 KB 的 GIF，`p240` 16 KB（25 张一包合计 360 KB），`a160` 109 KB（14 帧），`full` 425 KB；199 帧、7.0 MB 的 GIF，`a160` 188 KB（23 帧），`full` 约 2.9 MB。
+
+- **海报帧**：取第 0、¼、½、¾ 帧中图像熵最高的一帧，写入 `emojis.poster_frame`，表情库详情里显示。设计阶段的样本中，130 张动图有 76 张因此换帧。每次重新生成都重新计算。
+- **抽帧实现**：先把动图解码为 RGBA 长条，抽出保留的帧并缩放，再用 sharp 的 `raw: { width, height, channels, pageHeight }` 重新包装后编码。`webp()` 没有 `pageHeight` 参数，传了会被忽略，输出变成一张竖长的静态图。
+- **每帧都相同的动图按静态图保存**：WebP 编码器会合并相邻的相同帧。`a160` 编码后不足 2 帧，说明原图每一帧都一样，这时不保存 `a160`，`frames` 记为 1，只有 `p240`。
+- **上传限制**：单个文件 ≤ 20 MB，边长 ≤ 2048，帧数 ≤ 400，帧数 × 宽 × 高 ≤ 1.2 亿像素。超出时 ingest 失败并在上传列表里显示原因。
+- **并发与内存**：sharp 只在 worker 进程和一次性的命令行容器里运行，`sharp.cache(false)`、`sharp.concurrency(1)`，`limitInputPixels` 为 1.2 亿。`media.derive` 队列每个 worker 同时跑 6 个任务，但 `oneImageAtATime` 让同一进程里的 sharp 工作一次只做一个，内存里最多有一张解码后的动图；任务之间重叠的是 R2 读写。任务超时由 pg-boss 的 `expireInSeconds` 控制（第 12.5 节）。
+- **实测（生产，2026-10-20，v1 回填）**：并发 1 时每个任务 2.3 秒，worker 只用到单核的 8%；改为 6 个并发后每分钟 112 个任务，worker CPU 48%、内存 258 MB。
 
 ---
 
@@ -163,43 +185,58 @@ wuwa/
 | 表情包与表情增删改查、上传中心 | ✓ | ✓ | — |
 | 角色、画师、标签整理与合并 | ✓ | ✓ | — |
 | 评论审核、屏蔽词、禁止评论 | ✓ | ✓ | — |
-| 用户与角色、下载与风控 | ✓ | — | — |
-| 存储、任务、审计、系统设置 | ✓ | — | — |
+| 用户与权限、模拟登录、下载与风控 | ✓ | — | — |
+| 存储、任务队列、审计日志、系统设置、彻底删除表情包 | ✓ | — | — |
 
-- 只有站长能任命或撤销管理员。最后一位站长不能被降级、封禁或删除。
-- 每个用户有投稿模式：`review`（默认，需审核）、`trusted`（免审，直接发布）、`blocked`（禁止投稿）。投稿模式只有站长能改，管理员不能给自己免审。
-- 用户只能修改自己的投稿：查询都带 `owner_id`；签发上传链接前校验投稿属于当前用户，或当前用户有审核权限。对象键由服务端生成。
-- 每次写操作写入 `audit_logs`，记录操作人、当时的角色；站长以「模拟登录」代操作时另记 `impersonated_by`。
+权限表在 `src/shared/roles.ts`：站长持有全部权限；管理员持有 `dash`、`packs`、`review`、`upload`、`taxonomy`、`comments`、`submit`；用户只有 `submit`。
+
+- 只有站长能任命或撤销管理员。最后一位未被封禁的站长不能被降级、封禁或删除。第一位站长用命令行设置：`bun src/cli.ts promote-admin <邮箱>`。
+- 每个用户有投稿模式：`review`（默认，需审核）、`trusted`（免审，提交后自动通过）、`blocked`（禁止投稿）。投稿模式只有站长能改；被封禁的账号按 `blocked` 处理。投稿模式每次从 `users` 表读取，不信任会话缓存。
+- 用户只能修改自己的投稿。审核人能查看所有投稿，但不能代为修改；其他人访问时得到与「不存在」相同的 404。对象键由服务端生成。
+- 每次写操作写入 `audit_logs`：操作人、当时的角色、动作、对象和变更内容；站长模拟登录期间的写操作另记 `impersonated_by`。命令行改角色、举报自动隐藏评论这类没有操作人的写操作，`actor_id` 为空。
 
 实现：
 
-- Better Auth `admin()` 插件配合自定义访问控制，角色为 `admin`（站长）、`manager`（管理员）、`user`。`admin` 角色要显式包含插件自带的 `adminAc.statements`，否则站长自己调用设置角色等接口也会被拒绝。`adminRoles` 只有 `admin`，管理员拿不到设置角色、封禁、模拟登录等接口。
-- 「至少一位站长」由 `user` 表上的数据库触发器保证（`BEFORE UPDATE OF role, banned OR DELETE`），因为插件的设置角色、封禁、删除接口不经过业务代码。触发器先锁定全部站长行（`FOR UPDATE`）再计数，两个并发操作不会同时成功。
-- 业务权限写成共用的服务端函数中间件 `requirePerm(perm)`：每个服务端函数和 API 路由都要声明所需权限，CI 检查是否有遗漏，不靠每个处理函数自觉检查。
-- 验收测试：管理员调用设置角色接口返回 403；把最后一位站长降级失败。
+- Better Auth `admin()` 插件配合自定义访问控制（`src/server/auth/access.ts`），角色为 `admin`（站长）、`manager`（管理员）、`user`。`admin` 角色显式包含插件自带的 `adminAc.statements`，否则站长自己调用设置角色等接口也会被拒绝。`adminRoles` 只有 `admin`，管理员和用户拿不到列出用户、设置角色、封禁、模拟登录等接口。
+- 「至少一位站长」由 `users` 表上的触发器 `users_keep_last_admin` 保证（`BEFORE UPDATE OF role, banned OR DELETE`），因为插件的设置角色、封禁、删除接口不经过业务代码。触发器先锁定全部站长行（`FOR UPDATE`）再计数，两个并发操作不会同时成功。
+- 业务权限是共用的服务端函数中间件：`publicFn`（公开）、`requireUser`（需要登录）、`requirePerm(perm)`（需要权限）。`tests/unit/server-fn-guard.test.ts` 用 TypeScript 编译器解析 `src/` 下所有 `.ts`、`.tsx` 文件，任何一条 `createServerFn()` 链没有声明其中之一就失败。服务端路由（`/dl`、`/img`、`/review-img`、`/api/batch/sign`）在处理函数里自己检查。
+- 后台每个页面对应一个权限（`src/ui/admin/nav.ts`），菜单只是镜像。`tests/admin/matrix.test.ts` 对后台与「下载与风控」的每个服务端函数断言：未登录 401，用户 403，管理员只在其权限内放行，站长全部放行。
+- 模拟登录：站长在「用户与权限」里以某个用户的身份浏览，不能模拟自己。Better Auth 把会话换成目标用户的会话，有效 30 分钟。期间每个页面（公开站和后台）顶部显示「正在以 … 的身份浏览」和「结束模拟」按钮；结束后恢复站长自己的会话，回到「用户与权限」。开始和结束都写审计日志。
+- 验收测试：管理员和用户调用设置角色接口返回 403，未登录返回 401（`tests/integration/auth.test.ts`）；最后一位站长不能被降级、封禁或删除（`tests/integration/last-admin.test.ts`）。
 
 ### 5.2 投稿状态
 
 ```mermaid
 stateDiagram-v2
-  [*] --> 草稿: 新建投稿
-  草稿 --> 待审核: 提交
-  草稿 --> 已撤回: 撤回
-  待审核 --> 已通过: 审核通过（事务内应用）
-  待审核 --> 已退回: 退回（附原因）
-  待审核 --> 已撤回: 投稿者撤回
-  已退回 --> 待审核: 修改后重新提交
-  已通过 --> [*]
-  已撤回 --> [*]
+  state "草稿 draft" as draft
+  state "审核中 pending" as pending
+  state "已发布 approved" as approved
+  state "已退回 returned" as returned
+  state "已撤回 withdrawn" as withdrawn
+  [*] --> draft: 新建投稿
+  draft --> pending: 提交（免审用户随即自动通过）
+  draft --> withdrawn: 撤回
+  pending --> approved: 审核通过（一个事务内应用）
+  pending --> returned: 退回（附原因）
+  pending --> withdrawn: 投稿者撤回
+  returned --> pending: 修改后重新提交
+  approved --> [*]
+  withdrawn --> [*]
 ```
 
-- 投稿有三类：新包、补充表情、修改已发布的包。都存在 `submissions` 表，`payload` 保存提议的内容（标题、简介、角色、画师、增删的表情、授权声明）。
-- 新包投稿会先建一个 `status = draft` 的包，属于投稿者，前台不可见。
-- 上传：浏览器申请预签名 PUT，直传 `uploads/tmp/…`；worker 校验 MIME 与像素上限、计算 SHA-256（同一包内重复直接跳过）、选海报帧、把原图写到 `assets/v1/packs/<packKey>/emojis/`、把 `p240` 与 `a160` 预览图写到 `review/v1/`。表情状态为 `pending`，投稿者和审核人经 `/review-img` 预览。
-- 审核通过时：在一个事务里应用 `payload`（表情转为 `published`、更新包信息、写审计日志），由审核人确认「允许下载」开关；同一个任务把预览图复制到 `derived/v1/` 并删除 `review/v1/` 下的副本。
-- 修改已发布的包时，`payload` 记录基准版本 `base_updated_at`。审核通过前线上一直显示旧版本；如果期间包已被别人改过，审核通过会失败，需要重新提交。
-- 免审用户提交后直接走「审核通过」这一步，同样写审计日志。
-- 定时清理：退回或撤回超过 30 天的投稿、90 天未修改的草稿，删除其原图与预览图。
+状态表是 `src/server/submissions/rules.ts` 的 `TRANSITIONS`，每次转换在 SQL 里再按允许的来源状态检查一次（`UPDATE … WHERE status IN …`），两个并发操作不会同时成功。已退回的投稿不能撤回，只能修改后重新提交。
+
+- **三类投稿**：新包（`new_pack`）、补充表情（`add_emojis`）、修改已发布的包（`edit_pack`），都存在 `submissions` 表。`payload` 保存提议的内容：标题、简介、说明、角色、画师（`artistIds`，以及目录里还没有的画师名 `artistNames`）、约稿人、新增和移除的表情、封面、类型，新包还有「官方表情」标记 `official`。`declaration` 保存授权声明：身份（画师本人、约稿人、已获授权、整理搬运）、许可、凭证链接、说明，以及投稿者希望的「允许下载」。
+- **新包**：先建一个 `status = draft` 的包，属于投稿者，前台不可见；包键由标题拼音加随机后缀生成。修改已发布的包只限包的所有者或有 `packs` 权限的人；补充表情对任何已发布的包开放。每人最多 30 个草稿。
+- **上传**：浏览器为每个文件申请预签名 PUT（每次最多 50 个，每个投稿最多 200 张，单个 ≤ 20 MB，GIF、PNG、WebP、JPEG），直传 `uploads/tmp/…`，完成后通知服务端排队 `media.ingest`。ingest 校验格式、尺寸与帧数（第 4 节），计算 SHA-256（同一包内重复直接跳过），把原图复制到 `assets/v1/packs/<packKey>/emojis/`，建一张 `pending` 状态的表情，再排队生成 `p240` 与 `a160` 预览图到 `review/v1/`。投稿者和审核人经 `/review-img` 预览。
+- **顺序**：上传列表保持选择文件时的顺序；投稿者可以拖动排序，顺序存在 `payload.addEmojiIds`。
+- **提交**：缺少标题、表情、画师（新包）、授权说明，或者还有图片在上传或处理中时，不能提交。
+- **审核通过**：在一个事务里应用 `payload`：投稿自己的表情转为 `published` 并排在已有表情之后；修改投稿移除的表情转为 `hidden`；更新包信息、角色与画师（按名称或别名匹配已有画师，没有则新建）、计数、类型和封面；新包同时生成 slug 并发布。「允许下载」由审核人确认，官方表情固定关闭。随后发送通知、写审计日志。事务提交后再把预览图复制到 `derived/v1/`（最多 6 个并行），包允许下载时排队重建 ZIP。
+- **修改已发布的包**：`submissions.base_updated_at` 记录创建时包的 `updated_at`。审核通过前线上一直显示旧版本；如果期间包已被别人改过，审核通过失败，需要退回重新提交（重新提交时以包的当前版本为基准）。下载计数等不改变包内容的更新不会移动 `updated_at`。
+- **免审用户**：提交后立即以投稿者本人身份执行「审核通过」，「允许下载」取投稿者的声明；审计日志记为 `auto`。自动通过失败（例如包已被改过）时投稿留在审核中，等待审核人处理。
+- **后台「发布」不绕过审核**：「上传中心」里由站长或管理员直接传进已有包的图片，生成预览图后直接发布。属于用户投稿的待审核表情（上传记录指向投稿，或仍在某个未结束投稿的 `addEmojiIds` 里）在表情库和包编辑页上不能「发布」，只能经「投稿审核」上线，因为只有审核会应用授权声明和「允许下载」。
+- **审核页**：每条投稿列出自动检查：本包内重复、与其他包重复、画师与授权是否填写、是否附凭证、许可；修改投稿另列字段差异与冲突状态。退回原因有模板。
+- **定时清理**（每天 04:30，`src/server/submissions/cleanup.ts`）：退回或撤回超过 30 天的投稿、90 天未修改的草稿，删除其待审核表情的原图与预览图、残留的暂存文件和投稿记录；新包投稿的草稿包在没有其他引用时一并删除。已发布的表情从不在这里删除。
 
 ---
 
@@ -209,176 +246,300 @@ stateDiagram-v2
 
 | 场景 | 流程 |
 |---|---|
-| 查看原图 | `/dl/e/:id?mode=view` → 检查 → 302 到 inline 预签名链接 |
-| 保存原图 | `/dl/e/:id?mode=save` → 检查 → 302 到 attachment 预签名链接 |
-| 整包 ZIP | `/dl/p/:slug.zip` → 检查 → 命中 `zip_artifacts` 则 302，否则排队生成 |
-| 打包清单 | 浏览器用 client-zip 流式打包；边打包边调用 `POST /api/batch/sign`，每批最多 20 张；每 200 张一个压缩包 |
+| 查看原图 | `/dl/e/:id?mode=view` → 检查 → 302 到 `inline` 预签名链接 |
+| 保存原图 | `/dl/e/:id?mode=save` → 检查 → 302 到 `attachment` 预签名链接，文件名与 ZIP 内一致：`<slug>-<序号>.<扩展名>` |
+| 整包 ZIP | `/dl/p/:slug.zip` → 检查 → `zip_artifacts` 中有当前内容哈希的 ZIP 则计数并 302；否则排队生成，返回 202（`Retry-After: 5`），前端用 `?poll=1` 轮询，轮询不计数 |
+| 打包清单 | `POST /api/batch/sign` 分批签名，每批 1–20 张；浏览器端打包界面见第 8.3 节 |
 
-检查顺序：
+`/dl/e` 与 `/dl/p` 在请求带 `Accept: application/json` 时返回链接、文件名和有效期，不做 302；打包签名只返回 JSON。所有响应都是 `private, no-store`。
 
-1. 可下载：表情和包都已发布，且包的「允许下载」开启。待审核或已退回投稿里的原图只对投稿者和审核人签发。
-2. 紧急开关：「原图仅限登录用户」「暂停整包与打包」。
-3. 速率与限额：见 6.2。
-4. 签发时计数。预签名链接被浏览器直接使用、不经过应用，所以计数只能在签发时完成。打包清单每批最多 20 张、链接有效 2 分钟，边打包边签下一批，慢网速下也不会中途过期；放弃的打包只计已签发的批次。
+检查顺序（`src/server/downloads/policy.ts`，纯函数，用内存假数据做单元测试）：
 
-打包清单存在浏览器里，登录后同步到账号。每个压缩包附带 `CREDITS.txt`：包名、画师、约稿人、许可与来源。微信、QQ 内置浏览器无法下载压缩包，检测到时提示「在浏览器打开」。
+1. **可下载**：表情和包都已发布，且包的「允许下载」开启。待审核表情的原图只对包的所有者和审核人签发，且不要求「允许下载」（新包在审核前一直是关闭的）。隐藏的表情和包对所有人返回 404。
+2. **紧急开关**：「原图仅限登录用户」「暂停整包与打包」。
+3. **来源与可疑请求**：命中封禁的来源返回 403；命中观察名单或判定为可疑时要求人机验证（第 6.2 节）。
+4. **速率**：按 IP 每分钟计数，单张与打包分开。
+5. **每日限额**：按 Asia/Shanghai 的自然日计数。
+6. **签发时计数**：预签名链接被浏览器直接使用、不经过应用，所以计数只能在签发时完成；只有放行的签发才计数，被拒绝的请求不计。
+
+打包清单接口（`src/server/downloads/handlers.ts`）：
+
+- 请求体 `{ volume, first, ids }`：`volume` 是一个 UUID，代表浏览器生成的一个压缩包；`ids` 为 1–20 个表情 ID。路由自己检查 `Origin`（没有时检查 `Referer`）必须是本站，因为 Start 的 CSRF 中间件只保护服务端函数。
+- 响应列出放行的表情（预签名链接与文件名）、被拒绝的表情和原因、这些表情所属包的 `CREDITS.txt` 内容，以及因分钟速率被暂缓时的 `retryAfter`。
+- 服务端第一次为某个 IP 的某个 `volume` 放行表情时，把它记为一次整包下载。是否计数与客户端的 `first` 标记无关：客户端不能靠不发 `first` 跳过计数，重试第一批也不会重复计数。
+- 链接有效 2 分钟，浏览器边打包边签下一批，慢网速下也不会中途过期；放弃的打包只计已签发的批次。
+
+整包 ZIP（`src/server/media/zip.ts`）：
+
+- 每个已发布且允许下载的包一个 ZIP，存储模式（GIF、PNG 不再压缩），原图一张一张流式写入并分片上传，内存只占几个分片，与包的大小无关。压缩包里附 `CREDITS.txt`：包名、页面地址、画师、约稿人、许可、说明与来源。
+- 内容哈希（`chaochi-zip-v2`）覆盖压缩包的全部内容：每个条目的文件名、顺序、表情 ID 与原图 SHA-256（没有 SHA-256 时用字节数），以及去掉生成日期的 `CREDITS.txt` 正文。对象键取哈希前 8 位；`/dl/p` 只在记录的哈希等于当前哈希时提供 ZIP。哈希不变时跳过重建，新 ZIP 生成后删除旧对象。
+- 重建时机：投稿审核通过、后台修改包或表情、下架，以及 `/dl/p` 发现 ZIP 过期。`zip.build` 是独占队列，每个包同时最多一个排队或运行中的任务。
 
 ### 6.2 风控设置
 
-都在后台「下载与风控」里配置。限额项留空即不限制。
+都在后台「下载与风控」（`/admin/downloads`，站长）里配置，存在 `site_settings` 的 `downloads` 键。限额项留空即不限制，此时不读写对应的计数。
 
 | 设置 | 默认 | 说明 |
 |---|---|---|
-| 每个 IP 每天原图张数 | 留空 | 「查看原图」「保存原图」和打包都计入；WebP 预览不计 |
-| 每个账号每天原图张数 | 留空 | 登录用户按账号计 |
-| 每个 IP 每天整包次数 | 留空 | 整包 ZIP 与打包清单都计入 |
-| 单次打包张数上限 | 留空 | 超过 200 张自动分成多个压缩包 |
-| 单张签发速率 | 开，每个 IP 每分钟 60 次 | 只计单张「查看」「保存」，超出返回 429 |
-| 打包签发速率 | 留空 | 每个 IP 每分钟可签发的打包张数；与单张分开计，正常打包不会触发单张限速 |
-| 可疑时人机验证 | 开 | 连续顺序抓取或没有 Referer 时要求通过 Cap 验证 |
-| 原图仅限登录用户 | 关 | 紧急开关：游客只能看 WebP 预览 |
-| 暂停整包与打包 | 关 | 紧急开关：只保留单张下载 |
-| R2 读操作月度告警 | 900 万 | 超过时邮件通知站长 |
+| 每个 IP 每天原图张数 `perIpOriginalsPerDay` | 留空 | 游客按 IP 计；单张查看、保存和打包里的每一张都计入，WebP 预览不计 |
+| 每个账号每天原图张数 `perUserOriginalsPerDay` | 留空 | 登录用户按账号计，不再受 IP 限额约束 |
+| 每个 IP 每天整包次数 `perIpPacksPerDay` | 留空 | 整包 ZIP 与打包清单的每个压缩包都计入，始终按 IP 计 |
+| 单次打包张数上限 `maxBatchItems` | 留空 | 一个压缩包（`volume`）最多签发的张数 |
+| 单张签发速率 `singleSignsPerMinute` | 每个 IP 每分钟 60 次 | 只计 `/dl/e`，超出返回 429 |
+| 打包签发速率 `batchItemsPerMinute` | 留空 | 每个 IP 每分钟可签发的打包张数；与单张分开计，正常打包不会触发单张限速 |
+| 可疑时人机验证 `challengeSuspicious` | 开 | 见下文 |
+| 原图仅限登录用户 `originalsRequireLogin` | 关 | 紧急开关：游客只能看 WebP 预览 |
+| 暂停整包与打包 `pauseZipAndBatch` | 关 | 紧急开关：只保留单张下载 |
+| R2 读操作月度告警 `r2ReadAlertMonthly` | 9,000,000 | 留空即关闭告警 |
+
+设置在每个进程里缓存 10 秒，修改后两个副本最迟 10 秒生效；每次保存写审计日志。
 
 实现：
 
-- 主体是 IP 加盐哈希或账号。IP 一律取 `CF-Connecting-IP`，不读 `X-Forwarded-For`。
-- 计数表 `download_counters` 为 UNLOGGED 表，按主体、日期和类别计数。类别：`orig`（单张）、`batch_item`（打包的每一张，计入每天原图张数）、`batch`（每个压缩包，计入每天整包次数）、`zip`（整包 ZIP）。两个签发速率用按分钟的计数窗口。
-- UNLOGGED 表在崩溃恢复后会清空，对日限额可以接受；每小时把计数汇总到普通表 `download_stats_daily`，月度告警和统计以它为准。
-- 读操作告警按「原图与 ZIP 签发次数 + `/img` 回源次数」估算。
-- 可疑来源列表支持封禁或观察，并在后台显示特征（连续顺序抓取、无 Referer 等）。
-- Cloudflare WAF 在 `/dl/*` 与 `/api/batch/*` 上再加一层速率限制。
-- 达到限额时提示「明天恢复」，并引导登录。
+- **主体**：IP 的加盐哈希（`ip:<HMAC-SHA256 前 32 位十六进制>`）或账号（`user:<id>`）。IP 一律取 `CF-Connecting-IP`。
+- **可疑请求**：`challengeSuspicious` 开启时，两种情况要求人机验证：`/dl` 请求没有 `Referer` 或 `Referer` 不是本站（打包签名除外）；同一 IP 在 300 秒的固定窗口内签发了 30 个不同的表情（只看 `/dl/e`）。观察名单上的来源每次都要验证。令牌放在 `x-cap-token` 头或 `?cap=` 参数里，只校验一次；通过后该 IP 600 秒内不再被挑战。这个状态存在 PostgreSQL 里，两个副本都能看到。缺少令牌返回 428。
+- **可疑来源列表**：放行与拒绝过程中记录三种特征：连续抓取（`burst`）、无 Referer（`noref`）、触发限速或限额（`throttled`），按天保留今天和昨天。后台列出这些来源，可以设为封禁或观察，可带截止时间；每次修改写审计日志。
+- **计数表**：`download_counters` 为 UNLOGGED 表，按主体、日期和类别计数。类别：`orig`（单张）、`batch_item`（打包的每一张）、`batch`（打包的每个压缩包）、`zip`（整包 ZIP）。原图限额 = `orig` + `batch_item`；整包限额 = `zip` + `batch`。
+- **窗口表**：`rate_windows` 也是 UNLOGGED 表，存分钟速率、连续抓取检测、人机验证通过状态、打包 `volume` 进度和可疑特征。每天的清理任务删除过期一小时以上的行。
+- **崩溃恢复**：UNLOGGED 表在崩溃恢复后会清空，对日限额可以接受。每小时第 5 分钟把今天和昨天的计数汇总到普通表 `download_stats_daily`，取较大值合并，并删除两天以前的计数；统计和告警以汇总表为准。
+- **R2 读操作告警**（每天 04:00）：本月已签发的原图与 ZIP 次数（类别 `orig`、`batch_item`、`zip`）超过阈值时，给每位未被封禁的站长发一封邮件，每天最多一次。估算不含 `/img` 回源。
+- **拒绝提示**：达到每日限额返回 429 和「今天下载得有点多，明天 0 点恢复」，`Retry-After` 为到次日 0 点（Asia/Shanghai）的秒数；游客登录后能获得更大额度时，响应带 `loginRaisesLimit`，供前端引导登录。
+- **概览**：页面顶部显示今天与昨天的原图数、今天的整包数、本月按类别的计数与 R2 读操作估算、今天被限速的次数与 IP 数、封禁与观察的来源数。
 
 ### 6.3 下架
 
-删除表情或处理版权申诉时：删除原图与全部衍生图（所有档位、所有 `.r<rev>` 版本），重建或删除受影响的 ZIP，再调用 Cloudflare API 按 URL 清除这些 `/img` 地址的缓存。`/img` 响应是一年期的不可变缓存，只删 R2 对象不会让图片从 CDN 消失；已经下载到访客浏览器里的副本无法收回。worker 使用一枚只有「缓存清除」权限的 Cloudflare 令牌。
+- **隐藏**：表情或包设为 `hidden`，从站点上消失，但文件保留：`/img` 命中时不查库，旧地址仍可访问，CDN 里的副本也还在。隐藏可以恢复。
+- **删除表情**（版权申诉用这一项，`packs` 权限）：删除原图、所有版本（`.r1` 到当前 `.r<rev>`）的全部档位衍生图和预览图，删除数据库行，修正封面与计数；受影响包的 ZIP 立即删除，再按需排队重建；最后调用 Cloudflare API 按 URL 清除这些 `/img` 地址的缓存。
+- **彻底删除表情包**（只限站长）：逐张删除包内每个表情的文件和包的全部 ZIP，删除包记录（连带表情、关联与投稿），并清除缓存。文件按表情删除，不按前缀删除：移到别的包的表情仍在原包键下，`pack.json` 是只读的 v1 快照。管理员的「删除」是软删除（设为 `hidden`）。
+- 缓存清除在 web 进程里随后台操作执行，使用一枚只有「Zone · Cache Purge」权限的令牌（`CF_ZONE_ID`、`CF_PURGE_TOKEN`），按每批 30 个 URL 调用；未配置时只记日志。审计日志记录删除了什么、清除了多少地址、清除是否失败。
+- `/img` 响应是一年期的不可变缓存，只删 R2 对象不会让图片从 CDN 消失；已经下载到访客浏览器里的副本无法收回。
 
 ### 6.4 授权
 
-`DEVELOPMENT.md` 第 2.2 节写明当前镜像只供个人或本地开发，未经站方许可不得公开再分发。工程上这样处理：
+`DEVELOPMENT.md` 第 2.2 节写明 v1 镜像只供个人或本地开发，未经站方许可不得公开再分发。工程上这样处理：
 
 | 内容 | 处理 |
 |---|---|
 | CC BY-NC-SA 4.0 社区包 | 核对许可后开启「允许下载」；页面与 ZIP 展示署名 |
 | 「个人非商用约定」类包 | 默认只提供预览，取得画师授权后开启 |
-| 官方表情（官转） | 「允许下载」固定关闭，只提供预览 |
-| 投稿 | 投稿者声明身份（画师本人、约稿人、已获授权、整理搬运）、许可与凭证；审核人确认「允许下载」 |
+| 官方表情（官转） | 「允许下载」固定关闭，只提供预览：导入、审核通过和包编辑页都强制关闭 |
+| 投稿 | 投稿者声明身份、许可与凭证；审核人确认「允许下载」 |
 
-v1 数据导入时所有包的「允许下载」都关闭，逐个核对后开启。M0 需要联系源站站长，确认可公开的范围。
+- v1 导入时所有包的「允许下载」都关闭；重复导入不会改动已开启的开关，官方包除外。
+- 许可只取 `src/server/media/credits.ts` 中 `LICENSE_LABELS` 的 6 个代码：`cc-by-nc-sa-4.0`、`cc-by-nc-4.0`、`cc-by-sa-4.0`、`cc-by-4.0`、`personal-noncommercial`、`unknown`。投稿表单和包编辑页都只接受这些代码；导入时把 v1 的文字许可映射到代码，认不出的记为 `unknown`。
 
 ---
 
 ## 7. 数据模型
 
-PostgreSQL 是元数据唯一权威；R2 的 `meta/v1/*.json` 只用于首次导入。
+PostgreSQL 是元数据唯一权威；R2 的 `meta/v1/*.json` 只用于导入。表定义在 `src/server/db/schema/`。
 
 ```text
-packs            id, pack_key (不可变), slug (可改，旧值进 redirects), title, excerpt, description_md,
-                 status (draft|published|hidden), owner_id, source_kind (community|official),
-                 license (封闭枚举), downloadable, pin_level, memorial, commissioner, credits_text,
-                 source_url, cover_emoji_id, emoji_count, download_count, favorite_count,
-                 published_at, created_at, updated_at
+packs            id, pack_key (不可变), slug (改名时旧路径进 redirects), title, excerpt, description_md,
+                 status (draft|published|hidden), owner_id, source_kind (community|official), license,
+                 downloadable, kind (animated|static|mixed), pin_level, memorial, commissioner,
+                 credits_text, source_url, legacy_post_name, cover_emoji_id, emoji_count,
+                 download_count, favorite_count, published_at, created_at, updated_at
 emojis           id (r- + 20 位十六进制，沿用 v1), pack_id, storage_pack_key (不可变),
-                 status (pending|published|hidden), sort_order, original_key, format, bytes,
+                 status (pending|published|hidden), sort_order, original_key, format, mime, bytes,
                  width, height, frames, duration_ms, poster_frame, sha256, dominant_color,
-                 variant_rev (从 1 开始), p240_bytes, a160_bytes, full_ready, created_at
-submissions      id, kind (new_pack|add_emojis|edit_pack), pack_id, submitter_id,
-                 status (draft|pending|approved|returned|withdrawn), payload jsonb,
-                 declaration jsonb, reviewer_id, review_note, submitted_at, decided_at
-upload_items     id, submission_id, uploader_id, tmp_key, status, error, emoji_id
-users …          Better Auth 生成；role (admin|manager|user)，submit_mode (review|trusted|blocked)
-characters, character_aliases, artists, artist_aliases          -- 别名与合并后的旧名用于搜索
-pack_characters, emoji_characters, pack_artists                 -- 多对多
-tags (dimension: group|tool|project|origin|custom), pack_tags
-collections, collection_packs                                   -- 精选合集
+                 variant_rev (从 1 开始), p240_bytes, a160_bytes, full_bytes, derived_ready, full_ready
+submissions      id (uuid), kind (new_pack|add_emojis|edit_pack), pack_id, submitter_id,
+                 status (draft|pending|approved|returned|withdrawn), payload jsonb, declaration jsonb,
+                 base_updated_at, reviewer_id, review_note, submitted_at, decided_at
+upload_items     id, submission_id (上传中心的上传为空), pack_id, uploader_id, tmp_key, filename, bytes, mime,
+                 status (signed|uploaded|processing|done|duplicate|failed), error, emoji_id
+users, sessions, accounts, verifications, rate_limits           -- Better Auth（复数表名）
+                 users: role (admin|manager|user), banned, ban_reason, ban_expires, submit_mode (review|trusted|blocked)
+                 sessions: ip_address 与 user_agent 存加盐哈希, impersonated_by
+characters, character_aliases, artists, artist_aliases          -- 别名唯一，用于搜索与合并后的旧名
+pack_characters, emoji_characters, pack_artists (role artist|commissioner)   -- 多对多
+tags (dimension group|tool|project|origin|custom), pack_tags
+collections, collection_packs                                   -- 精选合集（首页读取）
 favorite_folders, favorites (target_type pack|emoji)
-batch_lists      user_id, items jsonb, updated_at               -- 打包清单（登录后同步）
+batch_lists      user_id, items jsonb                           -- 打包清单同步，表已建，尚未使用（第 8.3 节）
+notifications    user_id, kind, payload jsonb, read_at
 download_counters (UNLOGGED)  subject, day, kind (orig|batch_item|batch|zip), n
-download_stats_daily          day, kind, subject_count, n       -- 每小时从计数表汇总，供统计与告警
-blocked_sources  subject, mode (block|watch), reason, until
+rate_windows (UNLOGGED)       subject, bucket, window_start, n
+download_stats_daily          day, kind, subject_count, n       -- 每小时从计数表汇总
+blocked_sources  subject, mode (block|watch), reason, until, created_by
 zip_artifacts    pack_id, content_hash, object_key, bytes, built_at
-comments         id, thread_type, thread_id, parent_id, root_id, author_id | guest_name,
-                 guest_email_hash, body_src, sticker_ids text[], status, pinned, staff_badge,
-                 edited_at, deleted_at, ip_hash, created_at
+comments         id, thread_type (pack|emoji), thread_id, parent_id, root_id, author_id | guest_name,
+                 guest_email_hash, body_src, sticker_ids text[], status (published|pending|spam|deleted),
+                 pinned, staff_badge, edited_at, deleted_at, ip_hash, created_at
 comment_reactions, comment_reports
-redirects, site_settings (key, value jsonb)
-audit_logs       actor_id, actor_role, impersonated_by, action, target, diff jsonb, created_at
+redirects (from_path, to_path, code), site_settings (key, value jsonb, updated_by)
+audit_logs       actor_id, actor_role, impersonated_by, action, target_type, target_id, diff jsonb, created_at
 ```
 
-- 每张图都存宽高、帧数、海报帧与 SHA-256：宽高让瀑布流零偏移，SHA-256 在入库前拦下重复文件。
-- 站名、风控设置、紧急开关都存在 `site_settings`，改动即时生效并写审计日志。
-- 评论只存 `body_src`，读取时渲染并做进程内缓存。
+- 每张图都存宽高、帧数、海报帧与 SHA-256：宽高让瀑布流在图片加载前就排好，SHA-256 在入库前拦下同包重复。
+- 站名、公告、风控设置、紧急开关、评论规则都存在 `site_settings`（键 `site`、`downloads`、`comments`），读取时按 zod schema 校验并补默认值。
+- 评论只存 `body_src`，读取时渲染并做进程内缓存（第 9 节）。
+
+### 7.1 迁移
+
+- 迁移文件由 drizzle-kit 从 `src/server/db/schema/` 生成，放在 `drizzle/`。`src/migrate.ts` 应用迁移，再安装或升级 pg-boss 的表和队列，然后退出。
+- `drizzle/0000_init.sql` 有三处手工修改：开头 `CREATE EXTENSION IF NOT EXISTS pg_trgm`；把 `download_counters` 与 `rate_windows` 设为 UNLOGGED；函数 `keep_last_admin()` 与触发器 `users_keep_last_admin`。
+- `drizzle/0001_comment_indexes.sql` 为 `comments` 增加 `author_id`、`parent_id`、`ip_hash` 三个索引。
+- 迁移在副本切换前执行，旧版本会和新结构一起运行一段时间，所以每个发布只做「扩展」（新表、可空列或带默认值的列、索引），「收缩」（删列、改名、收紧约束）放到下一个发布。完整规则见 `deploy/README.md`「迁移的兼容规则」。
 
 ---
 
 ## 8. 前端
 
-- **瀑布流**：`useWindowVirtualizer({ lanes, estimateSize })`，宽高来自数据库，布局零偏移。
-- **动图播放**：网格默认显示 `p240`；悬停或进入可视区中心时换成 `a160`；同时播放不超过 4 张；用户可关闭，检测到 `Save-Data` 时自动关闭。
-- **单张表情**：弹窗，按贴纸原尺寸（约 300 px）显示，不铺满屏幕；手机上是底部面板，高度不超过屏幕的 72%。
+### 8.1 已实现的界面规则
+
+- **瀑布流**：`src/ui/Masonry.tsx` 用 `useWindowVirtualizer` 的 `lanes`，每个条目的高度由数据库里的宽高和列宽算出，不量 DOM，图片加载时布局不移动。最小列宽桌面 248 px、手机 150 px。服务端按假定宽度渲染，挂载后量到的列数不同时只重排一次。
+- **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
+- **字体**：正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体；标题用寒蝉圆黑体 v3.750 的 Bold 与 Heavy（OFL-1.1），以别名 `TP Rounded` 发布。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，去掉 `locl` 与 `aalt`，用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
+- **页面外壳**：页头、手机底部标签栏、页脚、站点公告条，以及模拟登录时置顶的「结束模拟」条。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
+- **已上线的页面**：注册、登录、找回与重置密码、邮箱验证；个人中心（收藏夹、我的投稿、我的评论、通知、设置）；投稿页 `/submit`；后台 16 个页面（第 8.2 节）。
+- **人机验证组件**：`@cap.js/widget` 在需要时才加载；WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
+- **组件样张**：`/kit` 展示全部组件，只在开发环境存在。
+
+### 8.2 后台页面
+
+后台共 16 个页面：`src/ui/admin/nav.ts` 的 15 个菜单项，加上包编辑页 `/admin/packs/$id`。`/admin/tags` 重定向到 `/admin/taxonomy`。
+
+| 分组 | 页面（路径 · 权限） |
+|---|---|
+| 概览 | 仪表盘 `/admin` · `dash` |
+| 内容 | 投稿审核 `/admin/review` · `review`；表情包 `/admin/packs` 与包编辑 `/admin/packs/$id` · `packs`；上传中心 `/admin/upload` · `upload`；表情库 `/admin/emojis` · `packs`；角色 `/admin/characters`、画师 `/admin/artists`、标签 `/admin/taxonomy` · `taxonomy` |
+| 社区 | 评论审核 `/admin/comments` · `comments`；用户与权限 `/admin/users` · `users` |
+| 系统 | 下载与风控 `/admin/downloads` · `downloads`；存储 R2 `/admin/storage` · `storage`；任务队列 `/admin/jobs` · `system`；审计日志 `/admin/audit` · `audit`；系统设置 `/admin/settings` · `settings` |
+
+- 包编辑页带乐观并发检查：保存时包已被别人改过则拒绝，提示刷新。
+- 存储页只用数据库聚合统计各前缀的对象数与体积，不列举桶；不在表里的对象（旧版本衍生图、备份、v1 快照）标注为未计入。
+- 系统设置里的密钥只显示「已配置」与否，不显示内容。
+
+### 8.3 公开浏览页与打包清单
+
+<!-- 待补：公开浏览页（lane I）与打包清单 / 批量下载界面（lane J2）上线后，按实现改写本节 -->
+
+公开浏览页和打包清单界面正在开发。本节写的是已经实现的服务端接口和已经确定的设计。
+
+目录接口（`src/server/catalog/`）。全部是 GET 服务端函数，中间件为 `publicFn`：
+
+| 函数 | 用途 | 主要参数 |
+|---|---|---|
+| `homeFn` | 首页：最新、置顶、精选合集与统计 | — |
+| `packsFn` | 表情包目录 | `character`、`artist`、`kind`、`source`、`group`、`tag`（`<维度>:<slug>`）、`sort`（`hot`、`new`、`fav`、`random`）、`seed`、`cursor`、`limit`（默认 24） |
+| `packDetailFn` | 包详情 `/packs/:slug` | `slug` |
+| `emojiPermalinkFn` | 单张表情 `/e/:emojiId` | `emojiId` |
+| `charactersFn`、`characterDetailFn` | 角色列表与角色页（包或全部表情两个标签） | `sort`、`tab`、`type`、`cursor` |
+| `artistsFn`、`artistDetailFn` | 画师列表与画师页 | `slug`、`sort`、`cursor` |
+| `galleryFn` | 跨包表情流（潮汐画廊） | `sort`（`new`、`random`）、`character`、`type`、`limit`（默认 48） |
+| `exploreFn` | 探索页：随机一个包和一张表情、按当天日期固定的今日推荐、筛选项列表 | — |
+| `searchFn`、`suggestFn` | 搜索结果与输入联想 | `q`、`limit` |
+
+已经确定的规则：
+
+- **返回值与身份无关**：同一个对象会渲染进可共享缓存的匿名 HTML，所以不含「是否已收藏」这类字段；与身份相关的状态由浏览器另行请求。只出现已发布包里的已发布表情；角色、画师、标签和合集只在有已发布内容时出现。时间是 ISO-8601 字符串，图片字段是可直接使用的 `/img` 地址，并带原图宽高，供瀑布流预留空间。
+- **分页**：游标分页（keyset），每种排序最后都按 ID 排，顺序稳定；游标不透明，格式错误时返回 400。`random` 排序按种子对 ID 做哈希，种子放在游标里，翻页不重复，也可以放进可分享的 URL。`hot` 按下载量，`fav` 按收藏数，`new` 按发布时间。
+- **缓存**：首页、角色、画师、筛选项和联想索引在进程内缓存 30 秒；后台写操作会清空这份缓存。
+- **旧链接**：`resolveLegacyPath`（`legacy.ts`）先查 `redirects` 表（最多跟随 5 跳，目标必须公开），再用内置规则：`/archives/:postName` → `/packs/:slug`；`/tags/:slug` → 角色页、画师页或按标签筛选的目录；改名后的角色、画师和包的旧 slug → 新地址。包、角色和画师的详情查询遇到未知 slug 时已经调用它；对任意旧路径统一返回 301 的路由尚未接入。
+- **单张表情**：`/e/:emojiId` 是单张表情的分享链接，服务端渲染所属包的页面并打开单张弹窗；关闭弹窗时用 `history.pushState` 回到 `/packs/:slug`，浏览器后退可关闭弹窗。弹窗按贴纸原尺寸（约 300 px）显示，不铺满屏幕；手机上是底部面板，高度不超过屏幕的 72%。
 - **筛选**：目录页用顶部筛选条和按内容定高的下拉面板，不用带边框、内部滚动的侧栏。页面内的滚动区域隐藏滚动条，只有页面本身保留细滚动条。
-- **字体**：正文用系统字体；数字与拉丁字母用自托管的 Nunito 拉丁子集；标题用寒蝉圆黑体（OFL-1.1）Bold 与 Heavy，以别名 `TP Rounded` 发布，用 cn-font-split 切成按 `unicode-range` 加载的分片。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，切分前先去掉 `locl`，生成后检查这几个字。
-- **动效**：只用 CSS 与 Web Animations API；页面切换用原生 View Transitions；`prefers-reduced-motion` 时关闭。
-- **复制图片**：剪贴板只能写入 PNG，动图提示改用「保存原图」。
-- **性能预算**：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。
+- **打包清单**：清单存在浏览器里，登录后同步到账号（`batch_lists`）。浏览器边打包边调用 `POST /api/batch/sign`（第 6.1 节），每 200 张一个压缩包，每个压缩包附带 `CREDITS.txt`。微信、QQ 内置浏览器无法下载压缩包，检测到时提示「在浏览器打开」。
+- **其他**：动效只用 CSS 与 Web Animations API，页面切换用原生 View Transitions，`prefers-reduced-motion` 时关闭；剪贴板只能写入 PNG，复制动图时提示改用「保存原图」。
+- **性能预算**（目标值，公开页上线后实测）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。
+
+### 8.4 客户端包检查
+
+`bun run build` 的最后一步是 `scripts/check-client-bundle.ts`：在 `.output/public` 的脚本里查找服务端才有的标记（`pg-boss`、`DATABASE_URL`、`IP_HASH_SALT`、`S3_SECRET_ACCESS_KEY`、`CAP_SECRET_KEY`），找到就让构建失败。起因是 `src/start.ts` 静态引入了关闭数据库连接的模块，把 pg 和 pg-boss 带进了浏览器包，页面在水合前就报错。改为只在 SSR 分支动态引入后，客户端入口包从约 870 KB 降到约 250 KB。
 
 ---
 
 ## 9. 评论与搜索
 
-评论：
+评论（`src/server/comments/`）：
 
-- 楼中楼、Markdown 子集、表情回应、10 分钟编辑窗、删除保留墓碑、置顶、站长与画师徽章、三种排序。
-- 贴纸：正文写作 `:s[r-0a7bf47f0ec26d3843bf]`，ID 先过正则 `^r-[0-9a-f]{20}$`，再校验表情存在且已发布，每条最多 6 张；显示为 `p240`。
-- markdown-it：`html: false`，禁用图片，保留默认的 `validateLink`，链接加 `rel="nofollow ugc noopener"`；全站配置 CSP。
-- 反垃圾：游客必须通过 Cap 验证；按 IP 哈希与账号限流；隐藏字段陷阱与最短填写时长；新用户首评、2 个以上链接、命中屏蔽词、被举报达到阈值的进入审核队列，不静默丢弃。
+- **评论区**：挂在表情包或单张表情上。包的评论区 ID 是 `String(pack.id)`，不用会改名的 slug；表情的评论区 ID 是表情 ID。评论区必须公开才能评论。
+- **结构**：楼中楼（`root_id`、`parent_id`），每楼先显示 3 条回复，其余点「展开」；每页 20 楼。三种排序：最热（回应数 + 2 × 可见回复数，同分时新的在前，默认）、最新、最早。
+- **正文**：最多 1000 字。markdown-it：`html: false`（原始 HTML 被转义），自动识别链接，换行保留；图片、标题、表格、分隔线、引用式链接和缩进代码都关闭。链接先过 markdown-it 默认的 `validateLink`，再只放行 `http:`、`https:`、`mailto:` 和站内相对地址，被拒的链接显示为文字；每个链接加 `rel="nofollow ugc noopener"` 和 `target="_blank"`。渲染只在服务端，结果按（评论 ID，编辑时间）放进进程内的 LRU 缓存（4000 条）。
+- **贴纸**：正文写作 `:s[r-0a7bf47f0ec26d3843bf]`，解析为行内标记（写在代码里的不算）。每条最多 6 张；表情和包都已发布、衍生图已生成才能用；显示为 `p240`。渲染时先输出占位，读取时再换成图片，所以贴纸后来被隐藏时评论里随之消失，缓存不会过期失效。贴纸可以在审核规则里整体关闭。
+- **回应与举报**：回应固定 6 种（好耶、笑死、哭哭、贴贴、问号、震撼），可以给每种配一张贴纸；回应和举报都要登录。每个账号对一条评论只能举报一次，不能举报自己；未处理的举报达到阈值（默认 3）时，已公开的评论退回审核队列。
+- **编辑与删除**：作者登录后在编辑窗口内（默认 10 分钟）可以编辑；编辑会重新检查链接和屏蔽词。作者删除自己的评论时留下墓碑（`deleted_at`）：有可见回复时显示为「已删除」，回复保留；审核人不能恢复作者删掉的评论。
+- **徽章与置顶**：站长和管理员发的评论自动带角色徽章；「画师」徽章由审核人设置，「站长」徽章只有站长能设。只能置顶已公开的评论。
+- **反垃圾**，按以下顺序检查：
+  1. 隐藏字段 `website` 有值即拒绝；表单签发时带一个签名时间戳（HMAC），提交时必须已过 3 秒、不超过 24 小时。
+  2. 是否允许游客评论、是否被禁止评论。
+  3. 昵称（游客）、正文、贴纸、评论区与回复对象。
+  4. 审核判定：首次评论（开启「首评审核」时；登录用户按账号，游客按 IP 哈希）、2 个以上链接（含裸域名和邮箱）、命中屏蔽词（正文或游客昵称；NFKC 归一化、不区分大小写，`*` 匹配至多 20 个字符，也检查去掉空白后的文本）、新用户（游客或注册不满 24 小时）在热帖（最近一小时 20 条以上）里评论。命中任意一条进入审核队列，不静默丢弃。拥有 `comments` 权限的站长和管理员从不进审核。
+  5. 游客必须通过 Cap 验证。令牌只能用一次，所以放在所有可能拒绝的检查之后、任何写入之前。
+  6. 限流：按 IP 哈希和账号，每分钟 5 条、每天 50 条；回应每分钟 30 次，举报每小时 10 次，预览每分钟 30 次，编辑每分钟 10 次。窗口存在 `rate_windows`，按窗口结束时间作键，所以一天的窗口不会被每天的清理提前清掉。
+- **审核后台**（`/admin/comments`）：按状态分标签的队列，通过、标为垃圾、删除、恢复，可批量；审核规则（游客评论、贴纸、首评审核、编辑窗口、屏蔽词、举报阈值、回应贴纸）；禁止某账号评论。每个操作写审计日志。
+- **通知**：回复别人的评论时，被回复的人收到带链接的通知；个人中心有「我的评论」。
+- 游客的邮箱只存加盐哈希，IP 只存加盐哈希。
 
-搜索：
+搜索（`src/server/catalog/search.ts`）：
 
-- 包标题、角色名与别名、画师名与别名、标签名建 `pg_trgm` GIN 索引。PostgreSQL 18.4 实测：中文能正常生成三元组，3 字以上的 `ILIKE '%…%'` 走索引。
-- 单字角色名（心、椿）先查别名表精确匹配；指令面板读进程内索引。
-- 使用 Debian 系镜像；Alpine（musl）未验证。
+- 包标题、角色名与别名、画师名与别名、标签名建 `pg_trgm` GIN 索引。
+- 整个查询为一个匹配词（权重 1）；多词查询时每个词再各为一个匹配词（权重 0.5）。查询最长 64 个字符、最多 5 个词。
+- 匹配：名称包含匹配词（`ILIKE`）；3 个字符以上的匹配词还按三元组相似度匹配，走 GIN 索引，更短的退化为扫描，在当前数据量下可以接受。得分：完全相同 100 > 前缀 60 > 包含 30，3 个字符以上另加 10 × 相似度。
+- 包可以通过标题匹配，也可以通过关联的角色、画师、标签匹配。单字匹配词（心、椿）通过关联匹配时要求名称或别名完全相同，所以「心」找到的是心的包，不是心月狐的；标题仍按包含匹配。多词查询要求每个词都命中。
+- 排序先按得分，再按热度。所有分组一条 SQL，包卡片再一条。
+- `tests/catalog/search.test.ts` 覆盖中文 3 字以上子串经 pg_trgm 命中标题、谓词可以使用 GIN 索引、单字精确匹配、拉丁别名不区分大小写、错字容忍和多词查询。
+- 镜像基于 Debian（glibc）；Alpine（musl）未验证。
 
 ---
 
 ## 10. 认证与安全
 
-- Better Auth：邮箱密码（要求邮箱验证）、通行密钥、可选 GitHub OAuth；`tanstackStartCookies()` 放在插件列表最后。
-- 人机验证用自托管的 Cap（SHA-256 工作量证明，用户无需点选图片）。Turnstile 依赖 Cloudflare 的挑战服务，部分网络下加载不稳定，所以不用。`@cap.js/server` 嵌在应用里，挑战与令牌存在 PostgreSQL，不需要额外容器。
-- Better Auth 的 `captcha()` 插件不支持 Cap：在注册、登录、重置密码接口上加 before 钩子，调用 `validateToken(token, { keepToken: false })`，令牌用一次即失效。签发挑战的公开接口按 IP 限速，因为每次签发都写一行数据。
-- Cap 前端组件默认从 jsDelivr 加载 WASM 与 pako，改为从本站提供；CSP 需要 `worker-src blob:` 与 `'wasm-unsafe-eval'`。
-- 客户端 IP 用 `cf-connecting-ip`（`advanced.ipAddressHeaders`）。只有源站完全不暴露端口时这个头才可信：只经 Tunnel 访问，调试时也不临时映射端口。
-- 自定义 `src/start.ts` 会关闭 Start 自动挂载的 CSRF 中间件，必须手动加 `createCsrfMiddleware()`。
-- IP 与 UA 只存加盐哈希；公开接口不返回邮箱。
-- 密钥放在 `.env` 或 Docker secrets：R2 令牌只授权桶 `wuwa`；缓存清除令牌只有该权限。后台只显示「已配置」。
-- 本项目对话中出现过明文 R2 密钥与 Cloudflare 令牌，项目搭建完成后轮换。
+账号：
+
+- Better Auth 1.7.11，只启用邮箱密码（8–128 位）。配置了 `SMTP_URL` 与 `MAIL_FROM` 时，注册后发送验证邮件、未验证不能登录；没有配置时不要求验证，开发环境把邮件内容写进日志。重置密码邮件里的链接 1 小时内有效。
+- 会话 30 天，每天刷新一次。Drizzle 适配器使用复数表名；`tanstackStartCookies()` 放在插件列表最后。
+- Better Auth 自带限流存在数据库里：默认每分钟 120 次；登录每分钟 10 次，注册每小时 10 次，申请重置密码每小时 5 次。
+
+人机验证：
+
+- 自托管 Cap Standalone。端点 `CAP_API_ENDPOINT`（路径里含站点键）与站点键 `CAP_SITE_KEY` 是公开配置，端点由根路由下发给浏览器；`CAP_SECRET_KEY` 只在服务器上，生产环境缺少它时配置校验报错（`src/server/env.ts`）。
+- 浏览器在 Cap 服务器上完成工作量证明，把得到的令牌放在 `x-cap-token` 头里随请求发送。服务端用密钥调用 `<CAP_API_ENDPOINT>siteverify`（5 秒超时）校验，令牌只能用一次。
+- 校验位置：Better Auth 的 before 钩子保护 `CAP_PROTECTED_PATHS` 中的注册、登录、申请重置密码、发送验证邮件四个接口；游客评论；被挑战的下载（第 6.2 节）。
+- 任何错误都按失败处理：没有令牌或令牌无效返回 400（下载返回 428），Cap 服务不可用时账号接口和评论返回 503。
+- Cap 服务器上的 `CORS_ORIGIN` 只设为站点源（`deploy/README.md`）。`CAP_DISABLED=1` 只在非生产环境跳过校验，生产环境设置它时配置校验报错。
+
+请求安全：
+
+- 客户端 IP 取 `cf-connecting-ip`（Better Auth 的 `advanced.ipAddress.ipAddressHeaders` 和 `src/server/http/client.ts`），不读 `X-Forwarded-For`。可信的前提见第 2 节。
+- 自定义的 `src/start.ts` 会替换 Start 默认的 CSRF 中间件，所以手动加回 `createCsrfMiddleware()`，范围是服务端函数；服务端路由不在其内，`POST /api/batch/sign` 自己检查来源。Better Auth 的 `trustedOrigins` 只有 `SITE_URL`。
+- 每个响应都带安全头：`Content-Security-Policy`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy`（关闭摄像头、麦克风、定位），生产环境另加 `Strict-Transport-Security: max-age=31536000`。
+- CSP 要点：`default-src 'self'`；`script-src` 含 `'unsafe-inline'`（Start 输出内联的水合脚本，nonce 尚未接入）和 `'wasm-unsafe-eval'`（Cap 编译 WASM）；`worker-src`、`child-src` 含 `blob:`（Cap 的求解线程）；`img-src` 与 `connect-src` 含存储源（查看原图是 302 到预签名链接），`connect-src` 另含 Cap 源；`frame-ancestors 'none'`、`object-src 'none'`。
+
+数据与密钥：
+
+- IP 与 UA 只存 HMAC-SHA256 加盐哈希（`IP_HASH_SALT`，截取 32 位十六进制）；游客邮箱同样只存哈希；公开接口和根路由下发的配置不含邮箱。
+- 密钥放在服务器的 `/opt/chaochi/app-env`（root 所有，权限 600），由站长在开发机上用 `deploy/push-env.sh` 从本地 `.env.local` 生成：R2 与 Cap 的凭据取自 `.env.local`，数据库密码、`AUTH_SECRET`、`IP_HASH_SALT` 现场随机生成，全程不打印值。R2 令牌只授权桶 `wuwa`；缓存清除令牌只有该权限（`deploy/README.md`）。
+- 仓库公开：仓库里没有服务器地址和密钥。部署脚本从不进仓库的 `deploy/.deploy-host` 或环境变量 `CHAOCHI_DEPLOY_HOST` 读取服务器；`.gitignore` 排除 `.env*`、`.secrets/`、`*.pem`；`.dockerignore` 另排除 `secrets`、`*.key`，密钥不进构建上下文。GitHub secret scanning 与 push protection 已开启。安全问题通过 GitHub 私密安全通告报告。
 
 ---
 
 ## 11. 技术栈
 
-版本取自 `https://registry.npmjs.org/<包名>`，核实日期 2026-10-20，上线前按 lockfile 固定。
+版本取自 `package.json`、`Dockerfile` 与 `compose.yaml`，依赖由 `bun.lock` 固定。
 
 | 层 | 选型 | 版本 | 说明 |
 |---|---|---|---|
-| 运行时 | Node.js | 24 LTS | Debian slim 镜像，保证 sharp 预编译二进制可用 |
-| 框架 | `@tanstack/react-start` | 1.169.3 | 1.169 为首个稳定版；需要 Vite 8 |
+| 运行时 | Bun | 1.4.3 | 镜像 `oven/bun:1.4.3-slim`（Debian），web、worker、迁移、命令行同一运行时 |
+| 框架 | `@tanstack/react-start` / `@tanstack/react-router` | 1.169.3 / 1.170.45 | |
 | 构建 | `vite` / `@vitejs/plugin-react` | 8.3.4 / 6.1.2 | |
-| Node 输出 | `nitro`（`node_server` 预设） | 3.0.260903-beta | 唯一未经充分验证的环节；固定版本，回退见 12.3 |
+| 服务端输出 | `nitro`（`bun` 预设） | 3.0.260903-beta | 固定版本；`sharp`、`pg-native` 不打进 web 包 |
 | UI | `react` / `react-dom` | 19.3.1 | |
-| 无样式组件 | `@base-ui/react` | 1.9.0 | 外观按设计令牌自建；animal-island-ui 只沿用令牌与规格，运行时零依赖 |
+| 无样式组件 | `@base-ui/react` | 1.9.0 | 外观按设计令牌自建 |
 | 数据获取 | `@tanstack/react-query` | 5.104.5 | 首屏由路由 loader 直出 |
 | 虚拟列表 | `@tanstack/react-virtual` | 3.14.21 | `lanes` 实现瀑布流 |
-| 认证 | `better-auth` + `@better-auth/drizzle-adapter` + `@better-auth/passkey` | 1.7.11 | 适配器 peer 范围与 Drizzle 0.45.4 兼容 |
+| 认证 | `better-auth` | 1.7.11 | 内置 Drizzle 适配器与 admin 插件 |
 | ORM | `drizzle-orm` / `drizzle-kit` / `pg` | 0.45.4 / 0.31.11 / 8.23.1 | |
-| 数据库 | PostgreSQL | 18（Debian 镜像） | `pg_trgm` 中文检索已实测 |
-| 任务队列 | `pg-boss` | 12.38.0 | 定时任务支持时区；单例队列 |
-| 图片 | `sharp` | 0.35.5 | 只在 worker 中运行；约束见第 4 节 |
-| 对象存储 | `@aws-sdk/client-s3` + `@aws-sdk/s3-request-presigner` | 3.1153.0 | R2 S3 端点，region 为 `auto` |
-| 打包 | `client-zip` / `archiver` | 2.5.1 / 8.0.0 | 浏览器端流式打包；服务端整包 ZIP 用存储模式 |
-| 人机验证 | `@cap.js/server` / `@cap.js/widget` | 4.0.5 / 0.1.58 | 自托管工作量证明，WASM 从本站提供 |
-| 其他 | `zod` 4.6.7 · `markdown-it` 15.0.3 · `pino` 10.4.0 · `cn-font-split` 7.4.3 | | |
+| 数据库 | PostgreSQL | 18（`postgres:18-bookworm`） | `pg_trgm`；镜像内带 `postgresql-client-18` 供备份 |
+| 任务队列 | `pg-boss` | 12.38.0 | 定时任务按 Asia/Shanghai；独占与单例队列 |
+| 图片 | `sharp` | 0.35.5 | 只在 worker 与命令行中运行 |
+| 对象存储 | `@aws-sdk/client-s3`、`lib-storage`、`s3-request-presigner` | 3.1153.0 | R2 S3 端点，region `auto` |
+| 打包 | `archiver` | 8.0.0 | 服务端整包 ZIP，存储模式 |
+| 人机验证 | `@cap.js/widget` / `@cap.js/wasm` | 0.1.58 / 0.0.8 | 服务端只调用 Cap Standalone 的 HTTP 接口 |
+| 邮件 | `nodemailer` | 10.1.7 | SMTP |
+| 入口 | Caddy | 2.11.7（`caddy:2.11.7-alpine`） | TLS 终止与两副本负载均衡 |
+| 其他 | `zod` 4.6.7 · `markdown-it` 15.0.3 · `pino` 10.4.0 · `pinyin-pro` 3.29.5 · `cn-font-split` 7.4.3 · `typescript` 6.0.3 | | |
 
 animal-island-ui 2.3.0 不进入运行时：它的样式会带入 3 个各约 1.1 MB 的 Noto Sans SC 字体（无 `unicode-range`），有 830 处写死的颜色，`Drawer` 服务端渲染报错，`Notification` 在 React 19 下报错。令牌已导出为 `design/tokens.css`。
 
@@ -390,94 +551,142 @@ animal-island-ui 2.3.0 不进入运行时：它的样式会带入 3 个各约 1.
 
 ```text
 src/
-  routes/       公开页、/admin、/api、/dl、/img、/review-img
-  server/       db（Drizzle）、auth、perm（角色与权限）、media（R2、键名、sharp）、
-                downloads（检查、计数、签发）、submissions、comments、search
-  ui/           组件与样式（tokens.css 来自 design/tokens.css）
-  shared/       zod schema、权限常量、错误码
+  routes/       页面（_site/、admin/）、服务端路由（/api、/dl、/img、/review-img）
+  server/       db（Drizzle schema）、auth（Better Auth、Cap）、perm（权限中间件）、
+                catalog（公开目录）、media（R2、键名、sharp、ZIP）、downloads（检查、计数、签发）、
+                submissions、comments、admin、account、favorites、jobs（pg-boss）、import（v1 导入）
+  ui/           组件与样式
+  shared/       ID 格式、角色与权限
+  start.ts      请求中间件：安全头、缓存规则、CSRF
   worker.ts     pg-boss 消费者与定时任务
   migrate.ts    迁移入口
-drizzle/        迁移文件（需单独复制进镜像）
-docker/         Dockerfile、compose.yaml
+  cli.ts        运维命令
+drizzle/        SQL 迁移
+deploy/         Caddy、防火墙、发布与环境脚本
 ```
 
-单包、两个入口；`worker.ts` 与 `migrate.ts` 用 esbuild 单独打包，`sharp` 保持为外部依赖。
+一个镜像、四个入口，都直接用 Bun 运行：web 为 `bun .output/server/index.mjs`（Nitro 构建产物），worker、migrate、命令行分别是 `bun src/worker.ts`、`bun src/migrate.ts`、`bun src/cli.ts`，从 TypeScript 源码运行，不另外打包。
+
+命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
+
+镜像（`Dockerfile`）多阶段构建：安装全部依赖并 `bun run build`；另装只含生产依赖的 `node_modules` 并删掉 musl 版本的原生包（基础镜像是 glibc，这些包永远加载不了）；运行层从 PGDG 安装 `postgresql-client-18`（`pg_dump`）和 `tini`，复制 `.output/`、`src/`、`drizzle/`，以 `bun` 用户运行，`tini` 作为 PID 1 转发信号。
 
 ### 12.2 Docker Compose
 
-```yaml
-services:
-  db:
-    image: postgres:18-bookworm
-    volumes: [pgdata:/var/lib/postgresql]          # 18 起 PGDATA 为 /var/lib/postgresql/18/docker，挂载上一级
-    environment: [POSTGRES_DB=chaochi, POSTGRES_USER=chaochi, POSTGRES_PASSWORD_FILE=/run/secrets/pg_password]
-    secrets: [pg_password]
-    healthcheck: { test: ["CMD", "pg_isready", "-U", "chaochi"], interval: 5s, retries: 20 }
-  migrate:
-    image: chaochi/app:${TAG}
-    command: ["node", "dist/migrate.mjs"]
-    env_file: .env
-    depends_on: { db: { condition: service_healthy } }
-    restart: "no"
-  web:
-    image: chaochi/app:${TAG}
-    command: ["node", ".output/server/index.mjs"]
-    env_file: .env                                 # SITE_NAME、SITE_DOMAIN、R2_BUCKET=wuwa 等
-    depends_on: { migrate: { condition: service_completed_successfully } }
-    healthcheck: { test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1))"] }
-  worker:
-    image: chaochi/app:${TAG}
-    command: ["node", "dist/worker.mjs"]
-    env_file: .env
-    mem_limit: 2g
-    cpus: 1                                        # 回填与长动图转码时不拖慢网站
-    depends_on: { migrate: { condition: service_completed_successfully } }
-  tunnel:
-    image: cloudflare/cloudflared:2026.10.1
-    command: ["tunnel", "run"]
-    environment: [TUNNEL_TOKEN_FILE=/run/secrets/tunnel_token]
-    secrets: [tunnel_token]
-secrets:
-  pg_password: { file: ./secrets/pg_password }
-  tunnel_token: { file: ./secrets/tunnel_token }
-volumes: { pgdata: {} }
-```
+`compose.yaml` 的默认值就是生产值（项目名 `chaochi`）：
 
-- 任何服务都不映射端口到宿主机。
-- 镜像基于 `node:24-bookworm-slim` 多阶段构建；Nitro 不会把 `drizzle/` 复制到 `.output`，Dockerfile 单独复制；worker 层安装 `postgresql-client-18` 用于 `pg_dump`。
-- `.dockerignore` 排除 `.env*`、`secrets/`、`node_modules`、`data/`。
+| 服务 | 作用 | 要点 |
+|---|---|---|
+| `db` | PostgreSQL 18 | `postgres:18-bookworm`；数据卷挂在 `/var/lib/postgresql`（18 起 PGDATA 在其下的 `18/docker`）；`shm_size` 256 MB |
+| `migrate` | 一次性迁移 | `bun src/migrate.ts`，`restart: "no"`；db 健康后执行 |
+| `web-a`、`web-b` | 网站 | 桥接网络 `app`（`172.30.47.0/24`）上的固定地址 `.11`、`.12`，不映射端口；迁移成功后启动；Docker 健康检查 `/api/health`；收到 SIGTERM 后最多 25 秒完成进行中的请求（`SERVER_SHUTDOWN_TIMEOUT`），`stop_grace_period` 40 秒 |
+| `worker` | 图片衍生、ZIP、备份、汇总 | 内存上限 2 GB（`memswap_limit` 同为 2 GB，不额外使用 swap）、1 个 CPU；停止时 pg-boss 最多用 60 秒完成进行中的任务，`stop_grace_period` 70 秒 |
+| `proxy` | Caddy 2.11.7 | 主机网络（受主机 nftables 过滤）；只读挂载 `./deploy` 到 `/etc/chaochi` 和证书目录；`cap_add: NET_BIND_SERVICE` |
 
-### 12.3 Nitro v3 beta 的回退
+- 所有应用容器读同一个环境文件（默认 `/opt/chaochi/app-env`），`cap_drop: [ALL]`、`no-new-privileges`；日志按 20 MB × 5 个文件轮转。
+- compose 层面的覆盖项（镜像、环境文件、证书目录、TLS 模式、域名、监听地址、子网）写在 `/opt/chaochi/deploy.conf`，不含密钥。
+- `local` 配置组另有 RustFS 和建桶脚本，只用于工作站上的测试栈。
+- 本地开发用 `compose.dev.yaml`：PostgreSQL 与 RustFS 只监听 127.0.0.1，凭据与 `src/server/env.ts` 的开发默认值一致。
 
-`@tanstack/nitro-v2-vite-plugin` 已在 Start 1.169 中移除，回退方案不是退回 Nitro v2，而是不用 Nitro 构建：用 `srvx` 包装 Start 产出的 fetch handler，由同一进程托管 `dist/client`。M0 验证四项：Docker 中启动、流式 SSR、sharp 作为外部依赖可加载、迁移目录已复制。任一项因 Nitro 失败就切换。
+入口细节：
+
+- **TLS**：`CHAOCHI_TLS_MODE=auto` 时，证书目录里有 Cloudflare Origin CA 证书对就用它（Cloudflare 设为「完全（严格）」），否则用 Caddy 内部 CA（只能配合「完全」）。从不申请 ACME 证书。
+- **转发**：Caddy 只信任来自 Cloudflare 网段（`deploy/cloudflare-ips.txt`）的 `CF-Connecting-IP`。轮询两个副本，每个请求单独建上游连接（`keepalive off`）。连接被拒绝的请求总会换副本重试；已建立连接后只重试 GET、HEAD、OPTIONS；重试最长 10 秒。
+- **健康检查**：主动检查每 2 秒请求一次 `/api/health`，连续 2 次失败摘除；一次连接失败被动摘除 5 秒。只有回环地址的请求能看到响应头 `X-Chaochi-Upstream`，`rollout.sh` 用它确认请求落到了哪个副本。
+- **防火墙**（`deploy/firewall.sh`）：nftables 表 `inet chaochi_fw` 只挂 input 钩子，不碰 Docker 的表。入站只放行本机回环、已建立的连接、IPv6 邻居发现、DHCP 回复、SSH，以及来自 Cloudflare 网段的 443，其余丢弃（IPv4 与 IPv6）。systemd 定时器每周刷新 Cloudflare 网段，获取失败时保留上次的列表。
+
+### 12.3 发布与零中断
+
+<!-- 待补：构建与发布流水线改为 GitHub Actions 构建镜像并推送到 GHCR、服务器用 git 检出公开仓库之后，按新流程改写本节 -->
+
+当前流程：
+
+1. 开发机执行 `deploy/push-src.sh`：把一个提交的 `git archive` 经 SSH 传到服务器，用 `rsync --delete` 原地更新 `/opt/chaochi/src`，提交号写进 `REVISION`。服务器地址取自不进仓库的 `deploy/.deploy-host` 或 `CHAOCHI_DEPLOY_HOST`。
+2. 服务器在 `/opt/chaochi/src` 执行 `deploy/rollout.sh --build "$(cat REVISION)"`：在服务器上构建镜像并滚动发布。`rollout.sh` 也接受 `--load <镜像.tar>` 或已经拉取的镜像。
+
+`/opt/chaochi/src` 只能原地更新：proxy 通过绑定挂载读取 `src/deploy`，目录被整体替换后它仍读已删除的旧目录，平滑重载会失败。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况就停止。
+
+`rollout.sh` 的步骤（任何一步失败都停止）：
+
+1. 预检：工具与 root 权限、环境文件、发布锁（同一时间只有一次发布）、proxy 配置校验。
+2. 把指针标签 `chaochi/app:latest` 指向新镜像，启动 db（如未运行），执行一次性迁移。迁移期间旧版本继续服务；迁移失败时不重启任何副本。
+3. 对 web-a、再对 web-b：
+   1. 另一个副本不健康、而这个副本仍健康时停止，避免两个副本同时不可用。
+   2. 进入副本的网络命名空间，用 nft 规则以 TCP reset 拒绝新连接。Caddy 把新请求改发到另一个副本，进行中的请求继续完成；脚本等这些连接关闭，最长 30 秒。
+   3. 用新镜像重建副本，等待 Docker 健康检查通过。
+   4. 经回环地址反复请求 `/api/health`，确认 Caddy 已把请求路由到这个副本。
+4. 重建 worker（先完成进行中的任务），写发布记录 `/opt/chaochi/state/releases.log`。
+5. 平滑重载 Caddy 配置（配置未变时不做任何事）。
+
+退出码：0 为已发布；1 为在发布生效前停止，此时指针标签退回原镜像，健康的副本继续服务，脚本打印各副本状态和回滚命令；2 为 web-a、web-b、worker 都已切换、只有最后的 Caddy 重载失败，发布已经生效，Caddy 继续使用原来的配置。
+
+- 同一标签再执行一次不做任何事；`--force` 滚动重启全部副本。
+- 回滚是用上一个标签再发布一次，同样逐个替换。回滚不撤销迁移，所以迁移只做扩展（第 7.1 节）。
+- 镜像变化后不要直接执行 `docker compose up -d`：它会同时重建 web-a 和 web-b，网站会中断。
+
+实测：
+
+| 场景 | 结果 |
+|---|---|
+| 生产，10 次发布（2026-10-20） | 每次 19–52 秒；每次发布期间经 Cloudflare 做 27–81 次健康探测，失败 0 次 |
+| 生产，备用 Caddy（`SO_REUSEPORT` 共用 443）接管期间重建 proxy（2026-10-20） | 探测失败 0 次。这是一次手工操作，`deploy/` 里没有对应脚本；按 `deploy/README.md`「已知限制」，常规重建 proxy 仍会中断数秒 |
+| 本地测试栈，两次连续发布（2026-10-20） | 每个副本约 6 秒，整次发布约 20 秒；期间以约 1,470 req/s 发送 90,377 个请求，失败 0 个 |
+
+发布期间只有一个副本在服务，负载必须在单个副本的能力之内（容量测试见 `deploy/README.md`）。
 
 ### 12.4 Cloudflare 与 R2 配置
 
+以下在 Cloudflare 控制台配置，不在仓库里，操作步骤见 `deploy/README.md`。
+
 | 项 | 配置 |
 |---|---|
-| DNS | 站点域名代理到 Tunnel；不需要图片子域 |
-| Cache Rules | `/img/*` 遵从源站头，源站没给缓存头就不缓存；`/assets/*`、`/fonts/*` 缓存一年；HTML 遵从源站头 |
+| DNS | 站点域名与 `www` 的 A 记录指向源站，保持代理开启（橙云）；不建任何指向源站的灰云记录 |
+| SSL/TLS | 源站用 Origin CA 证书，模式「完全（严格）」；开启「始终使用 HTTPS」 |
+| Cache Rules | `/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」；`/fonts/*` 缓存一年；HTML 遵从源站头。`/assets/*` 由 Nitro 加上 `public, max-age=31536000, immutable` |
 | Tiered Cache | 开启 Smart Tiered Cache |
-| WAF | `/dl/*`、`/api/batch/*`、`/api/*` 速率限制 |
-| 人机验证 | Cap 自托管：注册、登录、重置密码、游客评论、可疑下载；不需要 Cloudflare 侧配置 |
-| R2 CORS | 桶 `wuwa`：允许站点源的 GET（浏览器端打包）与 PUT（上传） |
+| 缓存清除 | 令牌只给 Zone · Cache Purge 权限；只在删除时按 URL 清除，衍生图与 ZIP 都按版本或内容哈希命名 |
+| R2 令牌 | 只授权桶 `wuwa`，权限为对象读写 |
+| R2 CORS | 桶 `wuwa`：允许站点源的 GET（浏览器端打包）与 PUT（上传），允许头 `content-type`，暴露 `ETag` |
 | 生命周期 | `uploads/tmp/` 7 天；`backups/` 30 天 |
-| 缓存清除 | 只在下架时按 URL 清除；衍生图与 ZIP 都按版本或内容哈希命名 |
 
-定时任务（pg-boss，Asia/Shanghai）：每小时把下载计数汇总到 `download_stats_daily`；每天 03:00 备份数据库到 `backups/postgres/`；每天 04:00 检查读操作告警；每天清理过期的投稿文件与草稿（第 5.2 节）。ZIP 只在包发布或内容变化时重建。
+人机验证不需要 Cloudflare 侧配置。
+
+### 12.5 队列与定时任务
+
+pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/server/jobs/handlers/`。迁移入口创建队列；web 进程只发送任务；worker 消费任务并注册定时任务（时区 Asia/Shanghai）。
+
+| 队列 | 用途 | 策略 | 重试 | 超时 | 每个 worker 并发 |
+|---|---|---|---|---|---|
+| `media.ingest` | 上传 → 待审核表情 | standard | 3 次 | 600 秒 | 1 |
+| `media.derive` | `p240`、`a160` 到 `review/` 或 `derived/` | exclusive（单例键为表情 ID） | 3 次 | 600 秒 | 6，sharp 串行 |
+| `media.full` | 按需生成 `full` | exclusive | 2 次 | 900 秒 | 1 |
+| `zip.build` | 整包 ZIP | exclusive（单例键为包 ID） | 3 次 | 1800 秒 | 1 |
+| `stats.rollup` | 每小时第 5 分钟汇总下载计数 | singleton | 1 次 | 300 秒 | 1 |
+| `db.backup` | 每天 03:00 `pg_dump -Fc` 到 `backups/postgres/` | singleton | 2 次 | 3600 秒 | 1 |
+| `r2.alert` | 每天 04:00 检查 R2 读操作告警 | singleton | 1 次 | 300 秒 | 1 |
+| `cleanup.daily` | 每天 04:30 清理窗口表与过期投稿 | singleton | 1 次 | 1800 秒 | 1 |
+
+备份把连接参数经 `PG*` 环境变量传给 `pg_dump`，密码不出现在进程列表里；失败的备份不留下对象。ZIP 只在内容变化时重建（第 6.1 节）。
 
 ---
 
-## 13. 里程碑
+## 13. 测试与检查
 
-| 阶段 | 内容 | 完成标志 |
-|---|---|---|
-| M0 基础 | 仓库、CI、Docker、schema、角色与权限、v1 导入、尺寸回填；联系源站确认授权范围 | Nitro 四项验证通过；309 个包与 15,272 张可在测试环境浏览；管理员调用设置角色接口返回 403 |
-| M1 浏览 | 公开页、`/img`、`p240` 与 `a160` 回填、缓存规则 | 设计稿公开页可用，性能预算达标 |
-| M2 下载与风控 | 查看与保存原图、整包 ZIP、打包清单、风控设置、紧急开关、CREDITS | 只有允许下载的已发布包能签发原图；留空的限额不生效，填写后生效 |
-| M3 投稿与后台 | 投稿、审核、上传流水线、预览图复制与清理、包与表情管理、分类合并、下架与缓存清除、审计 | 日常维护不再需要脚本；投稿状态与第 5.2 节一致；退回的图片在 `/img` 上不可访问 |
-| M4 评论 | 贴纸、回应、审核、站内通知 | 审核规则与设计稿一致 |
-| M5 打磨 | 字体分片、旧链接 301、无障碍、SEO、监控 | 移动端 Lighthouse 性能分数〔目标值待确认〕 |
+`bun run test` 依次运行九组测试：unit、ui、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 在 `develop` 上共 770 个测试全部通过。除 unit 和 ui 外，各组都连本地的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
+
+其他检查：
+
+| 检查 | 内容 |
+|---|---|
+| `tests/unit/server-fn-guard.test.ts` | 每个服务端函数都声明了权限中间件（第 5.1 节） |
+| `tests/admin/matrix.test.ts`、`tests/admin/audit.test.ts` | 后台服务端函数在未登录与三种角色下的权限矩阵；每个写操作都写审计日志 |
+| `tests/integration/presign-put.test.ts` | 预签名 PUT 把大小和类型签进签名头，在 RustFS 上拒绝其他类型与无长度的流式请求体 |
+| `scripts/check-client-bundle.ts` | 构建的最后一步：浏览器包里没有服务端代码（第 8.4 节） |
+| `bun run typecheck` | 生成路由树后 `tsc --noEmit` |
+| `bun src/cli.ts presign-selftest` | 在实际配置的存储上确认签名的 `Content-Length` 生效（第 3 节） |
+| `deploy/loadcheck.ts` | 发布期间持续发请求，统计失败数（第 12.3 节） |
+
+`tests/` 下的 `*-shots.ts`、`e2e-flow.ts`、`ui-smoke.ts` 是手动执行的浏览器脚本（截图与端到端流程），不在 `bun run test` 中。
 
 ---
 
@@ -488,37 +697,59 @@ volumes: { pgdata: {} }
 | D1 | 自研 TanStack Start，不用 EmDash | 难点是动图流水线、瀑布流、打包与贴纸评论，通用 CMS 帮不上；见附录 A |
 | D2 | 单桶 `wuwa`；网页图片经 `/img` 由 CDN 缓存；原图与 ZIP 用预签名链接 | 用户要求只用一个桶；对象小、键不可变，CDN 能承担 |
 | D3 | Base UI + 自建组件；animal-island-ui 只用令牌 | 它的样式和组件有体积与兼容问题 |
-| D4 | Drizzle 0.45.4 | 与 Better Auth 适配器 peer 范围兼容 |
-| D5 | 打包在浏览器端完成，不需要登录，每 200 张一个压缩包，分批签名 | 不占服务器带宽；分批签名让 2 分钟有效期不会中途过期 |
-| D6 | 搜索用 pg_trgm | 中文已实测可用，不需要额外服务 |
-| D7 | 单包、两个入口（web、worker） | 一个镜像，部署简单 |
-| D8 | 不引入 Redis | 队列、计数和会话都放在 PostgreSQL |
-| D9 | Node 24 LTS | Start 与 pg-boss 要求 ≥ 22.12 |
-| D10 | 接受 Nitro v3 beta 并固定版本 | 回退方案写进 M0 |
+| D4 | Drizzle 0.45.4 | 与 Better Auth 的 Drizzle 适配器兼容 |
+| D5 | 打包在浏览器端完成，不需要登录，分批签名，每批最多 20 张 | 不占服务器带宽；分批签名让 2 分钟有效期不会中途过期 |
+| D6 | 搜索用 pg_trgm | 中文子串检索可用，不需要额外服务 |
+| D7 | 一个镜像、四个入口（web、worker、migrate、cli） | 部署简单，版本一致 |
+| D8 | 不引入 Redis | 队列、计数、会话和人机验证通过状态都放在 PostgreSQL，两个副本共享 |
+| D9 | 运行时用 Bun 1.4.3 | web、worker、脚本和测试同一运行时；worker 与命令行直接运行 TypeScript 源码 |
+| D10 | Nitro v3 beta（`bun` 预设），固定版本 | Start 1.169 已移除 Nitro v2 插件；生产在用 |
 | D11 | 三种角色：站长、管理员、用户 | 权限下放给管理员，站长保留用户、风控与系统 |
 | D12 | 投稿对所有注册用户开放，单表 `submissions` 管理审核；待审核的预览图放 `review/v1/` | 不再由站长一人上传；未通过的图片不进 CDN |
 | D13 | 网页只显示 WebP；原图只在查看、保存、打包时下载 | 性能；GIF 原样保留 |
 | D14 | 风控全部可配置，留空不限，另有两个紧急开关 | 默认开放，被刷时能立即收紧 |
-| D15 | 站名「潮池」用变量实现 | 改名不改代码 |
+| D15 | 站名「潮池」用变量实现：`SITE_NAME` 给默认值，「系统设置」可覆盖 | 改名不改代码 |
 | D16 | 每个包一个「允许下载」开关；导入时全部关闭，官方包固定关闭 | 授权是项目级风险 |
-| D17 | 人机验证用自托管 Cap，不用 Turnstile | Turnstile 依赖 Cloudflare 网络，部分地区加载不稳定；Cap 在本站内完成 |
-| D18 | worker 独立容器，限制 2 GB 内存与 1 个 CPU | 开放投稿后要处理陌生人的文件；图片任务出问题不影响网站 |
+| D17 | 人机验证用自托管 Cap Standalone，不用 Turnstile | Turnstile 依赖 Cloudflare 的挑战服务，部分地区加载不稳定 |
+| D18 | worker 独立容器，限制 2 GB 内存与 1 个 CPU；sharp 在进程内串行 | 开放投稿后要处理陌生人的文件；图片任务出问题不影响网站 |
+| D19 | 入口为 Cloudflare 代理 + 源站 Caddy + nftables 只放行 Cloudflare，不用 Tunnel | 源站 Caddy 承担两个副本的负载均衡、重试与排空；只有 Cloudflare 能连到源站，`CF-Connecting-IP` 可信 |
+| D20 | 两个 web 副本，`rollout.sh` 逐个排空、替换 | 发布不中断访问；迁移只做扩展 |
+| D21 | 用户投稿只能经「投稿审核」上线 | 只有审核会应用授权声明与「允许下载」 |
+| D22 | 仓库公开，地址与密钥不进仓库 | 由 `.gitignore`、`.dockerignore`、不进仓库的部署主机文件和 GitHub push protection 共同保证 |
 
 ---
 
 ## 附录 A：为什么不用 EmDash
 
-EmDash（Cloudflare 出品的 Astro 全栈 CMS）作为通用 CMS 更完整：后台、通行密钥与 OAuth、带 Turnstile 的评论审核、签名直传的媒体库、修订与定时发布都是现成的。但本项目的难点它帮不上：1.5 万张动图的 WebP 流水线、依赖宽高的瀑布流、打包与 CREDITS、评论贴纸、角色与画师的多对多、旧链接 301。用通用集合模拟这些模型、改评论核心支持贴纸、在 Node 上为插件沙箱跑 workerd，成本都比自研高，而且 Astro 不符合指定栈。
+EmDash（Cloudflare 出品的 Astro 全栈 CMS）作为通用 CMS 更完整：后台、通行密钥与 OAuth、带 Turnstile 的评论审核、签名直传的媒体库、修订与定时发布都是现成的。但本项目的难点它帮不上：1.5 万张动图的 WebP 流水线、依赖宽高的瀑布流、打包与 CREDITS、评论贴纸、角色与画师的多对多、旧链接 301。用通用集合模拟这些模型、改评论核心支持贴纸、为插件沙箱另跑 workerd，成本都比自研高，而且 Astro 不符合指定栈。
 
 借鉴：EmDash 的签名直传与最低权限角色；Garrul 的楼中楼、回应、编辑时限与分层反垃圾；Ecoku 的「贴纸以纯文本标记保存、显示时渲染」与删除保留墓碑。三者都不直接部署。
 
-## 附录 B：评审与变更记录
+## 附录 B：变更记录
 
-- v1 经 Fable 评审定稿（D1–D11）。当时与 Fable 不一致的两点保留至今：衍生图键保留包名这一层（用户要求按类别分目录）；cloudflared 的 `TUNNEL_TOKEN_FILE` 经源码确认可用。
+v1 → v2（设计稿）：
+
+- v1 经 Fable 评审定稿（D1–D11）。当时保留的分歧：衍生图键保留包名这一层（用户要求按类别分目录）。
 - v2 按用户反馈修改：改为单桶（v1 为私有桶加公开桶 `wuwa-public`）；打包不再要求登录；角色从两级改为三级并开放投稿；新增网页只用 WebP、可配置风控与下架清除缓存；站名改为变量。
-- v2 的新机制经 Fable 评审，采纳的修改：`/img` 地址必带版本号、Cache Rule 遵从源站头、`/img` 不经过认证中间件；待审核预览图放 `review/v1/`，通过后复制；单张与打包分开限速，计数每小时汇总到普通表；表情不共用对象；修改已发布的包时校验基准版本；站长角色显式包含插件权限；投稿模式只由站长修改；审计记录代操作人；权限检查走共用中间件。
+- v2 的新机制经 Fable 评审，采纳的修改：`/img` 地址必带版本号、Cache Rule 遵从源站头、`/img` 不经过认证；待审核预览图放 `review/v1/`，通过后复制；单张与打包分开限速，计数每小时汇总到普通表；表情不共用对象；修改已发布的包时校验基准版本；站长角色显式包含插件权限；投稿模式只由站长修改；审计记录代操作人；权限检查走共用中间件。
 - 用户要求人机验证改用 Cap（D17），worker 保持独立并限制 CPU（D18）。
 - 2026-10-20 重新实测 `a160`：此前的抽帧脚本输出的是静态长图，修正后为 109 KB（14 帧）与 188 KB（23 帧）。
+
+v2 → v3（按实现，2026-10-20）：
+
+- 运行时从 Node.js 24 改为 Bun 1.4.3，Nitro 预设从 `node_server` 改为 `bun`；worker 与迁移不再用 esbuild 打包，直接运行源码。v2 为 Nitro beta 准备的回退方案（用 `srvx` 包装 fetch handler）没有用到。
+- 入口从 Cloudflare Tunnel（cloudflared 容器）改为 Cloudflare 代理 DNS + Origin CA + 源站 Caddy + nftables，web 从一个副本改为两个，新增零中断发布脚本（D19、D20）。
+- 人机验证从内嵌 `@cap.js/server`（挑战存 PostgreSQL）改为自托管的 Cap Standalone 服务器，应用只调用它的校验接口；保护范围增加发送验证邮件。
+- Better Auth 只启用邮箱密码；v2 计划的通行密钥与 GitHub OAuth 未实现。邮箱验证改为只在配置了 SMTP 时要求。
+- 衍生图并发从「每进程 1 个任务」改为「6 个任务、sharp 串行」；每帧都相同的动图按静态图保存；静态图的 `full` 为 WebP q80。
+- 预签名 PUT 签入 `Content-Length` 与 `Content-Type`，在 R2 上用 `presign-selftest` 验证。
+- R2 读操作告警只按原图与 ZIP 的签发次数估算，不再计入 `/img` 回源。
+- 缓存清除由 web 进程在后台删除操作中执行，而不是 worker。
+- ZIP 内容哈希升级为 v2，覆盖条目名、顺序与 `CREDITS.txt` 正文。
+- 后台「发布」不再能直接发布属于用户投稿的表情（D21）；上传保持选择顺序。
+- 评论落地了具体参数：包的评论区 ID 用 `String(pack.id)`；最热 = 回应数 + 2 × 回复数；首评审核对所有作者生效；回应与举报需要登录。
+- 原计划的里程碑 M0–M5 改为按模块分道开发；公开浏览页与打包清单界面仍在进行（第 8.3 节）。
+- 仓库公开前移除了文档与脚本中的服务器地址和账号标识（D22）。
 
 ## 参考来源
 
@@ -529,9 +760,13 @@ EmDash（Cloudflare 出品的 Astro 全栈 CMS）作为通用 CMS 更完整：�
 - pg-boss 定时任务：<https://pgboss.io/api/scheduling>
 - Drizzle 迁移：<https://orm.drizzle.team/docs/migrations>
 - sharp 构造参数：<https://sharp.pixelplumbing.com/api-constructor>
-- client-zip：<https://github.com/Touffy/client-zip>
-- cloudflared token 文件：<https://github.com/cloudflare/cloudflared/blob/master/cmd/cloudflared/tunnel/subcommands.go>
+- Caddy `reverse_proxy`：<https://caddyserver.com/docs/caddyfile/directives/reverse_proxy>
+- Cloudflare IP 网段：<https://www.cloudflare.com/ips/>
+- Cloudflare Origin CA：<https://developers.cloudflare.com/ssl/origin-configuration/origin-ca/>
+- Cap 组件：<https://www.npmjs.com/package/@cap.js/widget>
 - PostgreSQL Docker 镜像：<https://hub.docker.com/_/postgres>
+- Bun Docker 镜像：<https://hub.docker.com/r/oven/bun>
+- client-zip：<https://github.com/Touffy/client-zip>
 - cn-font-split：<https://www.npmjs.com/package/cn-font-split>
 - 寒蝉圆黑体：<https://github.com/Warren2060/ChillRoundGothic>（OFL-1.1）
 - animal-island-ui：<https://github.com/guokaigdg/animal-island-ui>（MIT）
