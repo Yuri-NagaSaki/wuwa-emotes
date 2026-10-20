@@ -32,6 +32,8 @@ export interface CommentsSectionProps {
   /** Load right away instead of when scrolled near (default: lazy). */
   eager?: boolean
   className?: string
+  /** Element id (default "comments"; a second thread on the same page needs another). */
+  id?: string
 }
 
 const SORTS = [
@@ -44,7 +46,7 @@ const REPORT_REASONS = ['广告或引流', '人身攻击', '色情低俗', '剧�
 
 type Target = { item: Item; root: number }
 
-export function CommentsSection({ threadType, threadId, packId, packStickers, eager, className }: CommentsSectionProps) {
+export function CommentsSection({ threadType, threadId, packId, packStickers, eager, className, id = 'comments' }: CommentsSectionProps) {
   const ref = useRef<HTMLElement>(null)
   const phone = useMediaQuery(PHONE_QUERY)
   const [near, setNear] = useState(!!eager)
@@ -266,7 +268,7 @@ export function CommentsSection({ threadType, threadId, packId, packStickers, ea
   }
 
   return (
-    <section ref={ref} className={['sec cm', className].filter(Boolean).join(' ')} id="comments" aria-label="评论">
+    <section ref={ref} className={['sec cm', className].filter(Boolean).join(' ')} id={id} aria-label={threadType === 'emoji' ? '这张表情的评论' : '评论'}>
       {/* React 19 hoists and dedupes this into <head> */}
       <link rel="stylesheet" href={commentsCss} precedence="default" />
       <div className="cm-head">

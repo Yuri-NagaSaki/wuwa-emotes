@@ -1,4 +1,5 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import type { Sticker } from '#/server/comments/types'
 import { Tag } from '../Chip'
 import { cx } from '../cx'
 import { fmtB } from '../format'
@@ -18,6 +19,11 @@ import { useFavorite } from './useFavorite'
 const useIsoLayoutEffect = typeof window === 'undefined' ? useEffect : useLayoutEffect
 const STRIP = 9
 
+// the sticker's own comment thread (thread "emoji", id = the emoji id): collapsed under the card, loaded
+// when opened (or right away for a #comments / #c-123 link, e.g. from a notification)
+const CommentsSection = lazy(() => import('../comments').then((m) => ({ default: m.CommentsSection })))
+const wantsComments = () => typeof location !== 'undefined' && /^#(comments|c-\d+)$/.test(location.hash)
+
 export interface EmojiDialogProps {
   items: readonly DialogEmoji[]
   index: number
@@ -27,6 +33,9 @@ export interface EmojiDialogProps {
   priority?: boolean
   /** Show the pack title as a link (cross-pack streams). */
   linkPack?: boolean
+  /** The pack page's id and stickers, for the 本包 tab of the comment sticker picker. */
+  packId?: number | null
+  packStickers?: readonly Sticker[] | null
 }
 
 function focusables(root: HTMLElement): HTMLElement[] {
@@ -35,13 +44,17 @@ function focusables(root: HTMLElement): HTMLElement[] {
   )
 }
 
-export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack }: EmojiDialogProps) {
+export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack, packId, packStickers }: EmojiDialogProps) {
   const e = items[index]!
   const titleId = useId()
   const cardRef = useRef<HTMLDivElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
   const [orig, setOrig] = useState<{ id: string; url: string } | null>(null)
   const [loaded, setLoaded] = useState<string | null>(null)
+  const [comments, setComments] = useState(false)
+  useEffect(() => {
+    if (wantsComments()) setComments(true)
+  }, [])
   const imgRef = useRef<HTMLImageElement>(null)
   const dl = useDownload()
   const fav = useFavorite({ type: 'emoji', id: e.id })
@@ -71,6 +84,11 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
       if (ev.defaultPrevented || ev.altKey || ev.ctrlKey || ev.metaKey) return
+      // keys inside the comment thread's own overlays (sticker picker, report / delete dialogs) and its
+      // controls belong to them, not to the sticker dialog
+      const t = ev.target as Element | null
+      if (t?.closest?.('.drawer, .modal-wrap, .picker, .menu') || wrapRef.current?.querySelector('.picker')) return
+      if ((ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') && t?.closest?.('.em-cm')) return
       if (ev.key === 'Escape') {
         ev.preventDefault()
         onClose()
@@ -135,13 +153,13 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
   return (
     <div className="em-layer">
       <div className="scrim em-scrim" aria-hidden="true" onClick={onClose} />
-      <div className="em-wrap" ref={wrapRef} onKeyDown={trap}>
+      <div className={cx('em-wrap', comments && 'has-cm')} ref={wrapRef} onKeyDown={trap}>
         <button type="button" className="icon-btn em-nav" onClick={() => go(index - 1)} disabled={index === 0} aria-label="上一张">
           <Icon name="left" />
         </button>
         <div
           ref={cardRef}
-          className={cx('em-card', priority && 'no-anim')}
+          className={cx('em-card', priority && 'no-anim', comments && 'has-cm')}
           role="dialog"
           aria-modal="true"
           aria-labelledby={titleId}
@@ -278,6 +296,18 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
               <span className="kbd">←</span>
               <span className="kbd">→</span> 切换 · <span className="kbd">Esc</span> 关闭
             </span>
+          </div>
+          <div className="em-cm">
+            <button type="button" className="em-cm-toggle" aria-expanded={comments} onClick={() => setComments((v) => !v)}>
+              <Icon name="chat" size="sm" />
+              <span>这张表情的评论</span>
+              <Icon name={comments ? 'up' : 'down'} size="sm" />
+            </button>
+            {comments ? (
+              <Suspense fallback={<p className="em-cm-wait">评论加载中…</p>}>
+                <CommentsSection key={e.id} threadType="emoji" threadId={e.id} packId={packId ?? null} packStickers={packStickers ?? null} eager className="em-thread" id="emoji-comments" />
+              </Suspense>
+            ) : null}
           </div>
         </div>
         <button type="button" className="icon-btn em-nav" onClick={() => go(index + 1)} disabled={index >= n - 1} aria-label="下一张">
