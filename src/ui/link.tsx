@@ -15,5 +15,8 @@ export interface AppLinkProps extends Omit<AnchorHTMLAttributes<HTMLAnchorElemen
  * should use the typed <Link> directly.
  */
 export function AppLink({ to, exact, ...rest }: AppLinkProps) {
-  return <Link to={to as '/'} activeOptions={{ exact: exact ?? to === '/', includeSearch: false }} {...rest} />
+  // activeProps={} drops the router's default "active" class; styles key off aria-current instead
+  return <Link to={to as '/'} activeOptions={{ exact: exact ?? to === '/', includeSearch: false }} activeProps={NO_ACTIVE_PROPS} {...rest} />
 }
+
+const NO_ACTIVE_PROPS = {}

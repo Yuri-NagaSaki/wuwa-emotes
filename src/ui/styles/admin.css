@@ -23,7 +23,7 @@
 .adm-top .crumbs { flex: 1; min-width: 0; }
 .adm-top .input { min-height: 38px; width: 260px; padding: 0 12px; border-width: 2px; }
 .adm-top .input input { height: 34px; font-size: 13.5px; }
-.adm-burger { display: none; }
+.adm-top .adm-burger { display: none; }
 .adm-me .ibtn { margin-left: auto; }
 .adm-top .bell { position: relative; }
 .adm-body { flex: 1; padding: 22px 24px 40px; display: grid; grid-auto-rows: max-content; gap: 20px; align-content: start; }
@@ -185,7 +185,7 @@
 @media (max-width: 760px) {
   .adm { grid-template-columns: minmax(0, 1fr); font-size: 13.5px; }
   .adm-side { display: none; }
-  .adm-burger { display: inline-grid; }
+  .adm-top .adm-burger { display: inline-grid; }
   .adm-top { padding: calc(10px + var(--safe-top)) 14px 10px; }
   .adm-top .input, .adm-top .hide-sm { display: none; }
   .adm-body { padding: 16px 14px calc(30px + var(--safe-bottom)); gap: 16px; }

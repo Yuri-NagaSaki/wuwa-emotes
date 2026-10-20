@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
 import { getAdminViewer, type PublicConfig, type ViewerSummary } from '#/server/ui/public-config'
 import { AdminShell } from '#/ui/admin/AdminShell'
+import { EmptyState } from '#/ui/EmptyState'
 import { useSiteConfig } from '#/ui/site-config'
 import adminCss from '#/ui/styles/admin.css?url'
 import { toast } from '#/ui/Toast'
@@ -31,6 +32,12 @@ export const Route = createFileRoute('/admin')({
     }
   },
   component: AdminLayout,
+  // unknown /admin/* paths render inside the shell (the 403 check still runs first)
+  notFoundComponent: () => (
+    <EmptyState icon="info" title="这个页面不存在" className="adm-deny">
+      管理台里没有这个页面，可能是链接写错了，或者功能还没有上线。
+    </EmptyState>
+  ),
 })
 
 function AdminLayout() {
