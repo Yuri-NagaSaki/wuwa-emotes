@@ -109,7 +109,7 @@ flowchart LR
 **登录提示 Cookie。** Cloudflare 的缓存键不含 Cookie：匿名请求把公开页放进边缘缓存后，带会话 Cookie 的请求也会命中这份匿名 HTML（`cf-cache-status: HIT`），源站的 `private, no-store` 根本没有机会生效。根路由下发的 viewer 于是为空，页头显示「登录」，没有模拟登录条，而且根配置不随页面切换刷新（`staleTime: Infinity`）。补救靠一个只表示「这个浏览器有会话」的 Cookie `tp_signed_in=1`（`src/shared/signed-in-hint.ts`）：
 
 - 不含身份信息，不是 HttpOnly（页面要读它），`Path=/`、`SameSite=Lax`，生产环境带 `Secure`，有效期与会话 Cookie 相同。
-- 服务端由 Better Auth 的 after 钩子维护（`src/server/auth/signed-in-hint.ts`），对 `/api/auth/*` 与服务端函数里的 `auth().api.*` 都生效：响应设置会话 Cookie 时设置它（登录、注册后直接登录、验证邮件自动登录、模拟登录与结束模拟、每日刷新会话），响应让会话 Cookie 过期时清除它（退出、会话已失效）；会话有效但请求里没有提示的 `get-session` 会补上它（上线前已登录的会话）。只有带会话 Cookie 的请求，响应里才会出现它的 `Set-Cookie`，而这些响应本来就是 `private, no-store`。
+- 服务端由 Better Auth 的 after 钩子维护（`src/server/auth/signed-in-hint.ts`），对 `/api/auth/*` 与服务端函数里的 `auth().api.*` 都生效：响应设置会话 Cookie 时设置它（登录、注册后直接登录、验证邮件自动登录、模拟登录与结束模拟、每日刷新会话），响应让会话 Cookie 过期时清除它（退出、会话已失效）；会话有效但请求里没有提示的 `get-session` 会补上它（上线前已登录的会话）。所以它的 `Set-Cookie` 只会和会话 Cookie 自己的 `Set-Cookie` 一起出现，或者出现在带有效会话 Cookie 的请求的响应上，这两种响应本来就不共享缓存。
 - 缓存规则不看它：只带提示的请求仍按匿名处理，匿名 HTML 照常共享。所以服务端从不在匿名响应上清除一个过期的提示，由浏览器自己删。
 - 浏览器端：`<head>` 里的启动脚本看到提示就给 `<html>` 加 `data-viewer-pending`，页头先隐藏「登录」但保留位置，3 秒后无论如何恢复。水合后如果根路由的 viewer 为空而提示还在，调用一次 `getPublicConfig()`（从不共享缓存）：拿到 viewer 就重新加载根路由，页头、模拟登录条和其他读根配置的组件随之更新；拿不到就删掉提示（`src/ui/shell/viewer-refresh.ts`）。没有提示的匿名访客不多发请求。重新加载根路由时，已超过 `staleTime` 的页面数据也会随之重新请求一次。评论区的身份来自评论服务端函数，每个访客各自请求，不受这个问题影响。
 - 可选的额外保险，目前没有配置：站长可以在 Cloudflare 加一条 Cache Rule，请求 Cookie 含 `better-auth.session_token`（也匹配 `__Secure-` 前缀的名字）时绕过缓存，只作用于页面，排除 `/img/`、`/assets/`、`/fonts/` 与 `/_serverFn/`。有了它，登录用户的页面请求直接回源；提示机制照样保留，规则缺失或失效时仍然有效。

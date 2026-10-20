@@ -8,9 +8,10 @@ import { HINT_MAX_AGE, hasSignedInHint, hintChangeFor, SIGNED_IN_HINT, type Hint
 //   verification link's auto sign-in, 模拟登录 and 结束模拟, the daily session refresh;
 // - a response that expires the session cookie clears it: sign-out, a session that no longer exists;
 // - get-session with a live session and no hint in the request sets it (sessions from before the hint).
-// Only responses to requests that carry a session cookie ever get the hint's Set-Cookie, and those are
-// private already. A stale hint without a session is cleared by the browser, never here: a Set-Cookie
-// on anonymous HTML would make it private (decideCacheControl).
+// So the hint's Set-Cookie only rides along with a Set-Cookie for the session cookie itself, or on a
+// request that carries a live session cookie: either way the response is never shared already
+// (decideCacheControl). A stale hint without a session is cleared by the browser, never here: a
+// Set-Cookie on anonymous HTML would make it private.
 
 interface SessionLike {
   session?: { expiresAt?: Date | string | null } | null

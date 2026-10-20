@@ -4,7 +4,7 @@
 // script fetches the pack page without cookies (its Cache-Control must be shareable) and serves
 // those bytes to the browser for the document request (request interception, cf-cache-status HIT).
 //
-//   1. signed in (sign-up in the page, so the browser stores the real Set-Cookies): the header shows the
+//   1. signed in (sign-in from the page, so the browser stores the real Set-Cookies): the header shows the
 //      avatar instead of 登录 and the composer reads 以 <name> 的身份评论, both within 1 s of
 //      DOMContentLoaded, and 登录 is never painted on the way; 1b. the same on an aged copy of /packs,
 //      reporting which page loaders run again;
@@ -283,6 +283,32 @@ async function signUp(l: Lane, label: string): Promise<{ id: string; email: stri
   return { id: out.json.user.id, email, name }
 }
 
+/** Sign in from the page (the account was made from Node, so this browser holds no cookie until now). */
+async function signIn(l: Lane, email: string) {
+  await l.page.goto(`${BASE}/api/health`)
+  const status = await l.page.evaluate(
+    async (token: string, body: string) =>
+      (await fetch('/api/auth/sign-in/email', { method: 'POST', headers: { 'content-type': 'application/json', 'x-cap-token': token }, body })).status,
+    capToken(),
+    JSON.stringify({ email, password: PASSWORD, rememberMe: true }),
+  )
+  if (status !== 200) throw new Error(`${l.name}: sign-in failed (${status})`)
+}
+
+/** An account made outside any browser. */
+async function createAccount(label: string): Promise<{ id: string; email: string; name: string }> {
+  const email = `${label}-${Date.now()}@lane-v.test`
+  const name = '漂泊者小号'
+  const res = await fetch(`${BASE}/api/auth/sign-up/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: BASE, 'x-cap-token': capToken(), 'cf-connecting-ip': '10.86.1.1' },
+    body: JSON.stringify({ email, password: PASSWORD, name }),
+  })
+  const json = (await res.json().catch(() => null)) as { user?: { id: string } } | null
+  if (res.status !== 200 || !json?.user) throw new Error(`sign-up failed (${res.status})`)
+  return { id: json.user.id, email, name }
+}
+
 async function cookie(l: Lane, name: string) {
   return (await l.ctx.cookies()).find((c) => c.name === name)
 }
@@ -324,10 +350,11 @@ try {
 
   // 1. signed in, anonymous HTML from the "edge cache"
   const a = await lane(browser, 'signed-in')
-  const user = await signUp(a, 'fan')
+  const user = await createAccount('fan')
+  await signIn(a, user.email)
   const hint = await cookie(a, SIGNED_IN_HINT)
   const sessionName = (await a.ctx.cookies()).find((c) => /better-auth\.session_token$/.test(c.name))?.name ?? null
-  report.cookiesAfterSignUp = (await a.ctx.cookies()).map((c) => ({ name: c.name, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite, days: c.expires > 0 ? Math.round((c.expires * 1000 - Date.now()) / 86_400_000) : 'session' }))
+  report.cookiesAfterSignIn = (await a.ctx.cookies()).map((c) => ({ name: c.name, httpOnly: c.httpOnly, secure: c.secure, sameSite: c.sameSite, days: c.expires > 0 ? Math.round((c.expires * 1000 - Date.now()) / 86_400_000) : 'session' }))
   check(sessionName === '__Secure-better-auth.session_token', `session cookie stored (${sessionName})`)
   check(hint?.value === '1' && hint.httpOnly === false && hint.secure === true && hint.sameSite === 'Lax' && hint.path === '/', `hint cookie stored: ${JSON.stringify(hint && { value: hint.value, httpOnly: hint.httpOnly, secure: hint.secure, sameSite: hint.sameSite, path: hint.path })}`)
   a.replay = { path, html: anonHtml, cacheControl: anonCache }
