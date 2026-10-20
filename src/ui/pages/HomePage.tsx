@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import type { CharacterCard, ExploreData, HomeData } from '#/server/catalog/types'
+import type { CharacterCard, EmojiTile, HomeData } from '#/server/catalog/types'
 import { Button, buttonClass } from '../Button'
 import { Chip } from '../Chip'
 import { fmtN, fmtW } from '../format'
@@ -8,13 +8,13 @@ import { AppLink } from '../link'
 import { PackCard } from '../PackCard'
 import { SectionHead } from '../Section'
 import { CharacterStrip } from './CharacterStrip'
-import { cardProps, packHref, tagHref } from './model'
+import { cardProps, packHref } from './model'
 import { PackMasonry } from './PackMasonry'
 import { palette } from './palette'
 import { StreamTiles } from './StreamTiles'
 
-// 首页: the tidepool hero (stats, floating stickers), 角色潮汐, 站长精选, 新上架, and teasers for the
-// gallery and 探索. Only static WebP posters load up front; the hero art is inline SVG.
+// 首页: the tidepool hero (stats, floating stickers), 角色潮汐, 站长精选, 新上架, 潮汐流 (random stickers
+// with two focus tiles) and 官方表情. Only static WebP posters load up front; the hero art is inline SVG.
 
 const SPOTS: [number, number, string][] = [
   [16, 20, '-0.4s'],
@@ -65,7 +65,7 @@ function PoolArt({ chars, today, downloads }: { chars: CharacterCard[]; today: n
   )
 }
 
-export function HomePage({ home, explore, current }: { home: HomeData; explore: ExploreData | null; current: string | undefined }) {
+export function HomePage({ home, stream, current }: { home: HomeData; stream: readonly EmojiTile[]; current: string | undefined }) {
   const s = home.stats
   const withAvatar = home.characters.filter((c) => c.avatar)
   const featured = home.featured.length ? home.featured : home.pinned.length ? home.pinned : home.latest.slice(0, 5)
@@ -156,11 +156,14 @@ export function HomePage({ home, explore, current }: { home: HomeData; explore: 
         </section>
       ) : null}
 
-      {explore?.today.emojis.length ? (
+      {stream.length ? (
         <section className="sec">
           <div className="wrap">
-            <SectionHead title="潮汐流" tone="mint" sub="今天冲上岸的表情，悬停播放" more={{ label: '进入画廊', to: '/gallery' }} />
-            <StreamTiles tiles={explore.today.emojis} current={current} size={120} />
+            <SectionHead title="潮汐流" tone="mint" sub="随机冲上岸的表情，悬停播放" />
+            {/* two 2×2 focus tiles (1st and 10th), as in the prototype: .home-stream in pages.css */}
+            <div className="home-stream">
+              <StreamTiles tiles={stream} current={current} size={120} />
+            </div>
             <div className="stream-cta">
               <AppLink to="/gallery" className={buttonClass()}>
                 <Icon name="wave" />
@@ -171,51 +174,22 @@ export function HomePage({ home, explore, current }: { home: HomeData; explore: 
         </section>
       ) : null}
 
-      {explore ? (
+      {home.official.length ? (
         <section className="sec">
           <div className="wrap">
-            {/* plain heading in the body font: 去探索 would pull three more display-font shards (~20 KB) */}
-            <SectionHead title={<span className="dyn">去探索</span>} plain sub="按角色、画师、分组逛，或者随手抽一包" more={{ label: '探索', to: '/explore' }} />
-            <div className="teasers">
-              {explore.randomPack ? (
-                <div className="teaser">
-                  <h3>
-                    <Icon name="sparkle" />
-                    随机来一包
-                  </h3>
-                  <AppLink to={packHref(explore.randomPack.slug)} className="mini-pack">
-                    {explore.randomPack.cover ? <img src={explore.randomPack.cover.poster} width={56} height={56} alt="" loading="lazy" decoding="async" /> : <span />}
-                    <span>
-                      <b>{explore.randomPack.title}</b>
-                      <small>{explore.randomPack.count} 张</small>
-                    </span>
-                  </AppLink>
-                  <p>每次打开都不一样。想再抽一次？去探索页。</p>
-                </div>
-              ) : null}
-              <div className="teaser">
-                <h3>
-                  <Icon name="hash" />
-                  按分组逛
-                </h3>
-                <div className="cloud">
-                  {(['group', 'project', 'tool'] as const)
-                    .flatMap((dim) => explore.facets.tags[dim].map((t) => ({ ...t, dim })))
-                    .slice(0, 8)
-                    .map((t) => (
-                    <AppLink key={`${t.dim}:${t.slug}`} to={tagHref(t.dim, t.slug)} style={{ '--tg': 'var(--c-yellow)' } as CSSProperties}>
-                      {t.name}
-                      <small>{t.packCount}</small>
-                    </AppLink>
-                  ))}
-                  {explore.facets.characters.slice(0, 6).map((c) => (
-                    <AppLink key={c.slug} to={`/packs?character=${encodeURIComponent(c.slug)}`}>
-                      {c.name}
-                      <small>{c.packCount}</small>
-                    </AppLink>
-                  ))}
-                </div>
-              </div>
+            <SectionHead title="官方表情" tone="deep" sub="转载自鸣潮官方，本站只做整理" />
+            <div className="official-row">
+              {home.official.map((p) => (
+                <AppLink key={p.id} to={packHref(p.slug)} className="ocard">
+                  {p.cover ? <img src={p.cover.poster} width={58} height={58} alt="" loading="lazy" decoding="async" /> : <span className="ocard-ph" />}
+                  <div>
+                    <b>{p.title.replace(/^【官转】\s*/, '')}</b>
+                    <small>
+                      {p.count} 张 · {fmtW(p.downloads)} 下载
+                    </small>
+                  </div>
+                </AppLink>
+              ))}
             </div>
           </div>
         </section>

@@ -4,17 +4,19 @@ import { commentFormTokenFn, createCommentFn, editCommentFn, previewCommentFn } 
 import type { CommentItem, CreateResult, PreviewResult, Sticker, ThreadConfig } from '#/server/comments/types'
 import { Button, IconButton } from '../Button'
 import { capHeaders } from '../cap/load'
+import { useInvisibleCap } from '../cap/useInvisibleCap'
 import { cx } from '../cx'
 import { Input, Textarea } from '../Field'
 import { Icon } from '../Icon'
 import { toast } from '../Toast'
 import { StickerPicker } from './StickerPicker'
-import { type CapStatus, useGuestCap } from './useGuestCap'
 import { composeBody, errorMessage, guestIdentity, markersIn, rememberGuest, rememberStickers, splitBody, stickersInHtml } from './util'
 
 // The comment form (new comment, reply, or edit). Guests fill in a name (and optionally an email, of
-// which only a salted hash is stored) and pass Cap invisibly (useGuestCap: no widget, a status next to
-// 发布); the token goes in the x-cap-token header exactly once. Signed-in users never see Cap.
+// which only a salted hash is stored) and pass Cap invisibly, the same way as the auth forms
+// (src/ui/cap/useInvisibleCap.ts): the proof of work starts when the guest starts writing, nothing is
+// shown while it runs; 发布 says 验证中… only if it has not finished yet, and a failed check shows one
+// line with 重试. The token goes in the x-cap-token header exactly once. Signed-in users never see Cap.
 // The hidden 「网站」 field is the honeypot; the form token proves the minimum fill time.
 // Markdown works (B / I / 引用 / 链接 in the toolbar, 预览 renders it on the server); no syntax hint.
 
@@ -44,6 +46,8 @@ export interface ComposerProps {
 }
 
 const TOKEN_REFRESH_MS = 20 * 3600_000
+/** capErrorMessage('missing' | 'invalid') in src/server/auth/cap.ts: this token, not this comment. */
+const CAP_REJECTED: ReadonlySet<string> = new Set(['请先完成人机验证', '人机验证已过期或无效，请重新验证'])
 
 export function Composer(props: ComposerProps) {
   const { viewer, config, replyTo, editing, phone, compact } = props
@@ -76,7 +80,14 @@ export function Composer(props: ComposerProps) {
   const tooLong = body.length > MAX_BODY
   const guestMode = !viewer && !editing
   const blocked = viewer?.banned || (!viewer && !config.guestsAllowed)
-  const cap = useGuestCap(guestMode && !blocked)
+  // solve only once the guest starts writing (most visitors of a pack page never comment)
+  const [engaged, setEngaged] = useState(false)
+  const cap = useInvisibleCap(guestMode && !blocked && engaged)
+  const warm = () => {
+    if (!guestMode) return
+    if (!engaged) setEngaged(true)
+    else cap.warm()
+  }
   const canSend = !busy && !blocked && !!body && !tooLong && remaining >= 0 && now >= readyAt && (!guestMode || !!guest.name.trim())
 
   function pick(s: Sticker) {
@@ -145,11 +156,6 @@ export function Composer(props: ComposerProps) {
         result = await editCommentFn({ data: { id: editing.id, body } })
       } else {
         const token = await freshToken()
-        const capToken = guestMode ? await cap.take() : null
-        if (guestMode && !capToken) {
-          toast({ message: '人机验证没有通过，评论还没有发出', detail: '点「重试」再验证一次', icon: 'shield', duration: 3500 })
-          return
-        }
         const data = {
           threadType: props.threadType,
           threadId: props.threadId,
@@ -159,8 +165,23 @@ export function Composer(props: ComposerProps) {
           [HONEYPOT_FIELD]: hpRef.current?.value ?? '',
           ...(guestMode ? { guestName: guest.name.trim(), guestEmail: guest.email.trim() } : {}),
         }
-        result = await createCommentFn({ data, headers: guestMode && capToken ? capHeaders(capToken) : undefined })
-        if (guestMode) rememberGuest({ name: guest.name.trim(), email: guest.email.trim() })
+        if (guestMode) {
+          const sent = await cap.run(async (capToken) => {
+            try {
+              return { error: null, result: await createCommentFn({ data, headers: capHeaders(capToken) }) }
+            } catch (err) {
+              // a token the server turned down is solved again and sent once more (CapSession.run)
+              if (CAP_REJECTED.has(errorMessage(err, ''))) return { error: { code: 'CAPTCHA_INVALID' }, result: null }
+              throw err
+            }
+          })
+          // no token: cap.failed shows the line with 重试
+          if (!sent?.result) return
+          result = sent.result
+          rememberGuest({ name: guest.name.trim(), email: guest.email.trim() })
+        } else {
+          result = await createCommentFn({ data })
+        }
       }
       if (stickers.length) rememberStickers(stickers)
       setText('')
@@ -224,7 +245,7 @@ export function Composer(props: ComposerProps) {
             maxLength={20}
             value={guest.name}
             onChange={(e) => setGuest({ ...guest, name: e.currentTarget.value })}
-            onFocus={() => cap.warm()}
+            onFocus={warm}
             autoComplete="nickname"
           />
           <Input
@@ -263,9 +284,9 @@ export function Composer(props: ComposerProps) {
           value={text}
           onChange={(e) => {
             setText(e.currentTarget.value)
-            cap.warm()
+            warm()
           }}
-          onFocus={() => cap.warm()}
+          onFocus={warm}
           placeholder={replyTo ? `回复 ${replyTo.name}` : '说点什么，或者直接甩一张贴纸'}
           aria-label={replyTo ? `回复 ${replyTo.name}` : '评论内容'}
           maxLength={MAX_BODY}
@@ -312,7 +333,6 @@ export function Composer(props: ComposerProps) {
           <Icon name="eye" size="sm" />
         </button>
         <div className="send">
-          {guestMode ? <CapChip status={cap.status} error={cap.error} onRetry={cap.retry} /> : null}
           <span className={cx('count', tooLong && 'err')}>
             {body.length} / {MAX_BODY}
           </span>
@@ -322,10 +342,19 @@ export function Composer(props: ComposerProps) {
             </Button>
           ) : null}
           <Button type="submit" variant="primary" size="sm" icon={editing ? 'check' : 'send'} disabled={!canSend} aria-busy={busy || undefined}>
-            {editing ? '保存' : replyTo ? '回复' : '发布'}
+            {guestMode && cap.waiting ? '验证中…' : editing ? '保存' : replyTo ? '回复' : '发布'}
           </Button>
         </div>
       </div>
+      {guestMode && cap.failed ? (
+        <div className="cm-capfail" role="alert">
+          <Icon name="warn" />
+          <span>人机验证没有完成，请检查网络后重试。</span>
+          <Button type="submit" size="xs">
+            重试
+          </Button>
+        </div>
+      ) : null}
       <StickerPicker
         open={picker}
         onClose={() => setPicker(false)}
@@ -338,29 +367,5 @@ export function Composer(props: ComposerProps) {
         anchorRef={pickerBtn}
       />
     </form>
-  )
-}
-
-/** Where the prototype shows 人机验证已通过 (.captcha): the state of the invisible check, with a retry. */
-function CapChip({ status, error, onRetry }: { status: CapStatus; error: string | null; onRetry: () => void }) {
-  if (status === 'idle') return null
-  if (status === 'failed') {
-    return (
-      <span className="captcha is-err" role="alert">
-        <span className="ok">
-          <Icon name="warn" size="sm" />
-        </span>
-        {error ?? '人机验证没有通过'}
-        <button type="button" onClick={onRetry}>
-          重试
-        </button>
-      </span>
-    )
-  }
-  return (
-    <span className={cx('captcha', status === 'solving' && 'is-busy')} role="status">
-      <span className="ok">{status === 'ready' ? <Icon name="check" size="sm" /> : null}</span>
-      {status === 'ready' ? '人机验证已通过' : '正在验证…'}
-    </span>
   )
 }

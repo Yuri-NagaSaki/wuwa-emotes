@@ -1,22 +1,26 @@
 import { useNavigate } from '@tanstack/react-router'
-import { useCallback } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { galleryFn } from '#/server/catalog/fns'
-import type { CharacterCard, EmojiTile, Page } from '#/server/catalog/types'
+import type { CharacterCard, EmojiTile, Page, PackCard as PackCardData } from '#/server/catalog/types'
 import { Button } from '../Button'
 import { Chip } from '../Chip'
 import { fmtN } from '../format'
 import { setAutoplayPref, useAutoplayPref } from '../motion'
 import { WaveLoader } from '../Section'
 import { Seg } from '../Seg'
-import { themeColor } from './model'
+import { AppLink } from '../link'
+import { PackCard } from '../PackCard'
+import { cardProps, characterColor, packHref } from './model'
+import { type StreamCell, StreamGrid } from './StreamGrid'
+import { streamEntries } from './stream-layout'
 import { StreamTiles } from './StreamTiles'
 import { Toggle } from './Toggle'
 import { useCursorList } from './useCursorList'
-import { WindowedGrid } from './WindowedGrid'
 
 // 潮汐画廊 /gallery: an endless grid of stickers from every pack, newest or in a seeded random order
-// (洗牌 = a new seed, shareable in the URL), filtered by character and animated/static. Only the
-// rows near the viewport are mounted.
+// (洗牌 = a new seed, shareable in the URL), filtered by character and animated/static. As in the
+// prototype the stream mixes 2×2 focus tiles, pack cards and a 潮汐小记 note between the stickers
+// (StreamGrid, stream-layout.ts). Only the rows near the viewport are mounted.
 
 export interface GallerySearch {
   sort?: 'new'
@@ -28,7 +32,34 @@ export interface GallerySearch {
 
 const newSeed = () => Math.random().toString(36).slice(2, 10)
 
-export function GalleryPage({ page, characters, search, total }: { page: Page<EmojiTile>; characters: CharacterCard[]; search: GallerySearch; total: number }) {
+/** Stickers plus the cards between them (stream-layout.ts decides where). */
+function streamCells(tiles: ReactNode[], cards: readonly PackCardData[]): StreamCell[] {
+  const note = cards[0] ?? null
+  return streamEntries(tiles.length, cards.length, !!note).map((e): StreamCell => {
+    if (e.kind === 'card') {
+      const p = cards[e.card]!
+      return { key: `card:${p.id}`, kind: 'card', node: <PackCard {...cardProps(p, e.card, { variant: e.card % 2 ? 'lead' : 'four', noExcerpt: true })} /> }
+    }
+    if (e.kind === 'note') {
+      return {
+        key: 'note',
+        kind: 'note',
+        node: (
+          <div className="note-card">
+            <small>潮汐小记</small>
+            <b>
+              新冲上岸 {note!.count} 张表情，来自「{note!.title}」
+            </b>
+            <AppLink to={packHref(note!.slug)}>去看看 →</AppLink>
+          </div>
+        ),
+      }
+    }
+    return { key: `t:${e.index}`, kind: e.kind, node: tiles[e.index] }
+  })
+}
+
+export function GalleryPage({ page, characters, search, total, cards }: { page: Page<EmojiTile>; characters: CharacterCard[]; search: GallerySearch; total: number; cards: readonly PackCardData[] }) {
   const navigate = useNavigate()
   const autoplay = useAutoplayPref()
   const sort = search.sort ?? 'random'
@@ -57,7 +88,7 @@ export function GalleryPage({ page, characters, search, total }: { page: Page<Em
               key={c.slug}
               size="sm"
               on={search.character === c.slug}
-              avatar={c.avatar ? { src: c.avatar.poster, color: themeColor(c.color) } : null}
+              avatar={c.avatar ? { src: c.avatar.poster, color: characterColor(c) } : null}
               onClick={() => go({ character: search.character === c.slug ? undefined : c.slug })}
             >
               {c.name}
@@ -96,7 +127,7 @@ export function GalleryPage({ page, characters, search, total }: { page: Page<Em
         <StreamTiles
           tiles={list.items}
           current={search.e}
-          layout={(tiles) => <WindowedGrid items={tiles} className="t120" label="表情" onEndReached={list.loadMore} />}
+          layout={(tiles) => <StreamGrid cells={streamCells(tiles, cards)} className="t120" label="表情" onEndReached={list.loadMore} />}
         />
       ) : (
         <p className="muted list-end">没有符合条件的表情。</p>

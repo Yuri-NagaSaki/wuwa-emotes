@@ -23,7 +23,10 @@ export const Route = createFileRoute('/_site/gallery')({
       charactersFn({ data: { sort: 'count' } }),
       homeFn(),
     ])
-    return { page, characters, total: home.stats.emojis }
+    // pack cards between the stickers: the featured collection, then the newest packs
+    const seen = new Set<number>()
+    const cards = [...home.featured, ...home.latest].filter((p) => !seen.has(p.id) && !!seen.add(p.id)).slice(0, 12)
+    return { page, characters, total: home.stats.emojis, cards }
   },
   staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) =>
@@ -37,7 +40,7 @@ export const Route = createFileRoute('/_site/gallery')({
 })
 
 function GalleryRoute() {
-  const { page, characters, total } = Route.useLoaderData()
+  const { page, characters, total, cards } = Route.useLoaderData()
   const search = Route.useSearch()
-  return <GalleryPage page={page} characters={characters} search={search} total={total} />
+  return <GalleryPage page={page} characters={characters} search={search} total={total} cards={cards} />
 }

@@ -14,7 +14,7 @@ import { CharacterTags } from './CharacterTags'
 import { CommentsSlot } from './CommentsSlot'
 import { EmojiDialogHost, prefetchEmojiDialog } from './dialog-loader'
 import type { EmojiDialogProps } from './EmojiDialog'
-import { artistHref, characterHref, dialogPack, fromPackEmoji, KIND_LABEL, licenseLabel, longDate, packHref, themeColor } from './model'
+import { artistHref, characterHref, dialogPack, fromPackEmoji, KIND_LABEL, licenseLabel, longDate, packAccent, packHref } from './model'
 import { TileItem, useLiveTiles, useStableActions } from './tile-items'
 import { Toggle } from './Toggle'
 import { useAddToBatch } from './useBatch'
@@ -63,7 +63,7 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink, dialo
   const lic = licenseLabel(pack.license)
   const animated = pack.emojis.filter((e) => e.frames > 1).length
   const bytes = pack.emojis.reduce((s, e) => s + e.bytes, 0)
-  const acc = themeColor(pack.accent, 'var(--c-pink)')
+  const acc = packAccent(pack)
   const firstChar = pack.characters[0]
   const zipBusy = dl.busy === `zip:${pack.slug}`
 

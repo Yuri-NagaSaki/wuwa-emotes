@@ -18,7 +18,7 @@ const CommandPalette = lazy(() => import('./CommandPalette'))
 const BatchTray = lazy(() => import('../batch/BatchTray'))
 
 export function SiteShell({ children }: { children: ReactNode }) {
-  const { site, announcement, viewer } = useSiteConfig()
+  const { site, announcement, viewer, stats } = useSiteConfig()
   const trayCount = useBatchCount()
   const pal = useSyncExternalStore(palette.subscribe, palette.get, paletteServerSnapshot)
   const trayState = useSyncExternalStore(tray.subscribe, tray.get, trayServerSnapshot)
@@ -34,7 +34,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
       <main id="main" className={deepLink ? 'page no-enter' : 'page'}>
         {children}
       </main>
-      <Footer siteName={site.name} subtitle={site.subtitle} />
+      <Footer siteName={site.name} subtitle={site.subtitle} stats={stats} />
       <Tabbar />
       <TrayFab count={trayCount} onClick={() => tray.open()} />
       {pal.open ? (

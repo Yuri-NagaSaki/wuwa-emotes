@@ -5,7 +5,9 @@ import type { Shape } from '../masonry-layout'
 
 // Catalog DTOs → UI kit props. Pure (no React), shared by every page.
 
-const PALETTE = new Set(['pink', 'purple', 'blue', 'yellow', 'orange', 'mint', 'green', 'red', 'lime', 'yg', 'brown', 'peach', 'teal'])
+/** The design palette (tokens.css --c-*), in the prototype's order. */
+const PALETTE_ORDER = ['pink', 'purple', 'blue', 'yellow', 'orange', 'mint', 'green', 'red', 'lime', 'yg', 'brown', 'peach', 'teal'] as const
+const PALETTE = new Set<string>(PALETTE_ORDER)
 const CSS_COLOR = /^(#[0-9a-f]{3,8}|(rgb|hsl)a?\([0-9.,%\s/]+\))$/i
 
 /** characters.theme_color (a palette name or a CSS color) → a CSS color; unknown values fall back. */
@@ -14,6 +16,21 @@ export function themeColor(c: string | null | undefined, fallback = 'var(--c-min
   const v = c.trim().toLowerCase()
   if (PALETTE.has(v)) return `var(--c-${v})`
   return CSS_COLOR.test(v) ? v : fallback
+}
+
+/**
+ * A stable palette color for a character (or any other key) without a theme color: the prototype's
+ * 31-hash over the key's code points, into the 13 design colors. Same result on server and client.
+ */
+export function paletteColor(key: string): string {
+  let h = 0
+  for (const ch of key) h = (h * 31 + ch.codePointAt(0)!) >>> 0
+  return `var(--c-${PALETTE_ORDER[h % PALETTE_ORDER.length]})`
+}
+
+/** A character's color: its theme_color when set, otherwise the palette pick for its slug. */
+export function characterColor(c: { slug: string; color: string | null }): string {
+  return themeColor(c.color, paletteColor(c.slug))
 }
 
 const enc = encodeURIComponent
@@ -61,6 +78,12 @@ export function cardFlags(card: Pick<PackCard, 'sourceKind' | 'pinLevel' | 'memo
   return f
 }
 
+/** A pack's accent: its first character's color (server `accent`), else the palette pick for the pack. */
+export function packAccent(p: { slug: string; accent: string | null; characters: readonly CharacterRef[] }): string {
+  const first = p.characters[0]
+  return first ? characterColor(first) : themeColor(p.accent, paletteColor(p.slug))
+}
+
 /** PackCard props for a catalog card; the cover layout cycles like the prototype. */
 export function cardProps(card: PackCard, index: number, o: CardOptions = {}): PackCardProps {
   return {
@@ -68,12 +91,12 @@ export function cardProps(card: PackCard, index: number, o: CardOptions = {}): P
     title: card.title,
     excerpt: card.excerpt,
     count: card.count,
-    accent: themeColor(card.accent),
+    accent: packAccent(card),
     images: cardImages(card),
     coverPreview: card.cover?.preview ?? null,
     variant: o.variant ?? VARIANTS[index % VARIANTS.length],
     flags: cardFlags(card, o.isNew),
-    characters: card.characters.map((c) => ({ name: c.name, color: themeColor(c.color) })),
+    characters: card.characters.map((c) => ({ name: c.name, color: characterColor(c) })),
     downloads: card.downloads,
     favorites: card.favorites,
     date: shortDate(card.publishedAt),

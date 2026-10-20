@@ -37,6 +37,8 @@ export function ExplorePage({ data, current }: { data: ExploreData; current: str
     ['原设', 'origin'],
     ['标签', 'custom'],
   ]
+  const tagDims = tagGroups.filter(([, dim]) => f.tags[dim].length)
+  const tagCount = tagDims.reduce((n, [, dim]) => n + f.tags[dim].length, 0)
   const kinds: CountedRef[] = f.kinds.map((k) => ({ slug: k.kind, name: KIND_LABEL[k.kind] ?? k.kind, packCount: k.packCount }))
   const sources: CountedRef[] = f.sources.map((s) => ({ slug: s.sourceKind, name: SOURCE_LABEL[s.sourceKind] ?? s.sourceKind, packCount: s.packCount }))
 
@@ -90,18 +92,26 @@ export function ExplorePage({ data, current }: { data: ExploreData; current: str
             </h3>
             <Cloud items={f.artists} href={(s) => artistHref(s)} color="var(--c-purple)" />
           </div>
-          {tagGroups
-            .filter(([, dim]) => f.tags[dim].length)
-            .map(([label, dim]) => (
-              <div key={dim} className="facet">
-                <h3>
-                  {label} <small>{f.tags[dim].length}</small>
-                </h3>
-                <Cloud items={f.tags[dim]} href={(s) => tagHref(dim, s)} color="var(--c-yellow)" />
-              </div>
-            ))}
+          {/* the small dimensions share one card next to 画师 (the prototype's 分组 · 工具 · 企划 · 原设 + 格式) */}
           <div className="facet">
-            <h3>类型与来源</h3>
+            {tagDims.length ? (
+              <>
+                <h3>
+                  {tagDims.map(([label]) => label).join(' · ')} <small>{tagCount}</small>
+                </h3>
+                <div className="cloud">
+                  {tagDims.flatMap(([, dim]) =>
+                    f.tags[dim].map((v) => (
+                      <a key={`${dim}:${v.slug}`} href={tagHref(dim, v.slug)} style={{ '--tg': 'var(--c-yellow)', fontSize: size(v.packCount) } as CSSProperties}>
+                        {v.name}
+                        <small>{v.packCount}</small>
+                      </a>
+                    )),
+                  )}
+                </div>
+              </>
+            ) : null}
+            <h3 className={tagDims.length ? 'facet-sub' : undefined}>类型与来源</h3>
             <Cloud items={kinds} href={(s) => `/packs?kind=${s}`} color="var(--c-mint)" />
             <Cloud items={sources} href={(s) => `/packs?source=${s}`} color="var(--c-blue)" />
           </div>

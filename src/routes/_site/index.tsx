@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { exploreFn, homeFn } from '#/server/catalog/fns'
+import { galleryFn, homeFn } from '#/server/catalog/fns'
 import { HomePage } from '#/ui/pages/HomePage'
 import { pageHead } from '#/ui/pages/seo'
 import { emojiParam } from '#/ui/pages/search-params'
@@ -8,8 +8,9 @@ import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 export const Route = createFileRoute('/_site/')({
   validateSearch: emojiParam,
   loader: async () => {
-    const [home, explore] = await Promise.all([homeFn(), exploreFn().catch(() => null)])
-    return { home, explore }
+    // 潮汐流: 18 random stickers (the prototype's three rows with two 2×2 focus tiles)
+    const [home, stream] = await Promise.all([homeFn(), galleryFn({ data: { sort: 'random', limit: 18 } }).then((p) => p.items, () => [])])
+    return { home, stream }
   },
   staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) => {
@@ -26,7 +27,7 @@ export const Route = createFileRoute('/_site/')({
 })
 
 function Home() {
-  const { home, explore } = Route.useLoaderData()
+  const { home, stream } = Route.useLoaderData()
   const { e } = Route.useSearch()
-  return <HomePage home={home} explore={explore} current={e} />
+  return <HomePage home={home} stream={stream} current={e} />
 }

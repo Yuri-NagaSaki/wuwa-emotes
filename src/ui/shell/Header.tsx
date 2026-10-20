@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useRouterState } from '@tanstack/react-router'
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconButton } from '../Button'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { LogoMark, LogoWord } from '../LogoMark'
-import { MAIN_NAV } from './nav'
+import { MAIN_NAV, navKeyFor } from './nav'
+import { isNight, setPref, subscribeTheme } from './theme'
 
 export interface HeaderUser {
   name: string
@@ -39,6 +41,7 @@ function useBump(count: number) {
 
 export function Header({ siteName, subtitle, trayCount = 0, onTrayClick, onSearch, user, userSlot }: HeaderProps) {
   const bump = useBump(trayCount)
+  const navKey = useRouterState({ select: (s) => navKeyFor(s.location.pathname) })
 
   useEffect(() => {
     if (!onSearch) return
@@ -77,7 +80,7 @@ export function Header({ siteName, subtitle, trayCount = 0, onTrayClick, onSearc
         </AppLink>
         <nav className="nav" aria-label="主导航">
           {MAIN_NAV.map((n) => (
-            <AppLink key={n.to} to={n.to}>
+            <AppLink key={n.to} to={n.to} aria-current={navKey === n.to ? 'page' : undefined}>
               {n.label}
             </AppLink>
           ))}
@@ -99,6 +102,7 @@ export function Header({ siteName, subtitle, trayCount = 0, onTrayClick, onSearc
               <Icon name="search" />
             </AppLink>
           )}
+          <ThemeToggle />
           {onTrayClick ? (
             <button key={bump} type="button" className={cx('bottle-btn', bump > 0 && 'is-bump')} onClick={onTrayClick} aria-label={trayLabel} data-tray-target="">
               {trayInner}
@@ -112,6 +116,18 @@ export function Header({ siteName, subtitle, trayCount = 0, onTrayClick, onSearc
         </div>
       </div>
     </header>
+  )
+}
+
+/** 白昼 / 夜潮 switch. Both icons are in the HTML; CSS shows the one for the theme in effect, so the
+ * server render (which cannot know the theme) never mismatches. */
+function ThemeToggle() {
+  const night = useSyncExternalStore(subscribeTheme, isNight, () => false)
+  return (
+    <button type="button" className="icon-btn theme-btn" onClick={() => setPref(night ? 'light' : 'night')} aria-label="夜潮主题" aria-pressed={night} title={night ? '切换到白昼' : '切换到夜潮'}>
+      <Icon name="moon" className="i-moon" />
+      <Icon name="sun" className="i-sun" />
+    </button>
   )
 }
 

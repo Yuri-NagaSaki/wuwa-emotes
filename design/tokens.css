@@ -1,6 +1,6 @@
 /* 潮池 Tidepool · design tokens v1 (2026-10-20)
    Source of truth: design/v1/tidepool-ui (UI 设计稿). Built on animal-island-ui (MIT) tokens.
-   Light theme on :root; 夜潮 night tokens are a preview layer, not a shipped theme. */
+   Light theme (白昼) on :root; 夜潮 on [data-theme="night"] (html attribute, set before first paint). */
 :root {
   /* surfaces */
   --tp-bg: #f8f8f0;
@@ -39,6 +39,12 @@
   --tp-warn-bg: #fbf0cc;
   --tp-err: #d24b4b;
   --tp-err-bg: #fbe3e0;
+  /* sticker wells (tiles, covers, thumbnails): light paper in both themes */
+  --tp-well: #fffbe7;
+  --tp-well-hi: #fffdf4;
+  --tp-well-dot: color-mix(in srgb, #d9cdb2 55%, transparent);
+  /* the hero pool's sand rim */
+  --tp-rim: #efe2bf;
   /* island palette (character + tag colors) */
   --c-pink: #f8a6b2; --c-purple: #b77dee; --c-blue: #889df0; --c-yellow: #f7cd67; --c-orange: #e59266; --c-mint: #82d5bb;
   --c-green: #8ac68a; --c-red: #fc736d; --c-lime: #d1da49; --c-yg: #ecdf52; --c-brown: #9a835a; --c-peach: #e18c6f; --c-teal: #19c8b9;
@@ -62,12 +68,16 @@
   --gutter: clamp(16px, 3vw, 32px); --maxw: 1440px; --maxw-narrow: 1200px; --head-h: 64px;
 }
 
+/* 夜潮 (night): the prototype's night layer with contrast fixes (borders, muted and faint text lifted;
+   every text pair ≥ 4.5:1, hints ≥ 3:1, see .work/fidelity/night/contrast.md of the UI-B audit).
+   Sticker wells stay light paper: many stickers have dark outlines or opaque white cards. */
 [data-theme="night"] {
   --tp-bg: #0f2228; --tp-sand: #13292f; --tp-card: #173039; --tp-input: #1b3640; --tp-sunk: #0c1c21;
-  --tp-ink: #fbecd0; --tp-body: #eadcc0; --tp-muted: #c2b293; --tp-faint: #93876f; --tp-disabled: #5f5a4c;
-  --tp-line: #24414a; --tp-line-2: #2f525c;
+  --tp-ink: #fbecd0; --tp-body: #eadcc0; --tp-muted: #c9b99a; --tp-faint: #a8997e; --tp-disabled: #6f685a;
+  --tp-line: #2a4953; --tp-line-2: #3a616c;
   --tp-teal: #3ee0cf; --tp-teal-hover: #69ebdd; --tp-teal-press: #23c3b2; --tp-teal-bg: #123c3d; --tp-teal-ink: #6ff0e1; --tp-on-teal: #052e2a;
-  --tp-deep: #071419; --tp-deep-2: #050f13; --tp-foam: #133a3c; --tp-shadow-3d: #07171c; --tp-heart: #ff8a80;
+  --tp-deep: #071419; --tp-deep-2: #050f13; --tp-foam: #133a3c; --tp-shadow-3d: #061216; --tp-heart: #ff8a80;
   --tp-ok-bg: #1d3a22; --tp-warn-bg: #3a3215; --tp-err-bg: #3e1f1e; --tp-ok: #9bd96f; --tp-warn: #f0c560; --tp-err: #ff8f8a;
+  --tp-well: #ebe3ce; --tp-well-hi: #f4eedf; --tp-well-dot: rgba(121, 79, 39, 0.16); --tp-rim: #3a4c49;
   --sh-soft: 0 2px 4px 0 rgba(0, 0, 0, 0.25); --sh-base: 0 3px 10px 0 rgba(0, 0, 0, 0.3); --sh-lift: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
 }

@@ -18,5 +18,10 @@ export const Route = createFileRoute('/_site')({
       <Outlet />
     </SiteShell>
   ),
-  notFoundComponent: () => <NotFound />,
+  // a page below this layout that throws notFound() renders here, in place of the layout: keep the chrome
+  notFoundComponent: () => (
+    <SiteShell>
+      <NotFound />
+    </SiteShell>
+  ),
 })

@@ -5,7 +5,7 @@ import { fmtN } from '../format'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { WaveEdge } from './CharacterPage'
-import { characterHref, themeColor } from './model'
+import { characterColor, characterHref } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile } from './people'
 import { useCursorList } from './useCursorList'
@@ -86,7 +86,7 @@ export function ArtistPage({ detail }: { detail: ArtistDetail }) {
         {detail.characters.length ? (
           <div className="chips" style={{ marginTop: 22 }}>
             {detail.characters.map((c) => (
-              <AppLink key={c.slug} to={characterHref(c.slug)} className="chip sm" style={{ borderColor: themeColor(c.color) }}>
+              <AppLink key={c.slug} to={characterHref(c.slug)} className="chip sm" style={{ borderColor: characterColor(c) }}>
                 {c.name}
                 <span className="n">{c.packCount}</span>
               </AppLink>
