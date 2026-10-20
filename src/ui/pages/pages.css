@@ -140,9 +140,9 @@
 .em-media .em-ph { position: absolute; inset: 0; margin: auto; }
 .em-media img.is-loading { opacity: 0; }
 .em-nav[disabled] { opacity: 0.4; pointer-events: none; }
-/* modal open: the page keeps its scrollbar gutter, so locking scroll moves nothing */
+/* the page keeps its scrollbar gutter, so overlays never shift it (the dialog's scroll lock is
+   event-based, src/ui/scroll-lock.ts: toggling the root's overflow repainted the whole page) */
 html { scrollbar-gutter: stable; }
-html.em-lock { overflow: hidden; }
 /* the sticker's comment thread: a row under the strip, opened in place; the card grows and the layer
    scrolls (no inner scroll box on desktop) */
 .em-card { grid-template-areas: "media info" "strip strip" "cm cm"; }
