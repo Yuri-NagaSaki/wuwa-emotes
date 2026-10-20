@@ -71,7 +71,7 @@ export class Client {
 export interface Emoji {
   id: string
   key: string
-  body: Uint8Array
+  body: Uint8Array<ArrayBuffer>
   ext: string
   sortOrder: number
 }
