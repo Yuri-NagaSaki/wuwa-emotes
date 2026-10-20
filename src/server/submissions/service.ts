@@ -330,10 +330,12 @@ export async function presignUploads(actor: Actor, id: string, files: UploadRequ
     const left = UPLOAD_LIMITS.maxFiles - (used?.n ?? 0)
     if (files.length > left) throw new HttpError(400, left > 0 ? `每个投稿最多 ${UPLOAD_LIMITS.maxFiles} 张，还能再传 ${left} 张` : `每个投稿最多 ${UPLOAD_LIMITS.maxFiles} 张`)
     const now = new Date()
-    const values = files.map((f) => {
+    const values = files.map((f, i) => {
       const uploadId = crypto.randomUUID()
       return {
         id: uploadId,
+        // one transaction gives every row the same now(): 1 ms apart keeps the order files were picked in
+        createdAt: new Date(now.getTime() + i),
         submissionId: id,
         packId: sub.packId,
         uploaderId: actor.id,
