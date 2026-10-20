@@ -41,18 +41,28 @@ export function loadCap(): Promise<CapCtor> {
 }
 
 /**
- * Solve a challenge without showing a widget (background actions such as a batch download). Resolves
- * with a single-use token for the x-cap-token header.
+ * Solve a challenge without showing a widget: Cap's own invisible mode, a hidden <cap-widget> on the
+ * document element, removed again afterwards. Used by background actions (a batch download) and by the
+ * account forms (useInvisibleCap). Resolves with a single-use token for the x-cap-token header; rejects
+ * when the proof of work fails, or with the signal's reason when it aborts.
  */
-export async function solveInvisible(endpoint: string | null = configuredEndpoint): Promise<string> {
+export async function solveInvisible(endpoint: string | null = configuredEndpoint, signal?: AbortSignal): Promise<string> {
   if (!endpoint) throw new Error('Cap endpoint is not configured')
+  signal?.throwIfAborted()
   const Cap = await loadCap()
+  signal?.throwIfAborted()
   const cap = new Cap({ apiEndpoint: endpoint })
+  // removing the widget aborts its solve (disconnectedCallback), which then resolves with nothing
+  const stop = () => cap.widget.remove()
+  signal?.addEventListener('abort', stop, { once: true })
   try {
-    const res = await cap.solve()
-    if (!res.success || !res.token) throw new Error('Cap verification failed')
+    // solve() resolves undefined instead of rejecting when it is aborted or the instrumentation check fails
+    const res = (await cap.solve()) as { success?: boolean; token?: string } | undefined
+    signal?.throwIfAborted()
+    if (!res?.success || !res.token) throw new Error('Cap verification failed')
     return res.token
   } finally {
+    signal?.removeEventListener('abort', stop)
     cap.widget.remove()
   }
 }

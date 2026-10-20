@@ -38,6 +38,8 @@ function createAuth() {
       // Without SMTP nobody could ever verify, so only require verification when mail works.
       requireEmailVerification: mailConfigured(),
       resetPasswordTokenExpiresIn: RESET_PASSWORD_EXPIRES_IN,
+      // a reset means the old password may be known to someone else: sign every device out
+      revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
         await sendMail(
           user.email,
