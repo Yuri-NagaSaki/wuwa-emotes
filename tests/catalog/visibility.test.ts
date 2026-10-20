@@ -10,9 +10,11 @@ import { searchCatalog, suggestCatalog } from '#/server/catalog/search'
 import { getGallery } from '#/server/catalog/stream'
 import type { PackSort } from '#/server/catalog/types'
 import { allPages, EMOJI_ID_GLOBAL } from './helpers'
-import { CHARACTERS, FORBIDDEN_EMOJI_IDS, FORBIDDEN_STRINGS, PACK_BY_SLUG, PACKS, PUBLIC_EMOJI_IDS, PUBLIC_PACKS, seedCatalog } from './seed'
+import { resolveLegacyPath } from '#/server/catalog/legacy'
+import { CHARACTERS, FORBIDDEN_EMOJI_IDS, FORBIDDEN_STRINGS, isPublicEmoji, PACK_BY_SLUG, PACKS, PUBLIC_EMOJI_IDS, PUBLIC_PACKS, seedCatalog } from './seed'
 
-// Drafts, hidden packs, pending/hidden emojis and everything only they use never leave the module.
+// Drafts, hidden packs, pending/hidden emojis, emojis without derivatives, packs with no public emoji
+// and everything only they use never leave the module.
 
 beforeAll(async () => {
   await seedCatalog()
@@ -36,11 +38,11 @@ async function everything(): Promise<unknown[]> {
     out.push(emojiTab.items)
   }
   out.push(await listArtists())
-  for (const slug of ['maowushi', '爱秧斯坦', 'kuroba', 'ghost']) out.push(await getArtistDetail({ slug }))
+  for (const slug of ['maowushi', '爱秧斯坦', 'kuroba', 'ghost', 'pending-artist']) out.push(await getArtistDetail({ slug }))
   for (const sort of ['new', 'random'] as const) out.push((await allPages((cursor) => getGallery({ sort, cursor, limit: 9 }))).items)
   for (let i = 0; i < 25; i++) out.push(await getExplore())
   out.push(await getFacets())
-  for (const q of ['守岸人', '守岸', '草稿', '隐藏', '秧秧', '秧', '幽灵', 'Ghost', 'GhostArtist', '草稿专用', '爱弥斯', '心', 'draft', '合集', 'a', '表情']) {
+  for (const q of ['守岸人', '守岸', '草稿', '隐藏', '秧秧', '秧', '幽灵', 'Ghost', 'GhostArtist', '草稿专用', '爱弥斯', '心', 'draft', '合集', 'a', '表情', '白芷', '白芷医生', '处理中', '待处理', 'Pending', '未就绪', 'notready']) {
     // the result echoes the query itself; everything else must be clean
     const { q: echoed, ...result } = await searchCatalog({ q, limit: 60 })
     expect(echoed).toBe(q)
@@ -65,6 +67,8 @@ describe('visibility', () => {
     expect(await getPackDetail('draft-01')).toEqual({ kind: 'missing' })
     expect(await getPackDetail('hidden-01')).toEqual({ kind: 'missing' })
     expect(await getPackDetail('to-draft')).toEqual({ kind: 'missing' })
+    expect(await getPackDetail('notready-01')).toEqual({ kind: 'missing' })
+    expect(await getPackDetail('to-notready')).toEqual({ kind: 'missing' })
   })
 
   test('permalinks of unpublished emojis resolve to nothing', async () => {
@@ -88,14 +92,15 @@ describe('visibility', () => {
     expect(home.stats.packs).toBe(published.length)
     expect(home.stats.emojis).toBe(PUBLIC_EMOJI_IDS.size)
     expect(home.stats.downloads).toBe(published.reduce((s, p) => s + p.downloads, 0))
-    expect(home.stats.characters).toBe(CHARACTERS.length - 1)
+    // 守岸人 only has a draft pack, 白芷 only a pack without derivatives
+    expect(home.stats.characters).toBe(CHARACTERS.length - 2)
     // P12 published today (6 emojis) + one emoji ingested today into P1
     expect(home.stats.todayEmojis).toBe(7)
 
     const cards = (await allPages((cursor) => listPacks({ cursor }))).items
     for (const card of cards) {
       const fx = PACK_BY_SLUG[card.slug]!
-      expect(card.count).toBe(fx.emojis.filter((e) => e.status === 'published').length)
+      expect(card.count).toBe(fx.emojis.filter(isPublicEmoji).length)
     }
     const aimisi = (await listCharacters()).find((c) => c.slug === 'aimisi')!
     expect(aimisi.packCount).toBe(3)
@@ -127,5 +132,55 @@ describe('visibility', () => {
     expect(home.latest.length).toBe(PUBLIC_PACKS.length)
     expect(home.characters[0]!.slug).toBe('aimisi')
     expect(home.characters.every((c) => c.avatar)).toBe(true)
+  })
+})
+
+describe('derived readiness (only emojis with web derivatives are public)', () => {
+  test('a published pack without ready emojis is hidden everywhere, including its only entities', async () => {
+    expect(PUBLIC_PACKS.map((p) => p.slug)).not.toContain('notready-01')
+    expect(await getCharacterDetail({ slug: 'baizhi' })).toEqual({ kind: 'missing' })
+    expect(await getCharacterDetail({ slug: 'baizhi-old' })).toEqual({ kind: 'missing' })
+    expect(await getArtistDetail({ slug: 'pending-artist' })).toEqual({ kind: 'missing' })
+    expect((await listPacks({ tag: 'custom:notready-only' })).items).toEqual([])
+    expect((await listPacks({ character: 'baizhi' })).items).toEqual([])
+    expect((await getFacets()).tags.custom).toEqual([])
+    // legacy paths never lead to it
+    expect(await resolveLegacyPath('/packs/to-notready')).toBeNull()
+    expect(await resolveLegacyPath('/archives/notready-01')).toBeNull()
+    expect(await resolveLegacyPath('/tags/baizhi')).toBeNull()
+    for (const e of PACK_BY_SLUG['notready-01']!.emojis) expect(await getEmojiPermalink(e.id)).toBeNull()
+    const home = await getHome()
+    expect(home.pinned.map((p) => p.slug)).toEqual(['aimisi-01'])
+    expect(home.latest[0]!.slug).toBe('yangyang-01')
+  })
+
+  test('a not-ready emoji inside a public pack is skipped: list, count, permalink index', async () => {
+    const fx = PACK_BY_SLUG['xin-01']!
+    const notReady = fx.emojis[1]!
+    expect(notReady.ready).toBe(false)
+    const d = await getPackDetail('xin-01')
+    if (d.kind !== 'pack') throw new Error('expected xin-01')
+    expect(d.pack.emojis.map((e) => e.id)).toEqual(fx.emojis.filter(isPublicEmoji).map((e) => e.id))
+    expect(d.pack.count).toBe(fx.emojis.length - 1)
+    expect(await getEmojiPermalink(notReady.id)).toBeNull()
+    expect(await getEmojiPermalink(fx.emojis[2]!.id)).toEqual({ emojiId: fx.emojis[2]!.id, packSlug: 'xin-01', index: 1 })
+    expect(await resolveLegacyPath(`/e/${notReady.id}`)).toBeNull()
+  })
+
+  test('a cover or avatar pointing at a not-ready emoji falls back to a public one', async () => {
+    const fx = PACK_BY_SLUG['xinyuehu-01']!
+    const card = (await listPacks({ kind: 'mixed' })).items[0]!
+    expect(card.slug).toBe('xinyuehu-01')
+    expect(card.cover!.id).toBe(fx.emojis[1]!.id)
+    expect([card.cover, ...card.minis].every((img) => PUBLIC_EMOJI_IDS.has(img!.id))).toBe(true)
+    const d = await getPackDetail('xinyuehu-01')
+    expect(d.kind === 'pack' && d.pack.cover!.id).toBe(fx.emojis[1]!.id)
+    // animated filter on the character's emoji tab: the not-ready animated emoji is not counted
+    const typed = await getCharacterDetail({ slug: 'xinyuehu', tab: 'emojis', type: 'animated' })
+    expect(typed.kind === 'character' && typed.page.items.map((e) => e.id)).toEqual(fx.emojis.slice(1, 4).map((e) => e.id))
+    const xin = (await listCharacters()).find((c) => c.slug === 'xin')!
+    expect(xin.avatar!.id).not.toBe(PACK_BY_SLUG['xin-01']!.emojis[1]!.id)
+    expect(PUBLIC_EMOJI_IDS.has(xin.avatar!.id)).toBe(true)
+    expect(xin.emojiCount).toBe(PACK_BY_SLUG['xin-01']!.emojis.filter(isPublicEmoji).length)
   })
 })

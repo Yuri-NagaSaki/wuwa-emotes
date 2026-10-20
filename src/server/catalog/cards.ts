@@ -1,11 +1,12 @@
 import { type SQL, sql } from 'drizzle-orm'
 import { type RawImage, toEmojiImage } from './images'
-import { emojiJson, emojiOrder, iso, num, PUB_AT, rows } from './sql'
+import { emojiJson, emojiOrder, emojiVisible, emojiVisibleText, iso, num, packVisible, PUB_AT, rows } from './sql'
 import type { ArtistRef, ArtistRole, CharacterRef, PackCard, PackKind, SourceKind } from './types'
 
 // Pack cards in one statement: the caller supplies a source subquery yielding `id` (plus any extra
 // columns such as ord, bucket, k0…, score, passed through untouched as src.*); this joins the pack,
-// keeps published packs only and aggregates count, cover + minis, characters and artists.
+// keeps public packs only (sql.ts: published with ready emojis) and aggregates count, cover + minis,
+// characters and artists. Counts and images only use public emojis.
 
 export interface RawCharacter {
   slug: string
@@ -54,13 +55,14 @@ export function packArtistsJson(pa = 'p'): SQL {
   )
 }
 
+/** Public emojis of pack `pa` (published, derivatives ready). */
 export function publishedEmojiCount(pa = 'p'): SQL {
-  return sql.raw(`(select count(*)::int from emojis ne where ne.pack_id = ${pa}.id and ne.status = 'published')`)
+  return sql.raw(`(select count(*)::int from emojis ne where ne.pack_id = ${pa}.id and ${emojiVisibleText('ne')})`)
 }
 
 /**
  * `select src.*, <card columns> from (<source>) src join packs p …` — append your own ORDER BY.
- * Images: up to 4 published emojis, cover first (cover_emoji_id if it is one of them), then pack order.
+ * Images: up to 4 public emojis, cover first (cover_emoji_id if it is one of them), then pack order.
  */
 export function cardSelect(source: SQL): SQL {
   return sql`
@@ -70,13 +72,13 @@ export function cardSelect(source: SQL): SQL {
       (select json_agg(x.j order by x.o) from (
          select ${emojiJson('e')} as j,
                 row_number() over (order by (e.id = p.cover_emoji_id) is true desc, ${emojiOrder('e')}) as o
-         from emojis e where e.pack_id = p.id and e.status = 'published'
+         from emojis e where e.pack_id = p.id and ${emojiVisible('e')}
          order by o limit 4
        ) x) as imgs,
       ${packCharactersJson('p')} as chars,
       ${packArtistsJson('p')} as arts
     from (${source}) src
-    join packs p on p.id = src.id and p.status = 'published'`
+    join packs p on p.id = src.id and ${packVisible('p')}`
 }
 
 export function toCharacterRef(c: RawCharacter): CharacterRef {
@@ -115,7 +117,7 @@ export function toPackCard(r: CardRow): PackCard {
   }
 }
 
-/** Cards for an ordered list of pack ids (unpublished ids are dropped). */
+/** Cards for an ordered list of pack ids (ids of non-public packs are dropped). */
 export async function packCardsByIds(ids: number[]): Promise<PackCard[]> {
   if (ids.length === 0) return []
   // sql.param: a JS array as ONE bind parameter (a bare array would expand to "(a, b, …)")

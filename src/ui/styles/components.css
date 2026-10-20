@@ -152,7 +152,7 @@
 .masonry { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--mcol, 248px), 1fr)); gap: var(--mgap, 20px); align-items: start; }
 .masonry.is-laid { display: flex; align-items: flex-start; }
 .mcol { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--mgap, 20px); }
-.pcard { background: var(--tp-card); border-radius: var(--r-lg); border: 2px solid var(--tp-line); overflow: hidden; transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease), border-color var(--t) var(--ease); position: relative; }
+.pcard { background: var(--tp-card); border-radius: var(--r-lg); border: 2px solid var(--tp-line); overflow: hidden; box-sizing: border-box; transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease), border-color var(--t) var(--ease); position: relative; }
 .pcard:hover { transform: translateY(-3px); box-shadow: var(--sh-lift); border-color: color-mix(in srgb, var(--acc, var(--c-mint)) 70%, var(--tp-line)); }
 .pcard-cover { display: block; position: relative; background-color: color-mix(in srgb, var(--acc, var(--c-mint)) 22%, var(--tp-input)); background-image: radial-gradient(color-mix(in srgb, var(--acc, var(--c-mint)) 45%, transparent) 1.4px, transparent 1.5px); background-size: 16px 16px; padding: 12px; }
 .pcard-cover .cv { display: grid; gap: 8px; }
@@ -169,17 +169,41 @@
 .cv.strip img:nth-child(2) { grid-column: 1; }
 .pcard-count { position: absolute; right: 12px; bottom: 12px; font: 900 12px/24px var(--tp-font-num); padding: 0 9px; border-radius: 9px; background: var(--tp-card); color: var(--tp-ink); box-shadow: var(--sh-soft); }
 .pcard-flags { position: absolute; left: 12px; top: 12px; display: flex; gap: 6px; }
-.pcard-body { padding: 14px 16px 16px; display: grid; gap: 9px; }
-.pcard-body h3 { font-size: 16.5px; line-height: 1.35; }
+.pcard-body { padding: 14px 16px 16px; display: grid; gap: 9px; align-content: start; }
+/* rows have fixed heights so a card's height is known before it renders (packCardShape); titles are
+   dynamic text, so they use the body font, not the display face */
+.pcard-body h3 { font-family: var(--tp-font-body); font-weight: 800; font-size: 16.5px; line-height: 22px; height: 44px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
 .pcard-body h3 a:hover { text-decoration: underline; text-decoration-color: var(--tp-teal); text-underline-offset: 4px; text-decoration-thickness: 2px; }
-.pcard-ex { font-size: 13px; color: var(--tp-muted); line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.pcard-meta { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
-.pcard-chars { display: flex; flex-wrap: wrap; gap: 5px; }
-.pcard-credit { font-size: 12px; color: var(--tp-muted); border-top: 1.5px dashed var(--tp-line); padding-top: 9px; display: flex; gap: 6px; align-items: center; min-width: 0; }
+.pcard-ex { font-size: 13px; color: var(--tp-muted); line-height: 20px; height: 40px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.pcard-meta { display: flex; flex-wrap: nowrap; gap: 12px; align-items: center; height: 20px; overflow: hidden; }
+.pcard-meta .pill-stat { flex: none; white-space: nowrap; }
+.pcard-chars { display: flex; flex-wrap: nowrap; gap: 5px; height: 26px; overflow: hidden; }
+.pcard-credit { font-size: 12px; line-height: 18px; height: 30px; box-sizing: border-box; color: var(--tp-muted); border-top: 1.5px dashed var(--tp-line); padding-top: 9px; display: flex; gap: 6px; align-items: center; min-width: 0; }
 .pcard-credit span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pcard.is-in { animation: tp-rise 0.55s var(--ease) both; animation-delay: calc(var(--d, 0) * 45ms); }
 .pcard.row { display: grid; grid-template-columns: 120px 1fr; }
 .pcard.row .pcard-cover { padding: 8px; }
+
+/* ============ masonry (src/ui/Masonry.tsx, geometry in masonry-layout.ts) ============
+   Every item carries its position for each (mode, lane count) as custom properties; the container
+   queries below pick one, and --lw is the lane width of the variant in force. Breakpoints = lanes ×
+   min + (lanes − 1) × gap with MASONRY_MODES (desktop 248/20 up to 5 lanes, phone 150/12 up to 4). */
+.vmasonry { container-type: inline-size; }
+.vm-inner { position: relative; --g: 20px; --n: 1; --lw: calc((100cqw - (var(--n) - 1) * var(--g)) / var(--n)); height: var(--h-d1); }
+.vm-it { position: absolute; left: 0; top: 0; width: var(--lw); --l: var(--l-d1); --a: var(--a-d1); --b: var(--b-d1); --c: var(--cd);
+  height: calc(var(--r) * var(--lw) + var(--c) * 1px);
+  transform: translate(calc(var(--l) * (var(--lw) + var(--g))), calc(var(--a) * var(--lw) + var(--b) * 1px)); }
+.vm-it > * { height: 100%; }
+@container (min-width: 516px) { .vm-inner { --n: 2; height: var(--h-d2); } .vm-it { --l: var(--l-d2); --a: var(--a-d2); --b: var(--b-d2); } }
+@container (min-width: 784px) { .vm-inner { --n: 3; height: var(--h-d3); } .vm-it { --l: var(--l-d3); --a: var(--a-d3); --b: var(--b-d3); } }
+@container (min-width: 1052px) { .vm-inner { --n: 4; height: var(--h-d4); } .vm-it { --l: var(--l-d4); --a: var(--a-d4); --b: var(--b-d4); } }
+@container (min-width: 1320px) { .vm-inner { --n: 5; height: var(--h-d5); } .vm-it { --l: var(--l-d5); --a: var(--a-d5); --b: var(--b-d5); } }
+@media (max-width: 760px) {
+  .vm-inner { --g: 12px; --n: 2; height: var(--h-p2); }
+  .vm-it { --l: var(--l-p2); --a: var(--a-p2); --b: var(--b-p2); --c: var(--cp); }
+  @container (min-width: 474px) { .vm-inner { --n: 3; height: var(--h-p3); } .vm-it { --l: var(--l-p3); --a: var(--a-p3); --b: var(--b-p3); } }
+  @container (min-width: 636px) { .vm-inner { --n: 4; height: var(--h-p4); } .vm-it { --l: var(--l-p4); --a: var(--a-p4); --b: var(--b-p4); } }
+}
 
 /* ============ character card ============ */
 .cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 16px; }
@@ -188,7 +212,7 @@
 .ccard .pool { width: 104px; height: 104px; border-radius: 50%; background-color: color-mix(in srgb, var(--cc) 30%, var(--tp-input)); background-image: radial-gradient(color-mix(in srgb, var(--cc) 75%, transparent) 2px, transparent 2.2px); background-size: 13px 13px; border: 3px solid var(--cc); display: grid; place-items: center; overflow: hidden; transition: transform var(--t) var(--spring); }
 .ccard:hover .pool { transform: rotate(-4deg) scale(1.04); }
 .ccard .pool img { width: 88%; height: 88%; object-fit: contain; }
-.ccard b { font-family: var(--tp-font-display); font-size: 17px; color: var(--tp-ink); font-weight: 800; }
+.ccard b { font-family: var(--tp-font-body); font-size: 16px; color: var(--tp-ink); font-weight: 800; }
 .ccard span { font-size: 12.5px; color: var(--tp-muted); font-family: var(--tp-font-num); font-weight: 700; }
 .cstrip { display: flex; gap: 14px; overflow-x: auto; padding: 6px 2px 14px; scroll-snap-type: x mandatory; scrollbar-width: thin; }
 .cstrip .cchip { scroll-snap-align: start; flex: none; display: grid; justify-items: center; gap: 6px; width: 92px; text-align: center; }
@@ -369,8 +393,10 @@ mark { background: color-mix(in srgb, var(--tp-sun) 70%, transparent); color: in
   .masonry { --mcol: 150px; --mgap: 12px; }
   .pcard { border-radius: 20px; }
   .pcard-body { padding: 10px 12px 12px; gap: 7px; }
-  .pcard-body h3 { font-size: 14.5px; }
-  .pcard-ex { font-size: 12.5px; -webkit-line-clamp: 2; }
+  .pcard-body h3 { font-size: 14.5px; line-height: 20px; height: 40px; }
+  .pcard-ex { font-size: 12.5px; line-height: 18px; height: 36px; }
+  .pcard-meta { gap: 9px; }
+  .pcard-meta .pill-stat:nth-child(3) { display: none; }
   .pcard-credit { display: none; }
   .pcard-cover { padding: 8px; }
   .cgrid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 10px; }
@@ -400,7 +426,8 @@ mark { background: color-mix(in srgb, var(--tp-sun) 70%, transparent); color: in
 @keyframes tp-sheet { from { transform: translateY(100%); } to { transform: none; } }
 
 /* ============ page heads ============ */
-.page-h { padding: 30px 0 6px; display: grid; gap: 10px; }
+/* <main> (.page) already pads the top (20/24 px) */
+.page-h { padding: 6px 0 6px; display: grid; gap: 10px; }
 .page-h h1 { font-size: 38px; }
 .page-h .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .page-h .sub { color: var(--tp-muted); font-size: 15px; }
@@ -408,7 +435,7 @@ mark { background: color-mix(in srgb, var(--tp-sun) 70%, transparent); color: in
 .nf .code { font: 900 108px/1 var(--tp-font-num); color: var(--tp-teal); letter-spacing: 0.04em; text-shadow: 0 6px 0 var(--tp-shadow-3d); }
 .nf h1 { font-size: 30px; }
 @media (max-width: 760px) {
-  .page-h { padding-top: 18px; }
+  .page-h { padding-top: 0; }
   .page-h h1 { font-size: 28px; }
   .nf .code { font-size: 80px; }
 }

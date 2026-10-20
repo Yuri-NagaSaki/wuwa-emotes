@@ -5,7 +5,7 @@ import { packCardsByIds, publishedEmojiCount } from './cards'
 import { characterEntries } from './characters'
 import { type RawImage, toEmojiImageOrNull } from './images'
 import { searchInput, type SearchInput, suggestInput, type SuggestInput } from './inputs'
-import { coverJson, likeEscape, num, rows } from './sql'
+import { coverJson, likeEscape, num, packVisible, rows } from './sql'
 import type { ArtistCard, CharacterCard, SearchResult, Suggestion, SuggestionType, TagDimension, TagHit } from './types'
 
 // Search over pack titles, character names + aliases, artist names + aliases and tag names.
@@ -144,7 +144,7 @@ function searchSql(pq: ParsedQuery, limit: number): SQL {
       select nm.g, nm.eid, max(${linkScore}) as ls from names nm group by nm.g, nm.eid having max(${linkScore}) > 0
     ),
     cand as (
-      select p.id from packs p where p.status = 'published' and ${or(N.map((n) => titleMatch(title, n)))}
+      select p.id from packs p where ${packVisible('p')} and ${or(N.map((n) => titleMatch(title, n)))}
       union select x.pack_id from links h join pack_characters x on h.g = 'c' and x.character_id = h.eid
       union select x.pack_id from links h join pack_artists x on h.g = 'a' and x.artist_id = h.eid
       union select x.pack_id from links h join pack_tags x on h.g = 't' and x.tag_id = h.eid
@@ -152,7 +152,7 @@ function searchSql(pq: ParsedQuery, limit: number): SQL {
     scored as (
       select p.id, p.download_count,
         ${greatest(N.map((n) => titleScore(title, n)))} + 0.5 * coalesce(l.ls, 0) as score
-      from cand join packs p on p.id = cand.id and p.status = 'published'
+      from cand join packs p on p.id = cand.id and ${packVisible('p')}
       left join lateral (
         select max(h.ls) as ls from links h
         where (h.g = 'c' and exists (select 1 from pack_characters x where x.pack_id = p.id and x.character_id = h.eid))
@@ -167,7 +167,7 @@ function searchSql(pq: ParsedQuery, limit: number): SQL {
     from disp d
     left join tags t on d.g = 't' and t.id = d.eid
     left join lateral (
-      select count(distinct x.pack_id)::int as n from pack_tags x join packs q on q.id = x.pack_id and q.status = 'published'
+      select count(distinct x.pack_id)::int as n from pack_tags x join packs q on q.id = x.pack_id and ${packVisible('q')}
       where d.g = 't' and x.tag_id = d.eid
     ) tc on true
     where d.g <> 't' or tc.n > 0
@@ -289,10 +289,10 @@ async function loadIndex(): Promise<IndexEntry[]> {
               union all select a.name from pack_artists x join artists a on a.id = x.artist_id where x.pack_id = p.id
               union all select aa.alias from pack_artists x join artist_aliases aa on aa.artist_id = x.artist_id where x.pack_id = p.id
               union all select t.name from pack_tags x join tags t on t.id = x.tag_id where x.pack_id = p.id))), '[]'::json)
-          from packs p where p.status = 'published') as packs,
+          from packs p where ${packVisible('p')}) as packs,
         (select coalesce(json_agg(json_build_object('dimension', s.dimension, 'slug', s.slug, 'name', s.name, 'n', s.n)), '[]'::json)
            from (select t.dimension, t.slug, t.name, count(distinct q.id)::int as n
-                   from tags t join pack_tags x on x.tag_id = t.id join packs q on q.id = x.pack_id and q.status = 'published'
+                   from tags t join pack_tags x on x.tag_id = t.id join packs q on q.id = x.pack_id and ${packVisible('q')}
                    group by t.id, t.dimension, t.slug, t.name) s) as tags`),
     characterEntries(),
     artistEntries(),

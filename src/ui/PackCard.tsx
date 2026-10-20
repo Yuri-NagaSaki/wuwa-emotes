@@ -4,6 +4,7 @@ import { cx } from './cx'
 import { fmtN, fmtW } from './format'
 import { Icon } from './Icon'
 import { AppLink } from './link'
+import type { Shape } from './masonry-layout'
 import { useAnimatedPreview } from './usePreview'
 
 export type CoverVariant = 'one' | 'four' | 'lead' | 'strip'
@@ -35,6 +36,8 @@ export interface PackCardProps {
   /** Hide the excerpt (dense grids). */
   noExcerpt?: boolean
   enterIndex?: number
+  /** Above the fold: load the cover eagerly with high priority (LCP candidates). */
+  priority?: boolean
   className?: string
 }
 
@@ -43,7 +46,44 @@ export function coverVariant(variant: CoverVariant, imageCount: number): CoverVa
   return imageCount < 4 ? 'one' : variant
 }
 
-/** Pack card for masonry and rails. The body height depends on the text (title lines, excerpt). */
+// Fixed geometry of the card (components.css, "pack card"): every text row has a fixed height, so the
+// card height is an exact function of its width. Keep these numbers in sync with the CSS.
+const CARD = {
+  desktop: { pad: 12, top: 14, bottom: 16, gap: 9, title: 44, excerpt: 40, chars: 26, meta: 20, credit: 30 },
+  phone: { pad: 8, top: 10, bottom: 12, gap: 7, title: 40, excerpt: 36, chars: 26, meta: 20, credit: 0 },
+} as const
+const BORDER = 2
+
+/** Which optional rows a card shows (same rules as <PackCard>). */
+export function packCardRows(p: Pick<PackCardProps, 'excerpt' | 'noExcerpt' | 'characters' | 'artists' | 'official'>) {
+  return {
+    excerpt: !p.noExcerpt && !!p.excerpt,
+    chars: (p.characters?.length ?? 0) > 0,
+    credit: (p.artists?.length ?? 0) > 0 || !!p.official,
+  }
+}
+
+/**
+ * Card height as ratio × width + chrome, for <Masonry>. The cover is square-ish per variant (see
+ * .cv.*), the body is the sum of its fixed rows. Phones hide the credit row and use tighter padding.
+ */
+export function packCardShape(p: Pick<PackCardProps, 'excerpt' | 'noExcerpt' | 'characters' | 'artists' | 'official' | 'variant' | 'images'>): Shape {
+  const v = coverVariant(p.variant ?? 'four', p.images.length)
+  const rows = packCardRows(p)
+  const ratio = v === 'strip' ? 31 / 30 : 1
+  const chrome = (mode: 'desktop' | 'phone') => {
+    const c = CARD[mode]
+    // cover box (padding included) for an inner width cw = width − 2·border − 2·pad
+    const inner = -(2 * BORDER + 2 * c.pad)
+    const cover = v === 'strip' ? ratio * inner + 8 - 16 / 3 + 2 * c.pad : v === 'lead' ? inner + 8 + 2 * c.pad : inner + 2 * c.pad
+    const list = [c.title, rows.excerpt ? c.excerpt : 0, rows.chars ? c.chars : 0, c.meta, rows.credit ? c.credit : 0].filter((h) => h > 0)
+    const body = c.top + c.bottom + list.reduce((a, b) => a + b, 0) + c.gap * (list.length - 1)
+    return 2 * BORDER + cover + body
+  }
+  return { ratio, chrome: { desktop: chrome('desktop'), phone: chrome('phone') } }
+}
+
+/** Pack card for masonry and rails. Text rows have fixed heights (packCardShape). */
 export function PackCard(p: PackCardProps) {
   const v = coverVariant(p.variant ?? 'four', p.images.length)
   const shown = v === 'one' ? p.images.slice(0, 1) : p.images.slice(0, 4)
@@ -57,7 +97,16 @@ export function PackCard(p: PackCardProps) {
       <AppLink to={p.href} className="pcard-cover" aria-label={p.title} ref={cover.ref} {...cover.handlers}>
         <div className={cx('cv', v)}>
           {shown.map((src, i) => (
-            <img key={i} src={i === 0 ? cover.src : src} width={240} height={240} loading="lazy" decoding="async" alt="" />
+            <img
+              key={i}
+              src={i === 0 ? cover.src : src}
+              width={240}
+              height={240}
+              loading={p.priority ? 'eager' : 'lazy'}
+              fetchPriority={p.priority && i === 0 ? 'high' : undefined}
+              decoding="async"
+              alt=""
+            />
           ))}
         </div>
         {p.flags?.length ? (

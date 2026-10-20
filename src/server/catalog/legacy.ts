@@ -1,6 +1,6 @@
 import { type SQL, sql } from 'drizzle-orm'
 import { EMOJI_ID_RE } from '#/shared/ids'
-import { artistVisible, characterVisible, rows, tagVisible } from './sql'
+import { artistVisible, characterVisible, emojiVisible, packPublished, packVisible, rows, tagVisible } from './sql'
 import type { LegacyRedirect } from './types'
 
 // Old-site paths → new paths, for the platform's 301 handler (and renamed pack/character slugs).
@@ -64,13 +64,13 @@ async function targetIsPublic(location: string): Promise<boolean> {
   if (seg.length !== 2) return true
   const [kind, slug] = seg as [string, string]
   let check: SQL | null = null
-  if (kind === 'packs') check = sql`select 1 from packs p where p.slug = ${slug} and p.status = 'published'`
+  if (kind === 'packs') check = sql`select 1 from packs p where p.slug = ${slug} and ${packVisible('p')}`
   if (kind === 'characters') check = sql`select 1 from characters c where c.slug = ${slug} and ${characterVisible('c')}`
   if (kind === 'artists') check = sql`select 1 from artists a where a.slug = ${slug} and ${artistVisible('a')}`
   if (kind === 'e') {
     if (!EMOJI_ID_RE.test(slug)) return false
     check = sql`select 1 from emojis e join packs p on p.id = e.pack_id
-                where e.id = ${slug} and e.status = 'published' and p.status = 'published'`
+                where e.id = ${slug} and ${emojiVisible('e')} and ${packPublished('p')}`
   }
   if (!check) return true
   return (await rows(check)).length > 0
@@ -87,7 +87,7 @@ async function fallback(path: string): Promise<string | null> {
   if (kind === 'archives') {
     const r = await rows<{ slug: string }>(sql`
       select p.slug from packs p
-      where p.status = 'published' and (p.legacy_post_name = ${x} or p.pack_key = ${x} or p.slug = ${x})
+      where ${packVisible('p')} and (p.legacy_post_name = ${x} or p.pack_key = ${x} or p.slug = ${x})
       order by (p.legacy_post_name = ${x}) is true desc, (p.slug = ${x}) desc, p.id
       limit 1`)
     return r[0] ? `/packs/${enc(r[0].slug)}` : null
@@ -95,7 +95,7 @@ async function fallback(path: string): Promise<string | null> {
 
   if (kind === 'packs') {
     const r = await rows<{ slug: string }>(sql`
-      select p.slug from packs p where p.status = 'published' and p.pack_key = ${x} and p.slug <> ${x} limit 1`)
+      select p.slug from packs p where ${packVisible('p')} and p.pack_key = ${x} and p.slug <> ${x} limit 1`)
     return r[0] ? `/packs/${enc(r[0].slug)}` : null
   }
 

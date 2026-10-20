@@ -555,16 +555,12 @@ export function KitPage() {
           </section>
 
           <section className="sec">
-            <SectionHead plain title="瀑布流" sub={`TanStack Virtual 窗口虚拟列表 + lanes；高度来自库里存的宽高，不测量 DOM（${MASONRY.length} 项）`} />
+            <SectionHead plain title="瀑布流" sub={`服务端与客户端同一布局（容器查询 + 每项位置变量），高度来自库里存的宽高，不测量 DOM（${MASONRY.length} 项）`} />
             <Masonry
               label="瀑布流示例"
               items={MASONRY}
               getKey={(it) => it.id}
-              getHeight={(it, lw) => itemHeight(it.w, it.h, lw)}
-              minColumnWidth={180}
-              minColumnWidthPhone={140}
-              gap={14}
-              gapPhone={10}
+              getShape={(it) => ({ ratio: itemHeight(it.w, it.h, 1000) / 1000, chrome: { desktop: 0, phone: 0 } })}
               renderItem={(it, i) => (
                 <div className="kit-mcell">
                   <img src={it.poster} width={it.w} height={it.h} alt={`占位贴纸 ${i + 1}`} loading="lazy" decoding="async" />

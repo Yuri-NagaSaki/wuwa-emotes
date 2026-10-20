@@ -3,9 +3,9 @@ import { artistEntries } from './artists'
 import { cached, LIST_TTL_MS } from './cache'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { characterEntries } from './characters'
-import { num, rows, seededHash, shanghaiDay } from './sql'
+import { emojiVisible, num, packPublished, packVisible, rows, seededHash, shanghaiDay } from './sql'
 import { TILE_COLUMNS, type TileRow, toEmojiTile } from './stream'
-import type { CountedRef, EmojiTile, ExploreData, Facets, PackCard, PackKind, SourceKind, TagDimension } from './types'
+import type { CountedRef, EmojiTile, ExploreData, Facets, PackCard, PackFacets, PackKind, SourceKind, TagDimension } from './types'
 
 // 探索: a random pack and a random emoji (fresh on every call), today's picks (seeded by the
 // Asia/Shanghai date, so stable all day) and the facet lists the page links into /packs filters.
@@ -26,12 +26,12 @@ async function loadFacetTags(): Promise<Pick<Facets, 'tags' | 'kinds' | 'sources
       (select coalesce(json_agg(json_build_object('dimension', s.dimension, 'slug', s.slug, 'name', s.name, 'n', s.n)
                                 order by s.dimension, s.n desc, s.name), '[]'::json)
          from (select t.dimension, t.slug, t.name, count(distinct p.id)::int as n
-                 from tags t join pack_tags pt on pt.tag_id = t.id join packs p on p.id = pt.pack_id and p.status = 'published'
+                 from tags t join pack_tags pt on pt.tag_id = t.id join packs p on p.id = pt.pack_id and ${packVisible('p')}
                  group by t.id, t.dimension, t.slug, t.name) s) as tags,
       (select coalesce(json_agg(json_build_object('kind', s.kind, 'n', s.n) order by s.n desc, s.kind), '[]'::json)
-         from (select kind, count(*)::int as n from packs where status = 'published' group by kind) s) as kinds,
+         from (select p.kind, count(*)::int as n from packs p where ${packVisible('p')} group by p.kind) s) as kinds,
       (select coalesce(json_agg(json_build_object('source', s.source_kind, 'n', s.n) order by s.n desc, s.source_kind), '[]'::json)
-         from (select source_kind, count(*)::int as n from packs where status = 'published' group by source_kind) s) as sources`)
+         from (select p.source_kind, count(*)::int as n from packs p where ${packVisible('p')} group by p.source_kind) s) as sources`)
   const tags = Object.fromEntries(DIMENSIONS.map((d) => [d, [] as CountedRef[]])) as Record<TagDimension, CountedRef[]>
   for (const t of r?.tags ?? []) tags[t.dimension]?.push({ slug: t.slug, name: t.name, packCount: num(t.n) })
   return {
@@ -53,6 +53,25 @@ export function getFacets(): Promise<Facets> {
   })
 }
 
+/** /packs filter facets: getFacets plus character colors/avatars and the public pack total (cached). */
+export function getPackFacets(): Promise<PackFacets> {
+  return cached('pack-facets', LIST_TTL_MS, async () => {
+    const [facets, chars] = await Promise.all([getFacets(), characterEntries()])
+    const bySlug = new Map(chars.map((c) => [c.card.slug, c.card]))
+    return {
+      total: facets.sources.reduce((s, x) => s + x.packCount, 0),
+      characters: facets.characters.map((c) => {
+        const card = bySlug.get(c.slug)
+        return { ...c, color: card?.color ?? null, avatar: card?.avatar?.poster ?? null }
+      }),
+      artists: facets.artists,
+      tags: facets.tags,
+      kinds: facets.kinds,
+      sources: facets.sources,
+    }
+  })
+}
+
 /** A uniformly random point in the emoji id space (ids are r- + 20 random hex digits). */
 function randomEmojiProbe(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(10))
@@ -64,12 +83,12 @@ export async function getExplore(now = new Date()): Promise<ExploreData> {
   const packKey = seededHash(sql.raw('p.id::text'), day)
   const emojiKey = seededHash(sql.raw('e.id'), day)
   const probe = randomEmojiProbe()
-  const visible = sql.raw(`e.status = 'published' and p.status = 'published'`)
+  const visible = sql`${emojiVisible('e')} and ${packPublished('p')}`
   const cardSource = sql`
-    (select p.id, 'random' as bucket, 1::bigint as ord from packs p where p.status = 'published' order by random() limit 1)
+    (select p.id, 'random' as bucket, 1::bigint as ord from packs p where ${packVisible('p')} order by random() limit 1)
     union all
     (select p.id, 'today', row_number() over (order by ${packKey}, p.id)
-       from packs p where p.status = 'published'
+       from packs p where ${packVisible('p')}
        order by ${packKey}, p.id limit ${TODAY_PACKS})`
   const [cardRows, tileRows, facets] = await Promise.all([
     rows<CardRow & { bucket: string }>(sql`${cardSelect(cardSource)} order by src.bucket, src.ord`),

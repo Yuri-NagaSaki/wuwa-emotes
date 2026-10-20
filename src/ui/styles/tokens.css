@@ -58,7 +58,8 @@
   /* device safe areas (notch, home indicator); needs viewport-fit=cover */
   --safe-top: env(safe-area-inset-top, 0px); --safe-bottom: env(safe-area-inset-bottom, 0px);
   /* layout */
-  --gutter: 32px; --maxw: 1240px; --head-h: 64px;
+  /* page container (same as AniBT): fluid gutter, 1440 px content, 1200 px for reading pages */
+  --gutter: clamp(16px, 3vw, 32px); --maxw: 1440px; --maxw-narrow: 1200px; --head-h: 64px;
 }
 
 [data-theme="night"] {
