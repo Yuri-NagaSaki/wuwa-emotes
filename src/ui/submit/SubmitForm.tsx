@@ -1,5 +1,6 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactElement } from 'react'
+import { createPortal } from 'react-dom'
 import type { SubmissionDeclaration, SubmissionKind } from '#/server/db/schema/submissions'
 import type { SubmitContext } from '#/server/submissions/context'
 import type { SubmissionDetail, UploadView } from '#/server/submissions/service'
@@ -120,6 +121,8 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
   const [busy, setBusy] = useState<null | 'save' | 'submit' | 'withdraw'>(null)
   const [over, setOver] = useState(false)
   const [confirmWithdraw, setConfirmWithdraw] = useState(false)
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => setMounted(true), [])
   const creating = useRef<Promise<string> | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
@@ -598,16 +601,21 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
         </aside>
       </div>
 
-      {editable ? (
-        <div className="mob-actbar">
-          <Button size="sm" onClick={() => save()} disabled={busy != null}>
-            保存草稿
-          </Button>
-          <Button variant="primary" icon="send" onClick={submit} disabled={busy != null}>
-            {status === 'returned' ? '重新提交' : '提交审核'}
-          </Button>
-        </div>
-      ) : null}
+      {editable && mounted
+        ? // portalled: main.page keeps a transform from its entrance animation, which would pin a
+          // fixed bar to the page instead of the screen
+          createPortal(
+            <div className="mob-actbar">
+              <Button size="sm" onClick={() => save()} disabled={busy != null}>
+                保存草稿
+              </Button>
+              <Button variant="primary" icon="send" onClick={submit} disabled={busy != null}>
+                {status === 'returned' ? '重新提交' : '提交审核'}
+              </Button>
+            </div>,
+            document.body,
+          )
+        : null}
 
       <Modal
         open={confirmWithdraw}

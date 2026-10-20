@@ -223,8 +223,17 @@ async function shoot(browser: Browser, cookies: { name: string; value: string; d
     if (prepare) await prepare(page)
     await settle(page, 900)
     const file = join(OUT, `${name}-${v.tag}.png`)
-    await page.screenshot({ path: file, fullPage: true })
-    shots.push(file)
+    if (v.isMobile) {
+      // the phone tab bar and action bar are fixed: the first screen shows them where they belong,
+      // the full-page shot shows the rest (fixed bars are drawn at the first screen's position there)
+      await page.screenshot({ path: file })
+      const full = join(OUT, `${name}-${v.tag}-full.png`)
+      await page.screenshot({ path: full, fullPage: true })
+      shots.push(file, full)
+    } else {
+      await page.screenshot({ path: file, fullPage: true })
+      shots.push(file)
+    }
     await ctx.close()
   }
 }
@@ -300,7 +309,8 @@ try {
   await sleep(800)
   const cookies = (await ctx.cookies()).map((c) => ({ name: c.name, value: c.value }))
   // the filled form, before it is sent
-  await shoot(browser, cookies, `/me/submissions/${(await sql<{ id: string }>(`select id from submissions order by created_at desc limit 1`))[0]!.id}`, 'submit')
+  await shoot(browser, cookies, '/submit', 'submit')
+  await shoot(browser, cookies, `/me/submissions/${(await sql<{ id: string }>(`select id from submissions order by created_at desc limit 1`))[0]!.id}`, 'submit-filled')
   await clickText(page, '.sub-submit button', '提交审核')
   await page.waitForFunction(() => location.pathname === '/me/submissions', { timeout: 60_000 })
   const [sub] = await sql<{ id: string; status: string; pack_id: number }>(`select id, status, pack_id from submissions order by created_at desc limit 1`)
