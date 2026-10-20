@@ -122,7 +122,7 @@ describe('batch plan', () => {
     expect(uniqueName('a-01.gif', taken)).toBe('a-01-3.gif')
     expect(uniqueName('README', taken)).toBe('README')
     expect(uniqueName('README', taken)).toBe('README-2')
-    expect(zipFileName('sparxie.moe', 32, 1, 1)).toBe('sparxie-32-stickers.zip')
+    expect(zipFileName('chaochi.example', 32, 1, 1)).toBe('chaochi-32-stickers.zip')
     expect(zipFileName('www.example.com', 200, 2, 3)).toBe('example-200-stickers-part2.zip')
     expect(zipFileName('localhost', 5, 1, 1)).toBe('localhost-5-stickers.zip')
     expect(zipFileName('', 5, 1, 1)).toBe('stickers-5-stickers.zip')
