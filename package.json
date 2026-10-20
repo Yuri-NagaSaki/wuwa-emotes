@@ -17,7 +17,7 @@
     "cli": "bun src/cli.ts",
     "routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
-    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:downloads && bun run test:submissions && bun run test:comments && bun run test:admin && bun run test:media",
+    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/pages && bun test ./tests/integration && bun run test:catalog && bun run test:downloads && bun run test:submissions && bun run test:comments && bun run test:admin && bun run test:media",
     "test:unit": "bun test ./tests/unit",
     "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate",

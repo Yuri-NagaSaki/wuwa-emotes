@@ -56,6 +56,8 @@ describe('create and list', () => {
 describe('edit', () => {
   test('slug change writes a 301, follows earlier redirects, and renaming back does not loop', async () => {
     const pack = await seedPack({ packKey: uniq('slug'), status: 'published' })
+    // a pack is public only with at least one published emoji whose derivatives are ready
+    await seedEmoji(pack, { objects: false })
     const deps = fakeDeps()
     const a = pack.slug
     const b = `${a}-b`
