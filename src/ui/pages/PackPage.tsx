@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type ComponentType, type CSSProperties } from 'react'
 import type { PackDetail } from '#/server/catalog/types'
 import { Button } from '../Button'
 import { Chips, Flag, Tag } from '../Chip'
@@ -8,12 +8,14 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { setAutoplayPref, useAutoplayPref } from '../motion'
 import { tray } from '../batch/tray'
-import { Tile, TileGrid } from '../Tile'
+import { TileGrid } from '../Tile'
 import { copyImage, copyLink } from './clipboard'
 import { CharacterTags } from './CharacterTags'
 import { CommentsSlot } from './CommentsSlot'
-import { EmojiDialog } from './EmojiDialog'
+import { EmojiDialogHost, prefetchEmojiDialog } from './dialog-loader'
+import type { EmojiDialogProps } from './EmojiDialog'
 import { artistHref, characterHref, dialogPack, fromPackEmoji, KIND_LABEL, licenseLabel, longDate, packAccent, packHref } from './model'
+import { TileItem, useLiveTiles, useStableActions } from './tile-items'
 import { Toggle } from './Toggle'
 import { useAddToBatch } from './useBatch'
 import { useDownload } from './useDownload'
@@ -21,6 +23,10 @@ import { favoriteKey, toggleFavorite, useFavorite, useFavoriteKeys, useFavoriteS
 
 // 包详情 /packs/:slug (and /e/:emojiId with the dialog open). The route owns the dialog's history
 // (route masking: the address bar shows /e/<id>); this component only reports open/switch/close.
+
+// The dialog code loads when the page is idle (or when a tile is pressed), not with the page
+// (dialog-loader.tsx). The /e deep link passes the component itself, so its server HTML and hydration
+// have the dialog.
 
 export interface PackPageProps {
   pack: PackDetail
@@ -31,6 +37,8 @@ export interface PackPageProps {
   onClose: () => void
   /** /e deep link: the dialog image is the LCP element */
   deepLink?: boolean
+  /** The dialog component rendered without lazy loading (the /e deep link); default: loaded on demand. */
+  dialog?: ComponentType<EmojiDialogProps>
 }
 
 function PackFlags({ pack }: { pack: PackDetail }) {
@@ -40,7 +48,7 @@ function PackFlags({ pack }: { pack: PackDetail }) {
   return null
 }
 
-export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: PackPageProps) {
+export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink, dialog: Dialog = EmojiDialogHost }: PackPageProps) {
   const dpack = useMemo(() => dialogPack(pack), [pack])
   const items = useMemo(() => pack.emojis.map((e) => fromPackEmoji(e, dpack)), [pack.emojis, dpack])
   const [selecting, setSelecting] = useState(false)
@@ -71,6 +79,24 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
     setSel(new Set())
   }
   const zip = () => void dl.run({ kind: 'zip', slug: pack.slug })
+
+  // one stable handler object for every tile (TileItem is memoized: a re-render of this page for the
+  // dialog, a selection or a heart only re-renders the tiles whose own props changed)
+  const actions = useStableActions({
+    open: (i: number) => {
+      const id = items[i]?.id
+      if (!id) return
+      if (selecting) toggle(id)
+      else onOpen(i)
+    },
+    copy: (e: (typeof items)[number]) => void copyImage(e),
+    download: (id: string) => void dl.run({ kind: 'emoji', id, mode: 'save' }),
+    add: (id: string) => addToBatch(id),
+    favorite: (id: string) => void toggleFavorite({ type: 'emoji', id }),
+  })
+  // long packs: the first tiles render now, the rest as they come near the screen (server: all)
+  const live = useLiveTiles(pack.id, items.length)
+  useEffect(() => prefetchEmojiDialog({ idle: true }), [])
 
   const zipLabel = zipBusy ? (dl.building ? '正在生成 ZIP…' : '准备下载…') : '整包下载'
   const groups = pack.tags.group
@@ -252,24 +278,23 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
 
       <div className="wrap">
         <TileGrid size={150} selecting={selecting} className={cx(pv && 'is-preview')}>
-          {items.map((e, i) => (
-            <Tile
-              key={e.id}
-              poster={e.poster}
-              preview={e.preview}
-              alt={`${pack.title} 第 ${i + 1} 张`}
-              format={e.format}
-              selecting={selecting}
-              selected={sel.has(e.id)}
-              previewOnly={pv}
-              onOpen={() => (selecting ? toggle(e.id) : onOpen(i))}
-              onCopy={pv ? undefined : () => void copyImage(e)}
-              onDownload={pv ? undefined : () => void dl.run({ kind: 'emoji', id: e.id, mode: 'save' })}
-              onAdd={pv ? undefined : () => addToBatch(e.id)}
-              favorite={favKeys.has(favoriteKey({ type: 'emoji', id: e.id }))}
-              onFavorite={() => void toggleFavorite({ type: 'emoji', id: e.id })}
-            />
-          ))}
+          {items.map((e, i) =>
+            live.isLive(i) ? (
+              <TileItem
+                key={e.id}
+                e={e}
+                index={i}
+                alt={`${pack.title} 第 ${i + 1} 张`}
+                selecting={selecting}
+                selected={sel.has(e.id)}
+                previewOnly={pv}
+                favorite={favKeys.has(favoriteKey({ type: 'emoji', id: e.id }))}
+                actions={actions}
+              />
+            ) : (
+              <div key={e.id} className="tile" data-i={i} ref={live.observe} aria-hidden="true" />
+            ),
+          )}
         </TileGrid>
 
         <div className="pack-comments">
@@ -310,7 +335,7 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
         <Button icon="heart" aria-label="收藏" className={fav.favorited ? 'is-fav' : undefined} onClick={fav.toggle} />
       </div>
 
-      {open != null && items[open] ? <EmojiDialog items={items} index={open} onIndex={onIndex} onClose={onClose} priority={deepLink} packId={pack.id} packStickers={pack.emojis} /> : null}
+      {open != null && items[open] ? <Dialog items={items} index={open} onIndex={onIndex} onClose={onClose} priority={deepLink} packId={pack.id} packStickers={pack.emojis} /> : null}
     </div>
   )
 }

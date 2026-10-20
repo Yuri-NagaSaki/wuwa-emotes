@@ -3,10 +3,12 @@ import { exploreFn } from '#/server/catalog/fns'
 import { ExplorePage } from '#/ui/pages/ExplorePage'
 import { emojiParam } from '#/ui/pages/search-params'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/explore')({
   validateSearch: emojiParam,
   loader: () => exploreFn(),
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) =>
     pageHead(matches, {
       title: '探索',

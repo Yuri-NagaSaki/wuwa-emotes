@@ -4,6 +4,7 @@ import { Tag } from '../Chip'
 import { cx } from '../cx'
 import { fmtB } from '../format'
 import { Icon, type IconName } from '../Icon'
+import { lockScroll } from '../scroll-lock'
 import { AppLink } from '../link'
 import { CharacterTags } from './CharacterTags'
 import { copyImage, copyLink } from './clipboard'
@@ -66,13 +67,14 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
   const pv = !e.pack.downloadable
   const n = items.length
 
-  // modal plumbing: scroll lock (the gutter stays, so nothing shifts), focus in, focus back out
+  // modal plumbing: scroll lock (event-based: the root keeps its overflow, so nothing repaints), focus
+  // in, focus back out
   useIsoLayoutEffect(() => {
     const prev = document.activeElement as HTMLElement | null
-    document.documentElement.classList.add('em-lock')
+    const unlock = lockScroll()
     cardRef.current?.focus({ preventScroll: true })
     return () => {
-      document.documentElement.classList.remove('em-lock')
+      unlock()
       if (prev && document.contains(prev)) prev.focus({ preventScroll: true })
     }
   }, [])

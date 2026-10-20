@@ -3,6 +3,7 @@ import { searchFn } from '#/server/catalog/fns'
 import { SearchPage } from '#/ui/pages/SearchPage'
 import { emojiParam } from '#/ui/pages/search-params'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/search')({
   validateSearch: (s: Record<string, unknown>): { q?: string; e?: string } => {
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/_site/search')({
   },
   loaderDeps: ({ search }) => ({ q: search.q ?? '' }),
   loader: ({ deps }) => (deps.q.trim() ? searchFn({ data: { q: deps.q, limit: 24 } }) : null),
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) =>
     pageHead(matches, {
       title: loaderData?.q ? `搜索「${loaderData.q}」` : '搜索',

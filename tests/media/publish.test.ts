@@ -79,6 +79,21 @@ describe('publishEmojiDerivatives', () => {
     expect(await headObject(reviewKey('p240', PK, noA160))).toBeNull()
   })
 
+  test('queues the full render for the dialog on both paths; a failing queue does not fail the publish', async () => {
+    const full: string[] = []
+    const withFull: PublishDeps = { ...deps, enqueueFull: async (id) => void full.push(id) }
+    const copied = await addEmoji({ frames: 1, review: ['p240'] })
+    expect(await publishEmojiDerivatives(copied, withFull)).toBe('copied')
+    const derive = await addEmoji({ frames: 1 })
+    expect(await publishEmojiDerivatives(derive, withFull)).toBe('queued')
+    expect(full).toEqual([copied, derive])
+
+    const broken: PublishDeps = { ...deps, enqueueFull: async () => Promise.reject(new Error('queue down')) }
+    const third = await addEmoji({ frames: 1, review: ['p240'] })
+    expect(await publishEmojiDerivatives(third, broken)).toBe('copied')
+    expect(await derivedReady(third)).toBe(true)
+  })
+
   test('refuses emojis that are not published', async () => {
     const id = await addEmoji({ status: 'pending', review: ['p240'] })
     await expect(publishEmojiDerivatives(id, deps)).rejects.toThrow('only published emojis')

@@ -3,6 +3,7 @@ import { galleryFn, homeFn } from '#/server/catalog/fns'
 import { HomePage } from '#/ui/pages/HomePage'
 import { pageHead } from '#/ui/pages/seo'
 import { emojiParam } from '#/ui/pages/search-params'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/')({
   validateSearch: emojiParam,
@@ -11,6 +12,7 @@ export const Route = createFileRoute('/_site/')({
     const [home, stream] = await Promise.all([homeFn(), galleryFn({ data: { sort: 'random', limit: 18 } }).then((p) => p.items, () => [])])
     return { home, stream }
   },
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) => {
     const s = loaderData?.home.stats
     return pageHead(matches, {

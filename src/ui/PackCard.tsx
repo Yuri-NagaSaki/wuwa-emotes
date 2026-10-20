@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { memo, type CSSProperties } from 'react'
 import { Flag, Tag, type FlagKind } from './Chip'
 import { cx } from './cx'
 import { fmtN, fmtW } from './format'
@@ -125,8 +125,12 @@ export function packCardShape(p: TierProps & Pick<PackCardProps, 'artists' | 'of
   return { ratio, chrome: { desktop: chrome('desktop'), phone: chrome('phone') } }
 }
 
-/** Pack card for masonry and rails. Text rows take the card's own line counts (packCardShape). */
-export function PackCard(p: PackCardProps) {
+/**
+ * Pack card for masonry and rails. Text rows take the card's own line counts (packCardShape).
+ * Memoized: lists pass the same props object per card (PackMasonry), so re-rendering a list only
+ * renders new cards.
+ */
+export const PackCard = memo(function PackCard(p: PackCardProps) {
   const v = coverVariant(p.variant ?? 'four', p.images.length)
   const shown = v === 'one' ? p.images.slice(0, 1) : p.images.slice(0, 4)
   const cover = useAnimatedPreview<HTMLAnchorElement>(shown[0] ?? '', p.coverPreview)
@@ -211,4 +215,4 @@ export function PackCard(p: PackCardProps) {
       </div>
     </article>
   )
-}
+})

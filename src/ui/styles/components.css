@@ -145,6 +145,8 @@
 .tile-acts button.is-fav svg.i { fill: var(--tp-heart); stroke: var(--tp-heart); }
 .tile-fmt { position: absolute; top: 8px; left: 8px; font: 900 10px/16px var(--tp-font-num); letter-spacing: 0.06em; color: var(--tp-muted); background: color-mix(in srgb, var(--tp-card) 90%, transparent); border-radius: 6px; padding: 0 5px; opacity: 0; transition: opacity var(--t-fast); }
 .tile:hover .tile-fmt { opacity: 1; }
+/* the actions and the badge are mounted on first hover/focus (Tile.tsx): fade them in from the hidden state */
+@starting-style { .tile:hover .tile-acts, .tile:focus-within .tile-acts { opacity: 0; transform: translateY(6px); } .tile:hover .tile-fmt { opacity: 0; } }
 .tile-check { position: absolute; top: 8px; right: 8px; width: 26px; height: 26px; border-radius: 9px; border: 2.5px solid var(--tp-line-2); background: var(--tp-card); display: none; place-items: center; color: transparent; }
 .tile-check svg.i { width: 15px; height: 15px; stroke-width: 3; }
 .is-selecting .tile-check { display: grid; }

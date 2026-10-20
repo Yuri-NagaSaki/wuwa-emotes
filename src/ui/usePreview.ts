@@ -24,6 +24,46 @@ function observeBand(el: Element, cb: (inBand: boolean) => void) {
   }
 }
 
+// Autoplay (the middle band) waits until the posters on screen have loaded: an a160 preview is 60–130 KB,
+// about ten posters' worth, and starting four of them right after a navigation took 35–45% of the
+// image bytes while the page's own posters were still arriving. Hover and focus never wait.
+const SETTLE_MAX_MS = 6000
+const settleWaiters = new Set<() => void>()
+let settleTimer: ReturnType<typeof setTimeout> | undefined
+let settleSince = 0
+
+function postersPendingInView(): boolean {
+  const vh = innerHeight
+  for (const img of document.images) {
+    if (img.complete) continue
+    const r = img.getBoundingClientRect()
+    if (r.width > 0 && r.bottom > 0 && r.top < vh) return true
+  }
+  return false
+}
+
+function checkSettled() {
+  settleTimer = undefined
+  if (!settleWaiters.size) return
+  if (postersPendingInView() && performance.now() - settleSince < SETTLE_MAX_MS) {
+    settleTimer = setTimeout(checkSettled, 250)
+    return
+  }
+  const run = [...settleWaiters]
+  settleWaiters.clear()
+  for (const fn of run) fn()
+}
+
+/** Run `fn` once the posters in the viewport have loaded (or after SETTLE_MAX_MS); returns a cancel. */
+function whenPostersLoaded(fn: () => void): () => void {
+  if (!settleWaiters.size) settleSince = performance.now()
+  settleWaiters.add(fn)
+  settleTimer ??= setTimeout(checkSettled, 120)
+  return () => {
+    settleWaiters.delete(fn)
+  }
+}
+
 export interface AnimatedPreview<E extends HTMLElement> {
   ref: RefObject<E | null>
   /** The poster, or the preview once it is granted a slot and decoded. */
@@ -49,12 +89,20 @@ export function useAnimatedPreview<E extends HTMLElement>(poster: string, previe
   const enabled = allowed && Boolean(preview)
   const [playing, setPlaying] = useState(false)
   const [ready, setReady] = useState<string | null>(null)
+  const hovered = useRef(false)
 
   useEffect(() => {
     const el = ref.current
     if (!enabled || !el) return
-    const stop = observeBand(el, (inBand) => limiter.want(id, 'view', inBand, setPlaying))
+    let cancelWait: (() => void) | null = null
+    const stop = observeBand(el, (inBand) => {
+      cancelWait?.()
+      cancelWait = null
+      if (inBand) cancelWait = whenPostersLoaded(() => limiter.want(id, 'view', true, setPlaying))
+      else limiter.want(id, 'view', false, setPlaying)
+    })
     return () => {
+      cancelWait?.()
       stop()
       limiter.forget(id)
       setPlaying(false)
@@ -66,6 +114,8 @@ export function useAnimatedPreview<E extends HTMLElement>(poster: string, previe
     let cancelled = false
     const img = new Image()
     img.decoding = 'async'
+    // autoplay stays below the page's posters and the dialog image; a hovered tile asks normally
+    img.fetchPriority = hovered.current ? 'auto' : 'low'
     img.src = preview
     img.decode().then(
       () => !cancelled && setReady(preview),
@@ -77,6 +127,7 @@ export function useAnimatedPreview<E extends HTMLElement>(poster: string, previe
   }, [playing, preview, ready])
 
   const hover = (on: boolean) => {
+    hovered.current = on
     if (enabled) limiter.want(id, 'hover', on, setPlaying)
   }
 

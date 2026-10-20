@@ -87,6 +87,8 @@ export function securityHeaders(cfg: SecurityConfig): Record<string, string> {
 // ---- cache rules ----
 
 export const PUBLIC_HTML_CACHE = 'public, s-maxage=60, stale-while-revalidate=600'
+/** Public catalog server functions (edge-cache.ts): shared by Cloudflare, not kept by browsers. */
+export const PUBLIC_FN_CACHE = 'public, s-maxage=30, stale-while-revalidate=300'
 export const PRIVATE_NO_STORE = 'private, no-store'
 
 /**
@@ -148,8 +150,19 @@ export function decideCacheControl(i: CacheInput): string | null {
   return decided
 }
 
+/** A header that lets a shared cache (Cloudflare) store the response. */
+function isShared(cacheControl: string | null): boolean {
+  return !!cacheControl && !isStrict(cacheControl) && /(^|[\s,])(public|s-maxage=)/i.test(cacheControl)
+}
+
 function baseDecision(i: CacheInput): string | null {
-  if (i.handlerType === 'serverFn') return i.cacheControl ? null : 'no-store'
+  if (i.handlerType === 'serverFn') {
+    // Only a successful anonymous GET may leave shareable: a session cookie means the answer could
+    // be someone's own (and Cloudflare ignores Vary: Cookie), and writes or errors are never shared.
+    if (hasSessionCookie(i.cookieHeader)) return isStrict(i.cacheControl) ? null : PRIVATE_NO_STORE
+    if (isShared(i.cacheControl)) return i.method.toUpperCase() !== 'GET' || i.status !== 200 ? 'no-store' : null
+    return i.cacheControl ? null : 'no-store'
+  }
   const cls = classifyPath(i.pathname)
   if (cls === 'self-cached') return null
   if (cls === 'api') return i.cacheControl ? null : 'no-store'

@@ -241,6 +241,7 @@ export async function publishPendingEmojis(actor: Actor, ids: string[], deps: Me
         async enqueueDerived(emojiId) {
           if (!(await deps.enqueueDerive(emojiId, 'derived'))) throw new Error('derive job busy')
         },
+        enqueueFull: deps.enqueueFull,
       })
       out.published.push(r.id)
     } catch (err) {

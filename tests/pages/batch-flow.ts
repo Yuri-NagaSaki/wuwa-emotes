@@ -176,7 +176,12 @@ try {
 
   // pack B: two by the tile action, one from the dialog
   await go(page, `/packs/${B.slug}`)
-  for (const k of [0, 1]) await page.evaluate((i) => (document.querySelectorAll('.tile')[i]!.querySelector('button[aria-label="加入打包"]') as HTMLButtonElement).click(), k)
+  // the tile actions are mounted on first hover/focus (Tile.tsx): point at the tile first
+  for (const k of [0, 1]) {
+    await (await page.$$('.tile'))[k]!.hover()
+    await page.waitForFunction((i) => !!document.querySelectorAll('.tile')[i]!.querySelector('button[aria-label="加入打包"]'), {}, k)
+    await page.evaluate((i) => (document.querySelectorAll('.tile')[i]!.querySelector('button[aria-label="加入打包"]') as HTMLButtonElement).click(), k)
+  }
   await page.evaluate(() => (document.querySelectorAll('.tile .tile-hit')[2] as HTMLButtonElement).click())
   await page.waitForSelector('.em-card')
   await clickText(page, '.em-act', '加入打包')

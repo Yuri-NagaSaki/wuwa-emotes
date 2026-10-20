@@ -8,6 +8,7 @@ import {
   type PathClass,
   hasSessionCookie,
   PRIVATE_NO_STORE,
+  PUBLIC_FN_CACHE,
   PUBLIC_HTML_CACHE,
   securityConfig,
   securityHeaders,
@@ -263,6 +264,30 @@ describe('HTML cache rule (§2.1)', () => {
     expect(decideCacheControl(input({ pathname: '/api/health', contentType: 'application/json' }))).toBe('no-store')
     expect(decideCacheControl(input({ pathname: '/api/x', cacheControl: 'public, max-age=30' }))).toBeNull()
     expect(decideCacheControl(input({ pathname: '/_serverFn/abc', handlerType: 'serverFn', contentType: 'application/json' }))).toBe('no-store')
+  })
+
+  test('public catalog server functions are shared only for an anonymous, successful GET', () => {
+    const fn = (o: Partial<CacheInput>) => decideCacheControl(input({ pathname: '/_serverFn/abc', handlerType: 'serverFn', contentType: 'application/json', cacheControl: PUBLIC_FN_CACHE, ...o }))
+    // anonymous GET: the handler's shared header leaves as it is
+    expect(fn({})).toBeNull()
+    expect(fn({ cookieHeader: 'theme=dark; tp-x=1' })).toBeNull()
+    // a session cookie (either name) makes it private, whatever the handler said
+    expect(fn({ cookieHeader: '__Secure-better-auth.session_token=abc' })).toBe(PRIVATE_NO_STORE)
+    expect(fn({ cookieHeader: 'a=1; better-auth.session_token=abc' })).toBe(PRIVATE_NO_STORE)
+    expect(fn({ cookieHeader: 'better-auth.session_token=abc', cacheControl: 'public, max-age=60' })).toBe(PRIVATE_NO_STORE)
+    // writes, errors and redirects are never shared
+    expect(fn({ method: 'POST' })).toBe('no-store')
+    expect(fn({ status: 400 })).toBe('no-store')
+    expect(fn({ status: 500 })).toBe('no-store')
+    expect(fn({ status: 307 })).toBe('no-store')
+    // Set-Cookie always wins
+    expect(fn({ hasSetCookie: true })).toBe(PRIVATE_NO_STORE)
+    // functions that set nothing (getPublicConfig, comments, favorites, account): no-store, and
+    // private as well once the request carries a session
+    expect(fn({ cacheControl: null })).toBe('no-store')
+    expect(fn({ cacheControl: null, cookieHeader: '__Secure-better-auth.session_token=abc' })).toBe(PRIVATE_NO_STORE)
+    expect(fn({ cacheControl: 'no-store', cookieHeader: '__Secure-better-auth.session_token=abc' })).toBeNull()
+    expect(fn({ cacheControl: PRIVATE_NO_STORE, cookieHeader: '__Secure-better-auth.session_token=abc' })).toBeNull()
   })
 
   test('/img, /review-img and /dl keep their own headers', () => {
