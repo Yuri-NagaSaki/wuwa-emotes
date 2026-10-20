@@ -1,12 +1,15 @@
+import type { Readable } from 'node:stream'
 import {
   CopyObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   S3ServiceException,
 } from '@aws-sdk/client-s3'
+import { Upload } from '@aws-sdk/lib-storage'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../env'
 
@@ -98,4 +101,42 @@ export async function presignGet(key: string, opts: { expiresIn?: number; filena
 
 export async function presignPut(key: string, contentType: string, expiresIn = 900) {
   return getSignedUrl(s3Presign(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn })
+}
+
+/** First bytes of an object (HTTP Range, inclusive end). Used to read image headers without the whole file. */
+export async function getObjectRange(key: string, start: number, end: number): Promise<Uint8Array> {
+  const res = await s3().send(new GetObjectCommand({ Bucket: bucket(), Key: key, Range: `bytes=${start}-${end}` }))
+  const bytes = await res.Body!.transformToByteArray()
+  // a server that ignores Range sends the whole object; callers only look at the requested window
+  return bytes.byteLength > end - start + 1 ? bytes.subarray(0, end - start + 1) : bytes
+}
+
+/** Every key under a prefix (paginated ListObjectsV2). */
+export async function listKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = []
+  let token: string | undefined
+  do {
+    const res = await s3().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: prefix, ContinuationToken: token }))
+    for (const o of res.Contents ?? []) if (o.Key) keys.push(o.Key)
+    token = res.IsTruncated ? res.NextContinuationToken : undefined
+  } while (token)
+  return keys
+}
+
+/**
+ * Multipart upload of a stream of unknown length (ZIP builds, database dumps). Memory stays at about
+ * partSize × queueSize; call done() before writing into the stream and abort() if the producer fails.
+ */
+export function createUpload(
+  key: string,
+  body: Readable,
+  opts: { contentType: string; cacheControl?: string; partSize?: number; queueSize?: number },
+): Upload {
+  return new Upload({
+    client: s3(),
+    params: { Bucket: bucket(), Key: key, Body: body, ContentType: opts.contentType, CacheControl: opts.cacheControl },
+    partSize: opts.partSize ?? 8 * 1024 * 1024,
+    queueSize: opts.queueSize ?? 2,
+    leavePartsOnError: false,
+  })
 }
