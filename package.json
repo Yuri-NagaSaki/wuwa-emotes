@@ -17,7 +17,9 @@
     "cli": "bun src/cli.ts",
     "routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
-    "test": "bun test",
+    "test": "bun test ./tests/unit && bun test ./tests/integration",
+    "test:unit": "bun test ./tests/unit",
+    "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
