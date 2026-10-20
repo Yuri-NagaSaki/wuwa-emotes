@@ -53,9 +53,11 @@
 
 本地开发不需要 `.env` 文件：开发环境的默认值（数据库、RustFS 地址与密钥、站点地址）写在 `src/server/env.ts`。
 
-- 本地注册与登录：服务端没有 Cap 密钥时会拒绝所有人机验证。用 `CAP_DISABLED=1 bun run dev` 启动即可跳过校验；生产环境拒绝这个设置。人机验证组件的 WASM 由 `bun run build` 复制到 `public/cap/`，`bun run dev` 不会复制；本地需要显示组件时，先执行一次 `bun scripts/copy-cap-assets.ts`。
+- 本地注册与登录：注册、登录等接口要求人机验证令牌，服务端没有 `CAP_SECRET_KEY` 时拒绝所有令牌。账号页面的表单先从 `CAP_API_ENDPOINT` 指向的 Cap Standalone 服务器取得令牌；默认端点是生产的 Cap 服务器，按 `deploy/README.md` 它只允许站点源跨域，本地页面取不到令牌。两种做法：
+  - 在浏览器里使用账号页面：把 `CAP_API_ENDPOINT`、`CAP_SITE_KEY`、`CAP_SECRET_KEY` 指向一台允许 `http://localhost:3000` 的 Cap Standalone 服务器。组件的 WASM 由 `bun run build` 复制到 `public/cap/`，`bun run dev` 不复制，先执行一次 `bun scripts/copy-cap-assets.ts`。
+  - 只需要账号时：用 `CAP_DISABLED=1 bun run dev` 启动，服务端接受任意非空令牌（生产环境拒绝这个设置）；再直接调用 Better Auth 接口注册，`x-cap-token` 头填任意值，做法见 `tests/admin/dev-accounts.ts`。
 - 邮件：没有配置 `SMTP_URL` 和 `MAIL_FROM` 时，邮件内容写进日志，注册也不要求验证邮箱。
-- 设为站长：先在网页上注册，再执行 `bun run cli promote-admin <邮箱>`。
+- 设为站长：先用上一条的方法注册账号，再执行 `bun run cli promote-admin <邮箱>`。
 - 端口冲突：用 `CHAOCHI_DEV_PG_PORT`、`CHAOCHI_DEV_S3_PORT` 改端口，并相应设置 `DATABASE_URL`、`S3_ENDPOINT`。
 - 停止本地服务：`bun run dev:services:down`。
 
@@ -75,7 +77,7 @@ bun run test
 
 ## 构建与部署
 
-`bun run build` 生成 `.output/`，最后运行 `scripts/check-client-bundle.ts`，浏览器包里出现服务端代码时构建失败；`bun run docker:build` 构建应用镜像。生产是单机 Docker Compose：Cloudflare 代理到源站的 Caddy，Caddy 把请求分给两个 web 副本，`deploy/rollout.sh` 逐个替换副本，发布不中断访问。构建与发布流水线正在调整。当前步骤以 [`deploy/README.md`](deploy/README.md) 为准。
+`bun run build` 生成 `.output/`（最后由 `scripts/check-client-bundle.ts` 确认浏览器包里没有服务端代码），`bun run docker:build` 构建应用镜像；生产是单机 Docker Compose，Cloudflare 代理到源站的 Caddy，Caddy 把请求分给两个 web 副本，`deploy/rollout.sh` 逐个替换副本，发布不中断访问。构建与发布流水线正在调整，当前步骤以 [`deploy/README.md`](deploy/README.md) 为准。
 
 ## 目录结构
 
