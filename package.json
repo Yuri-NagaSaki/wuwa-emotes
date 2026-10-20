@@ -25,7 +25,7 @@
     "test:catalog": "CHAOCHI_TEST_DB=chaochi_test_catalog CHAOCHI_TEST_BUCKET=chaochi-test-catalog bun test ./tests/catalog",
     "dev:services": "docker compose -f compose.dev.yaml up -d && docker compose -f compose.dev.yaml run --rm s3-init",
     "dev:services:down": "docker compose -f compose.dev.yaml down",
-    "docker:build": "docker build -t chaochi/app:dev --build-arg CHAOCHI_REVISION=dev .",
+    "docker:build": "docker build -t ghcr.io/yuri-nagasaki/wuwa-emotes:dev --build-arg CHAOCHI_REVISION=dev .",
     "deploy:loadcheck": "bun deploy/loadcheck.ts",
     "test:downloads": "CHAOCHI_TEST_DB=chaochi_test_downloads CHAOCHI_TEST_BUCKET=chaochi-test-downloads bun test ./tests/downloads",
     "test:submissions": "CHAOCHI_TEST_DB=chaochi_test_submissions CHAOCHI_TEST_BUCKET=chaochi-test-submissions bun test ./tests/submissions ./tests/account",

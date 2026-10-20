@@ -5,11 +5,13 @@
 #                                        └──▶ web-b  172.30.47.12:3000 ┘ never published
 #   web-a, web-b, worker, migrate ──▶ db (PostgreSQL 18)          web, worker ──▶ R2 (S3 API)
 #
-# Releases go through deploy/rollout.sh (see deploy/README.md). Do not run a bare `docker compose up -d`
-# after the image changed: it recreates web-a and web-b at the same time, which is an outage.
+# Releases go through deploy/release.sh and deploy/rollout.sh (see deploy/README.md). Do not run a bare
+# `docker compose up -d` after the image changed: it recreates web-a and web-b at the same time, which is
+# an outage.
 #
 # Compose-level settings (all have production defaults; override in /opt/chaochi/deploy.conf):
-#   CHAOCHI_IMAGE      image every app service runs; rollout.sh moves this tag (default chaochi/app:latest)
+#   CHAOCHI_IMAGE      image every app service runs (default ghcr.io/yuri-nagasaki/wuwa-emotes:latest), a tag
+#                      that exists only on the host: rollout.sh moves it. CI publishes <repo>:<sha7>, never :latest
 #   CHAOCHI_ENV_FILE   app settings and secrets, root-only (default /opt/chaochi/app-env)
 #   CHAOCHI_CERT_DIR   Cloudflare Origin CA pair origin.pem + origin-key.pem (default /opt/chaochi/certs)
 #   CHAOCHI_TLS_MODE   auto | origin | internal (default auto, see deploy/caddy/caddy.sh)
@@ -30,7 +32,7 @@ x-env-file: &env-file
     required: true
 
 x-app: &app
-  image: ${CHAOCHI_IMAGE:-chaochi/app:latest}
+  image: ${CHAOCHI_IMAGE:-ghcr.io/yuri-nagasaki/wuwa-emotes:latest}
   env_file: *env-file
   restart: unless-stopped
   cap_drop: [ALL]
