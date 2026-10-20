@@ -70,18 +70,6 @@ describe('packDetail', () => {
     expect(card.accent).toBe('pink')
   })
 
-  test('prev/next follow publication order and skip unpublished packs', async () => {
-    const order = ['aimisi-01', 'aimisi-02', 'xin-01', 'changli-01', 'xinyuehu-01', 'feibi-01', 'multi-01', 'official-01', 'chun-01', 'yangyang-01']
-    for (const [i, slug] of order.entries()) {
-      const p = await pack(slug)
-      expect(p.prev?.slug ?? null).toBe(order[i - 1] ?? null)
-      expect(p.next?.slug ?? null).toBe(order[i + 1] ?? null)
-    }
-    const p2 = await pack('aimisi-02')
-    expect(p2.prev).toMatchObject({ slug: 'aimisi-01', title: '爱弥斯动态表情包（板牌）' })
-    expect(p2.prev!.cover!.id).toBe(PACK_BY_SLUG['aimisi-01']!.emojis[0]!.id)
-  })
-
   test('old slugs redirect; unknown slugs are missing', async () => {
     expect(await getPackDetail('yangyang-old')).toEqual({ kind: 'redirect', redirectTo: '/packs/yangyang-01' })
     expect(await getPackDetail('yangyang-legacy-slug')).toEqual({ kind: 'redirect', redirectTo: '/packs/yangyang-01' })

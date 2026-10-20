@@ -114,12 +114,6 @@ export interface PackEmoji extends EmojiImage {
   characters: CharacterRef[]
 }
 
-export interface PackNeighbor {
-  slug: string
-  title: string
-  cover: EmojiImage | null
-}
-
 export interface PackDetail {
   id: number
   slug: string
@@ -150,9 +144,6 @@ export interface PackDetail {
   commissionerText: string | null
   creditsText: string | null
   tags: TagsByDimension
-  /** Publication order: prev = the pack published just before this one, next = just after. */
-  prev: PackNeighbor | null
-  next: PackNeighbor | null
 }
 
 export type PackLookup = { kind: 'pack'; pack: PackDetail } | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }

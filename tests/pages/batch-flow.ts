@@ -324,13 +324,18 @@ try {
   check((await count(gp, '#comments cap-widget')) === 0, 'guest composer: no Cap widget box')
   await gp.type('#comments .composer input[aria-label="昵称"]', '路过的潮友')
   await gp.type('#comments .composer textarea', '游客评论测试')
-  const seen = await gp.waitForFunction(() => document.querySelector('#comments .captcha')?.textContent ?? '', { timeout: 5000 }).then((h) => h.jsonValue()).catch(() => '')
-  check(/正在验证|人机验证已通过/.test(String(seen)), `guest: invisible Cap status next to 发布 (${seen})`)
-  await gp.waitForFunction(() => document.querySelector('#comments .captcha')?.textContent?.includes('人机验证已通过'), { timeout: 30_000 }).catch(() => {})
+  // invisible Cap: the proof of work runs in the background while the guest writes, with no status chip;
+  // 发布 says 验证中… only while a submit waits for a proof that has not finished yet
+  const submitLabel = () => gp.$eval('#comments .composer button[type="submit"]', (b) => b.textContent?.trim() ?? '').catch(() => '')
+  check((await count(gp, '#comments .captcha')) === 0, 'guest composer: no Cap status chip')
+  const writing = await submitLabel()
+  check(writing === '发布', `guest: the button says 发布 while the guest writes (${writing})`)
   await gp.evaluate(() => document.querySelector('#comments .composer')?.scrollIntoView({ block: 'center' }))
   await shot(gp, 'comments-guest-cap-1440')
   await wait(3500)
   await clickText(gp, '#comments .composer button[type="submit"]', '发布')
+  const sending = await submitLabel()
+  check(['发布', '验证中…', ''].includes(sending), `guest: after 发布 the button says 验证中… at most (${sending})`)
   check(await toast(gp, '已提交，审核通过后公开'), 'guest comment sent with an invisible Cap token (held for review)')
 
   // ===== 模拟登录 bar vs sticky headers =====

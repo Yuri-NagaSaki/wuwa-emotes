@@ -599,7 +599,6 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 | UI | `react` / `react-dom` | 19.3.1 | |
 | 无样式组件 | `@base-ui/react` | 1.9.0 | 外观按设计令牌自建 |
 | 数据获取 | `@tanstack/react-query` | 5.104.5 | 首屏由路由 loader 直出 |
-| 虚拟列表 | `@tanstack/react-virtual` | 3.14.21 | 仍在依赖里，当前代码不再使用：瀑布流改为服务端算好的布局（第 8.1 节） |
 | 认证 | `better-auth` | 1.7.11 | 内置 Drizzle 适配器与 admin 插件 |
 | ORM | `drizzle-orm` / `drizzle-kit` / `pg` | 0.45.4 / 0.31.11 / 8.23.1 | |
 | 数据库 | PostgreSQL | 18（`postgres:18-bookworm`） | `pg_trgm`；镜像内带 `postgresql-client-18` 供备份 |
@@ -884,7 +883,6 @@ v1 快照（R2 `meta/v1`）：
 - TanStack Start 部署：<https://tanstack.com/start/latest/docs/framework/react/guide/hosting>
 - Better Auth TanStack 集成：<https://www.better-auth.com/docs/integrations/tanstack>
 - Better Auth admin 插件：<https://www.better-auth.com/docs/plugins/admin>
-- TanStack Virtual：<https://tanstack.com/virtual/latest/docs/api/virtualizer>
 - pg-boss 定时任务：<https://pgboss.io/api/scheduling>
 - Drizzle 迁移：<https://orm.drizzle.team/docs/migrations>
 - sharp 构造参数：<https://sharp.pixelplumbing.com/api-constructor>

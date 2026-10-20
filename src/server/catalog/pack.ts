@@ -1,9 +1,9 @@
 import { sql } from 'drizzle-orm'
 import { packArtistsJson, packCharactersJson, type RawCharacter, splitArtists, toCharacterRef } from './cards'
-import { type RawImage, toEmojiImage, toEmojiImageOrNull } from './images'
+import { type RawImage, toEmojiImage } from './images'
 import { emojiIdInput, packSlugInput } from './inputs'
 import { resolveLegacyPath } from './legacy'
-import { coverJson, emojiOrder, emojiVisible, iso, num, packPublished, packVisible, PUB_AT, rows } from './sql'
+import { emojiOrder, emojiVisible, iso, num, packPublished, packVisible, PUB_AT, rows } from './sql'
 import type {
   ArtistRole,
   EmojiPermalink,
@@ -11,7 +11,6 @@ import type {
   PackEmoji,
   PackKind,
   PackLookup,
-  PackNeighbor,
   SourceKind,
   TagDimension,
   TagRef,
@@ -43,8 +42,6 @@ interface DetailRow {
   chars: RawCharacter[]
   arts: { slug: string; name: string; role: ArtistRole }[]
   tags: TagRef[]
-  prev: { slug: string; title: string; cover: RawImage | null } | null
-  next: { slug: string; title: string; cover: RawImage | null } | null
 }
 
 interface EmojiRow extends RawImage {
@@ -63,12 +60,6 @@ function byDimension(tags: TagRef[]): TagsByDimension {
   return out
 }
 
-function neighbor(n: DetailRow['prev']): PackNeighbor | null {
-  return n ? { slug: n.slug, title: n.title, cover: toEmojiImageOrNull(n.cover) } : null
-}
-
-const NEIGHBOR_KEY = sql.raw('(coalesce(q.published_at, q.created_at), q.id)')
-
 export async function getPackDetail(slugInput: string): Promise<PackLookup> {
   const { slug } = packSlugInput.parse({ slug: slugInput })
   const [main, emojiRows] = await Promise.all([
@@ -80,13 +71,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
         ${packArtistsJson('p')} as arts,
         (select coalesce(json_agg(json_build_object('dimension', t.dimension, 'slug', t.slug, 'name', t.name)
                                   order by t.dimension, t.name, t.id), '[]'::json)
-           from pack_tags pt join tags t on t.id = pt.tag_id where pt.pack_id = p.id) as tags,
-        (select json_build_object('slug', q.slug, 'title', q.title, 'cover', ${coverJson('q')})
-           from packs q where ${packVisible('q')} and ${NEIGHBOR_KEY} < (${PUB_AT}, p.id)
-           order by coalesce(q.published_at, q.created_at) desc, q.id desc limit 1) as prev,
-        (select json_build_object('slug', q.slug, 'title', q.title, 'cover', ${coverJson('q')})
-           from packs q where ${packVisible('q')} and ${NEIGHBOR_KEY} > (${PUB_AT}, p.id)
-           order by coalesce(q.published_at, q.created_at) asc, q.id asc limit 1) as next
+           from pack_tags pt join tags t on t.id = pt.tag_id where pt.pack_id = p.id) as tags
       from packs p
       where p.slug = ${slug} and ${packVisible('p')}`),
     rows<EmojiRow>(sql`
@@ -149,8 +134,6 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
     commissionerText: p.commissioner ?? null,
     creditsText: p.credits_text ?? null,
     tags: byDimension(p.tags ?? []),
-    prev: neighbor(p.prev),
-    next: neighbor(p.next),
   }
   return { kind: 'pack', pack }
 }
