@@ -109,6 +109,7 @@ export async function handleEmojiDownload(request: Request, emojiId: string, dep
 export async function handlePackZip(request: Request, slug: string, deps: DownloadDeps): Promise<Response> {
   if (request.method !== 'GET') return methodNotAllowed('GET')
   const poll = new URL(request.url).searchParams.get('poll') === '1'
+  if (!slug || slug.length > 200) return json({ error: MESSAGES.pack_not_found, reason: 'not_found' }, 404)
   const [viewer, settings, pack] = await Promise.all([deps.getViewer(request.headers), deps.settings(), deps.lookupPackBySlug(slug)])
   const check = await checkZip(requestCtx(request, viewer, deps), settings, pack, deps.policy)
   if (!check.ok) return deny(check.denial)
