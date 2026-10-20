@@ -8,7 +8,9 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { SectionHead } from '../Section'
 import { Tabs } from '../Tabs'
-import { artistHref, characterHref, characterColor, tagHref } from './model'
+import { characterCountText } from '#/shared/characters'
+import { CharacterCss, RingAvatar } from './character-art'
+import { artistHref, characterColor, characterHref, tagHref } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile, CharacterTile } from './people'
 import { StreamTiles } from './StreamTiles'
@@ -79,7 +81,7 @@ export function SearchPage({ result, q, current }: { result: SearchResult | null
           {show('characters') && r.characters.length && !dupChar ? (
             <section className="sec">
               <SectionHead plain title="角色" sub={`${c!.characters} 位`} />
-              <div className="cgrid sr-cgrid">
+              <div className="cgrid">
                 {r.characters.map((ch) => (
                   <CharacterTile key={ch.slug} c={ch} />
                 ))}
@@ -149,13 +151,14 @@ function BestHit({ best }: { best: NonNullable<SearchResult['best']> }) {
     const ch = best.character
     return (
       <div className="top-hit" style={{ '--cc': characterColor(ch) } as CSSProperties}>
-        <span className="pool">{ch.avatar ? <img src={ch.avatar.poster} width={96} height={96} alt="" decoding="async" /> : <span className="initial">{Array.from(ch.name)[0]}</span>}</span>
+        <CharacterCss />
+        <span className="pool">
+          <RingAvatar c={ch} priority portraitFirst />
+        </span>
         <div>
           <div className="eyebrow">最佳匹配 · 角色</div>
           <h3>{ch.name}</h3>
-          <span className="muted">
-            {fmtN(ch.emojiCount)} 张表情 · {ch.packCount} 个包
-          </span>
+          <span className="muted">{characterCountText(ch)}</span>
         </div>
         <AppLink to={characterHref(ch.slug)} className={buttonClass({ variant: 'primary' })}>
           进入角色页

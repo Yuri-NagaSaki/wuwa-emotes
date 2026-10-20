@@ -1,15 +1,20 @@
 import { useNavigate } from '@tanstack/react-router'
-import { Fragment, useMemo, useState } from 'react'
+import { type CSSProperties, Fragment, useMemo, useState } from 'react'
 import type { CharacterCard } from '#/server/catalog/types'
+import { characterCountText } from '#/shared/characters'
 import { cx } from '../cx'
 import { Input } from '../Field'
-import { fmtN } from '../format'
+import { AppLink } from '../link'
 import { Seg } from '../Seg'
-import { CharacterTile } from './people'
+import { CharacterCss, PortraitImg, RingAvatar } from './character-art'
+import { characterHref, themeColor } from './model'
 
-// 角色图鉴 /characters: every character with public stickers, avatar = one of its stickers. Sort by
-// sticker count, latest pack, or pinyin (slugs are pinyin); find by name, alias-free pinyin prefix,
-// or the letter index.
+// 角色图鉴 /characters: every character with a public pack or an official portrait, like the official
+// atlas. Cards are tall for the portrait (立绘); the character's own sticker rides in the corner, or
+// stands in the middle when there is no portrait (its initial when there is no sticker either). The
+// count line reads 「N 张 · M 包」 for stickers of its own and 「出现在 M 个合集包」 for a character only
+// seen in group packs (catalog/attribution.ts, src/shared/characters.ts). Sort by sticker count, latest
+// pack, or pinyin (slugs are pinyin); find by name, alias-free pinyin prefix, or the letter index.
 
 export type CharacterSort = 'count' | 'recent' | 'pinyin'
 const SORTS = [
@@ -20,6 +25,36 @@ const SORTS = [
 
 const letterOf = (c: CharacterCard) => (/^[a-z]/i.test(c.slug) ? c.slug[0]!.toUpperCase() : '#')
 
+/** Card width per breakpoint (characters.css .atlas), for the portrait srcset. */
+const CARD_SIZES = '(max-width: 760px) 34vw, 200px'
+
+export function AtlasCard({ c, eager }: { c: CharacterCard; eager?: boolean }) {
+  return (
+    <AppLink to={characterHref(c.slug)} className="acard" style={{ '--cc': themeColor(c.color) } as CSSProperties}>
+      <span className="acard-art">
+        {c.portrait ? (
+          <>
+            <PortraitImg p={c.portrait} sizes={CARD_SIZES} alt={`${c.name}的立绘`} eager={eager} />
+            {c.avatar ? (
+              <span className="acard-badge">
+                <RingAvatar c={c} eager={eager} />
+              </span>
+            ) : null}
+          </>
+        ) : (
+          <span className="acard-pool">
+            <RingAvatar c={c} eager={eager} />
+          </span>
+        )}
+      </span>
+      <span className="acard-meta">
+        <b>{c.name}</b>
+        <span className={cx(!c.emojiCount && 'group-only')}>{characterCountText(c)}</span>
+      </span>
+    </AppLink>
+  )
+}
+
 export function CharactersPage({ list, sort }: { list: CharacterCard[]; sort: CharacterSort }) {
   const navigate = useNavigate()
   const [q, setQ] = useState('')
@@ -29,7 +64,6 @@ export function CharactersPage({ list, sort }: { list: CharacterCard[]; sort: Ch
     return list.filter((c) => c.name.toLowerCase().includes(needle) || c.slug.toLowerCase().startsWith(needle))
   }, [list, q])
   const letters = useMemo(() => [...new Set(list.map(letterOf))].sort(), [list])
-  const emojis = list.reduce((s, c) => s + c.emojiCount, 0)
 
   const jump = (l: string) => {
     if (sort !== 'pinyin') void navigate({ to: '/characters', search: { sort: 'pinyin' }, hash: `letter-${l}` })
@@ -39,12 +73,11 @@ export function CharactersPage({ list, sort }: { list: CharacterCard[]; sort: Ch
   let prev = ''
   return (
     <div className="wrap">
+      <CharacterCss />
       <div className="page-h">
         <h1>角色图鉴</h1>
         <div className="row">
-          <span className="sub">
-            {list.length} 位角色，{fmtN(emojis)} 张表情。头像是该角色的一张表情。
-          </span>
+          <span className="sub">{list.length} 位角色。立绘来自官方，角落里是一张只属于 TA 的表情。</span>
         </div>
       </div>
       <div className="toolbar" style={{ marginTop: 14 }}>
@@ -60,7 +93,7 @@ export function CharactersPage({ list, sort }: { list: CharacterCard[]; sort: Ch
         </div>
       </div>
       {shown.length ? (
-        <div className="cgrid">
+        <div className="atlas">
           {shown.map((c, i) => {
             const l = letterOf(c)
             const head = sort === 'pinyin' && !q && l !== prev
@@ -72,7 +105,7 @@ export function CharactersPage({ list, sort }: { list: CharacterCard[]; sort: Ch
                     {l}
                   </div>
                 ) : null}
-                <CharacterTile c={c} eager={i < 6} />
+                <AtlasCard c={c} eager={i < 6} />
               </Fragment>
             )
           })}

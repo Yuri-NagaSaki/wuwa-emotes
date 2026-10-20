@@ -184,14 +184,39 @@ export interface BatchItem extends EmojiImage {
 
 // ---- characters / artists ----
 
+/** Official portrait (立绘), 3:4 WebP served from /img/v1/portrait/. */
+export interface CharacterPortrait {
+  /** 240 px wide variant */
+  src: string
+  /** every stored width, e.g. "…-240.webp 240w, …-480.webp 480w" */
+  srcSet: string
+  /** size of the largest stored variant (3:4) */
+  width: number
+  height: number
+}
+
+/**
+ * A listed character: one with a public pack (包 or 合集) or an official portrait. 张, 包 and 合集
+ * follow catalog/attribution.ts: a sticker belongs to a character through its own tags, or through its
+ * pack when the pack has exactly one character; group packs whose stickers all carry the same list of
+ * characters attribute nothing. Text for the counts: characterCountText() in src/shared/characters.ts.
+ */
 export interface CharacterCard extends CharacterRef {
-  /** characters.avatar_emoji_id when published, else an emoji of the character from its most downloaded pack. */
+  /**
+   * A public sticker of this character alone, never shared with another character (also not by image
+   * hash): characters.avatar_emoji_id when public and free, else one from its most downloaded pack.
+   * null when there is none; show a placeholder (initial on the character color), never other art.
+   */
   avatar: EmojiImage | null
-  /** Published packs tagged with the character (pack_characters). */
+  /** characters.portrait_key as a portrait; null when none was imported. */
+  portrait: CharacterPortrait | null
+  /** Public packs holding at least one sticker attributed to the character (包). */
   packCount: number
-  /** Published emojis tagged with the character (emoji_characters). */
+  /** Public stickers attributed to the character (张). */
   emojiCount: number
-  /** Newest publication among its packs; null if it only appears through emoji tags. */
+  /** Public packs the character appears on without stickers of its own (合集包). */
+  groupCount: number
+  /** Newest publication among its 包 and 合集包. */
   latestAt: IsoDate | null
 }
 
@@ -230,19 +255,20 @@ export interface CountedRef {
 }
 
 export interface CharacterArtist extends ArtistRef {
-  /** Published packs of this character drawn by the artist. */
+  /** Public packs the character appears on (包 or 合集包) drawn by the artist. */
   packCount: number
 }
 
 interface CharacterDetailBase {
   kind: 'character'
   character: CharacterProfile
-  /** Artists of this character's packs, most packs first. */
+  /** Artists of the packs it appears on (包 and 合集包), most packs first. */
   artists: CharacterArtist[]
 }
 
+/** tab packs: its 包; groups: its 合集包 (also what a character without 包 opens on). */
 export type CharacterDetail =
-  | (CharacterDetailBase & { tab: 'packs'; page: Page<PackCard> })
+  | (CharacterDetailBase & { tab: 'packs' | 'groups'; page: Page<PackCard> })
   | (CharacterDetailBase & { tab: 'emojis'; page: Page<EmojiTile> })
 
 export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }
@@ -250,7 +276,7 @@ export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: 
 export interface ArtistDetail {
   kind: 'artist'
   artist: ArtistProfile
-  /** Characters across the artist's published packs, most packs first. */
+  /** Characters with stickers of their own in the artist's public packs; packCount counts those packs. */
   characters: (CharacterRef & { packCount: number })[]
   page: Page<PackCard>
 }
@@ -262,7 +288,7 @@ export type ArtistLookup = ArtistDetail | { kind: 'redirect'; redirectTo: string
 export interface CatalogStats {
   packs: number
   emojis: number
-  /** Characters with published content. */
+  /** Listed characters (see CharacterCard). */
   characters: number
   /** Published emojis that went public today (Asia/Shanghai day). See home.ts for the rule. */
   todayEmojis: number
@@ -287,7 +313,7 @@ export interface HomeData {
   featured: PackCard[]
   /** 官方表情: official packs, most downloaded first, topped up with community packs (HOME_OFFICIAL). */
   official: PackCard[]
-  /** Top characters by published emoji count, with avatars (角色潮汐). */
+  /** Top characters by sticker count (张) that have a sticker avatar (角色潮汐). */
   characters: CharacterCard[]
   stats: CatalogStats
 }

@@ -1,4 +1,5 @@
 import { type SQL, sql } from 'drizzle-orm'
+import { appearsInPackIds, ownPackIds } from './attribution'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { listPacksInput, type ListPacksInput, TAG_FILTER_RE } from './inputs'
@@ -10,7 +11,10 @@ import type { PackCard, PackKind, PackSort, Page, SourceKind, TagDimension } fro
 // pages never repeat.
 
 export interface PackFilters {
+  /** character slug: its 包, packs holding a sticker attributed to it (attribution.ts) */
   character?: string
+  /** character slug: its 合集包, packs it appears on without stickers of its own */
+  groupOf?: string
   artist?: string
   kind?: PackKind
   source?: SourceKind
@@ -38,10 +42,8 @@ export function packKeyCols(sort: PackSort, seed: string): KeyCol[] {
 
 function filterSql(f: PackFilters): SQL[] {
   const out: SQL[] = []
-  if (f.character) {
-    out.push(sql`exists (select 1 from pack_characters fc join characters c on c.id = fc.character_id
-                         where fc.pack_id = p.id and c.slug = ${f.character})`)
-  }
+  if (f.character) out.push(sql`p.id in (${ownPackIds(f.character)})`)
+  if (f.groupOf) out.push(sql`p.id in (${appearsInPackIds(f.groupOf)}) and p.id not in (${ownPackIds(f.groupOf)})`)
   if (f.artist) {
     out.push(sql`exists (select 1 from pack_artists fa join artists a on a.id = fa.artist_id
                          where fa.pack_id = p.id and a.slug = ${f.artist})`)
@@ -101,7 +103,7 @@ export async function packPage(filters: PackFilters, opts: PackPageOptions): Pro
 export async function listPacks(input: ListPacksInput = {}): Promise<Page<PackCard>> {
   const i = listPacksInput.parse(input)
   return packPage(
-    { character: i.character, artist: i.artist, kind: i.kind, source: i.source, group: i.group, tag: i.tag },
+    { character: i.character, groupOf: i.groupOf, artist: i.artist, kind: i.kind, source: i.source, group: i.group, tag: i.tag },
     { sort: i.sort, seed: i.seed, cursor: i.cursor, limit: i.limit },
   )
 }

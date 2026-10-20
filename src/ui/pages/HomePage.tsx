@@ -7,7 +7,8 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { PackCard } from '../PackCard'
 import { SectionHead } from '../Section'
-import { cardProps, characterHref, packHref, themeColor } from './model'
+import { CharacterStrip } from './CharacterStrip'
+import { cardProps, packHref } from './model'
 import { PackMasonry } from './PackMasonry'
 import { palette } from './palette'
 import { StreamTiles } from './StreamTiles'
@@ -126,24 +127,7 @@ export function HomePage({ home, stream, current }: { home: HomeData; stream: re
         </div>
       </section>
 
-      {withAvatar.length ? (
-        <section className="sec">
-          <div className="wrap">
-            <SectionHead title="角色潮汐" sub="按表情数量排序" more={{ label: `全部 ${s.characters} 位`, to: '/characters' }} />
-            <div className="cstrip">
-              {withAvatar.map((c) => (
-                <AppLink key={c.slug} to={characterHref(c.slug)} className="cchip" style={{ '--cc': themeColor(c.color) } as CSSProperties}>
-                  <span className="pool">
-                    <img src={c.avatar!.poster} width={160} height={160} loading="lazy" decoding="async" alt="" />
-                  </span>
-                  <b>{c.name}</b>
-                  <small>{fmtN(c.emojiCount)} 张</small>
-                </AppLink>
-              ))}
-            </div>
-          </div>
-        </section>
-      ) : null}
+      <CharacterStrip characters={withAvatar} total={s.characters} />
 
       {featured.length ? (
         <section className="sec">

@@ -1,0 +1,91 @@
+/* 角色图鉴 cards, the portrait header of 角色详情 and the round avatars of 角色潮汐
+   (CharactersPage.tsx, CharacterPage.tsx, CharacterStrip.tsx). --cc is the character colour.
+   Every rounded frame clips its media: portraits are cut by their frame, round avatars are circles
+   themselves, so no square corner ever shows inside a rounded border. */
+
+/* ---- round avatars: the image is the circle ---- */
+.ring-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+/* beat the older 86–88% contain rules of the shared pools (components.css, pages.css) */
+.cchip .pool img.ring-img, .char-hero .pool img.ring-img, .cgrid .ccard .pool img.ring-img, .top-hit .pool img.ring-img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+}
+/* a portrait's face in a circle: its top, enlarged, clipped by its own round box */
+.ring-crop { display: block; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; }
+.ring-crop img.ring-portrait {
+  display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0;
+  transform: scale(1.9); transform-origin: 50% 14%;
+}
+.ring-initial { font-weight: 900; color: var(--tp-ink); line-height: 1; user-select: none; }
+.ccard .pool .ring-initial { font-size: 40px; }
+.top-hit .pool .ring-initial { font-size: 36px; }
+
+/* ---- 角色图鉴: tall cards for 3:4 portraits ---- */
+.atlas { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 18px 16px; }
+.acard {
+  position: relative; display: grid; grid-template-rows: auto 1fr; overflow: hidden; isolation: isolate;
+  border-radius: var(--r-lg); background: var(--tp-card); border: 2px solid var(--tp-line); color: inherit;
+  transition: transform var(--t) var(--ease), border-color var(--t) var(--ease), box-shadow var(--t) var(--ease);
+}
+.acard:hover { transform: translateY(-3px); border-color: var(--cc); box-shadow: var(--sh-lift); }
+.acard:focus-visible { outline: 3px solid var(--cc); outline-offset: 3px; }
+.acard-art {
+  position: relative; aspect-ratio: 3 / 4; overflow: hidden; border-bottom: 3px solid var(--cc);
+  background-color: color-mix(in srgb, var(--cc) 30%, var(--tp-input));
+  background-image: radial-gradient(color-mix(in srgb, var(--cc) 70%, transparent) 2px, transparent 2.2px);
+  background-size: 14px 14px;
+}
+.acard-art .portrait {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0;
+  transform-origin: 50% 18%; transition: transform 420ms var(--spring);
+}
+.acard:hover .acard-art .portrait { transform: scale(1.045); }
+/* no portrait: the character's own sticker (or its initial) in a round pool, centred in the frame */
+.acard-pool {
+  position: absolute; left: 50%; top: 46%; width: 70%; aspect-ratio: 1; translate: -50% -50%;
+  display: grid; place-items: center; border-radius: 50%; overflow: hidden;
+  background: var(--tp-card); border: 3px solid var(--cc); transition: transform var(--t) var(--spring);
+}
+.acard:hover .acard-pool { transform: rotate(-4deg) scale(1.04); }
+.acard-pool .ring-initial { font-size: 44px; }
+/* with a portrait, the sticker avatar rides in the corner as a small ring */
+.acard-badge {
+  position: absolute; left: 8px; bottom: 8px; width: 40px; aspect-ratio: 1; border-radius: 50%; overflow: hidden;
+  background: var(--tp-card); border: 3px solid var(--cc); box-shadow: 0 3px 0 0 color-mix(in srgb, var(--cc) 55%, var(--tp-shadow-3d));
+}
+.acard-meta { display: grid; gap: 2px; padding: 9px 12px 11px; min-width: 0; }
+.acard-meta b { font-size: 16px; font-weight: 800; color: var(--tp-ink); line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acard-meta span { font: 700 12.5px/1.3 var(--tp-font-num); color: var(--tp-muted); font-variant-numeric: tabular-nums; }
+/* 「出现在 3 个合集包」: Chinese text, not a figure */
+.acard-meta span.group-only { font-family: var(--tp-font-body); }
+
+/* ---- 角色详情: the portrait replaces the round pool ---- */
+.char-hero.has-portrait .wrap { grid-template-columns: 186px minmax(0, 1fr) auto; }
+.char-portrait {
+  position: relative; width: 186px; aspect-ratio: 3 / 4; overflow: hidden; border-radius: var(--r-lg);
+  border: 6px solid var(--cc); background: color-mix(in srgb, var(--cc) 22%, var(--tp-card));
+  box-shadow: 0 10px 0 0 color-mix(in srgb, var(--cc) 55%, var(--tp-shadow-3d));
+}
+.char-portrait .portrait { display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; }
+.char-portrait .badge {
+  position: absolute; right: 8px; bottom: 8px; width: 54px; aspect-ratio: 1; border-radius: 50%; overflow: hidden;
+  background: var(--tp-card); border: 3px solid var(--cc);
+}
+.char-hero .pool .ring-initial { font-size: 72px; }
+
+@media (max-width: 1100px) {
+  .char-hero.has-portrait .wrap { grid-template-columns: 150px minmax(0, 1fr); }
+  .char-portrait { width: 150px; }
+}
+@media (max-width: 760px) {
+  .atlas { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 12px 10px; }
+  .acard { border-radius: var(--r); }
+  .acard-meta { padding: 7px 8px 9px; }
+  .acard-meta b { font-size: 14px; }
+  .acard-meta span { font-size: 11.5px; }
+  .acard-badge { width: 30px; left: 6px; bottom: 6px; border-width: 2px; box-shadow: none; }
+  .acard-pool .ring-initial { font-size: 32px; }
+  .char-hero.has-portrait .wrap { grid-template-columns: 96px minmax(0, 1fr); }
+  .char-portrait { width: 96px; border-width: 4px; border-radius: var(--r); box-shadow: 0 6px 0 0 color-mix(in srgb, var(--cc) 55%, var(--tp-shadow-3d)); }
+  .char-portrait .badge { width: 34px; right: 5px; bottom: 5px; border-width: 2px; }
+  .char-hero .pool .ring-initial { font-size: 40px; }
+}
