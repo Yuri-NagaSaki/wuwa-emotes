@@ -283,7 +283,7 @@ export function formatPortraitSummary(s: PortraitSummary): string {
   }
   for (const r of s.results) {
     const tail = [r.key, r.color ? `colour ${r.color}${r.colorSet ? ' (set)' : ''}` : null, r.note].filter(Boolean).join('  ')
-    lines.push(`    ${r.outcome.padEnd(9)} ${r.entry} → ${r.slug ?? '?'} [${r.by}]  ${tail}`)
+    lines.push(`    ${(s.dryRun && r.outcome === 'skipped' && r.note !== 'duplicate character' ? 'match' : r.outcome).padEnd(9)} ${r.entry} → ${r.slug ?? '?'} [${r.by}]  ${tail}`)
   }
   lines.push(`  manifest entries without a character: ${s.unmatchedEntries.length ? s.unmatchedEntries.join(', ') : 'none'}`)
   lines.push(`  characters without a portrait: ${s.withoutPortrait.length ? s.withoutPortrait.map((c) => c.name).join(', ') : 'none'}`)
