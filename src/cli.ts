@@ -7,6 +7,8 @@
 //                                            width/height of originals that have none (32-byte ranged reads)
 //   bun src/cli.ts backfill-derived [--pack <packKey>] [--limit N]
 //                                            queue p240/a160 generation for published emojis without them
+//   bun src/cli.ts presign-selftest          check that storage refuses a PUT whose size differs from the
+//                                            signed Content-Length (writes and deletes uploads/tmp/selftest/ only)
 import { eq } from 'drizzle-orm'
 import { audit } from './server/audit'
 import { closeDb, db, schema } from './server/db/client'
@@ -84,6 +86,15 @@ async function backfillDerivedCmd(args: string[]) {
   }
 }
 
+async function presignSelftestCmd() {
+  const { presignSelftest } = await import('./server/media/presign-selftest')
+  const r = await presignSelftest()
+  console.log(`presign-selftest: bucket ${r.bucket}`)
+  for (const c of r.cases) console.log(`  ${c.line}`)
+  console.log(r.ok ? 'presign-selftest: ok, storage enforces the signed Content-Length' : 'presign-selftest: FAILED')
+  if (!r.ok) process.exitCode = 1
+}
+
 const USAGE = [
   'commands:',
   '  promote-admin <email>',
@@ -91,6 +102,7 @@ const USAGE = [
   '  import-v1 [--prefix meta/v1/] [--dry-run]',
   '  backfill-dims [--concurrency 16] [--limit N]',
   '  backfill-derived [--pack <packKey>] [--limit N]',
+  '  presign-selftest',
 ].join('\n')
 
 async function main() {
@@ -112,6 +124,9 @@ async function main() {
       break
     case 'backfill-derived':
       await backfillDerivedCmd(args)
+      break
+    case 'presign-selftest':
+      await presignSelftestCmd()
       break
     default:
       console.log(USAGE)

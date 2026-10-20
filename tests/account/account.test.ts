@@ -169,8 +169,18 @@ describe('settings through Better Auth', () => {
 
   test('summary counts', async () => {
     await createSubmission(u.actor, { kind: 'new_pack', payload: { title: '我的草稿' } })
+    const thread = { threadType: 'pack' as const, threadId: String(packId), authorId: u.id }
+    await db()
+      .insert(schema.comments)
+      .values([
+        { ...thread, bodySrc: '已发布', status: 'published' },
+        { ...thread, bodySrc: '待审核', status: 'pending' },
+        { ...thread, bodySrc: '已删除', status: 'deleted' },
+        { ...thread, bodySrc: '自己删掉的', status: 'published', deletedAt: new Date() },
+      ])
     const s = await meSummary(u.actor)
     expect(s.submissions).toEqual({ approved: 0, pending: 0, returned: 0, draft: 1 })
+    expect(s.comments).toBe(2)
     expect(s.email).toBe(u.email)
   })
 })

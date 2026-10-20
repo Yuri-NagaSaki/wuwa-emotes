@@ -4,6 +4,7 @@ import { getPublicConfig } from '#/server/ui/public-config'
 import { BlobDefs } from '#/ui/BlobDefs'
 import { setCapEndpoint } from '#/ui/cap/load'
 import { NotFoundPage } from '#/ui/NotFoundPage'
+import { ImpersonationBar } from '#/ui/shell/ImpersonationBar'
 import { SiteConfigProvider } from '#/ui/site-config'
 import appCss from '#/ui/styles/app.css?url'
 import { Toaster } from '#/ui/Toast'
@@ -50,6 +51,7 @@ function RootComponent() {
   useEffect(() => setCapEndpoint(config.cap.endpoint), [config.cap.endpoint])
   return (
     <SiteConfigProvider value={config}>
+      {config.viewer?.impersonated ? <ImpersonationBar name={config.viewer.name} /> : null}
       <Outlet />
       <Toaster />
     </SiteConfigProvider>

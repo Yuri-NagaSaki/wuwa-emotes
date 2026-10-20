@@ -1,4 +1,5 @@
 import { and, eq, isNull, sql } from 'drizzle-orm'
+import { notify } from '../account/notifications'
 import { capErrorMessage } from '../auth/cap'
 import { audit } from '../audit'
 import { rows } from '../catalog/sql'
@@ -107,10 +108,10 @@ export async function notifyReply(
   )
   if (already.rows.length) return
   const ref = (await threadRefs([{ type: reply.threadType as 'pack' | 'emoji', id: reply.threadId }])).get(`${reply.threadType}:${reply.threadId}`)
-  await tx.insert(schema.notifications).values({
-    userId: to,
-    kind: 'comment.reply',
-    payload: {
+  await notify(
+    to,
+    'comment.reply',
+    {
       commentId: reply.id,
       parentId: reply.parentId,
       rootId: reply.rootId,
@@ -118,12 +119,12 @@ export async function notifyReply(
       threadId: reply.threadId,
       by: reply.byName,
       excerpt: reply.text.slice(0, 80),
-      /** where the thread lives, e.g. 爱弥斯动态表情包 */
       title: ref?.title ?? null,
-      /** link to the reply (/packs/<slug>#c-<id> or /e/<emojiId>#c-<id>); null when the page is gone */
+      // /packs/<slug>#c-<id> or /e/<emojiId>#c-<id>
       href: ref?.href ? `${ref.href}#c-${reply.id}` : null,
     },
-  })
+    tx,
+  )
 }
 
 export async function createComment(ctx: RequestCtx, input: unknown, deps: CommentDeps = withDeps()): Promise<CreateResult> {

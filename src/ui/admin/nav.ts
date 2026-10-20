@@ -96,3 +96,26 @@ export function canOpen(role: string | null | undefined, pathname: string): bool
   const item = activeNavItem(pathname)
   return item ? can(role, item.perm) : true
 }
+
+export interface AdminSearchTarget {
+  to: '/admin/packs' | '/admin/emojis' | '/admin/users'
+  q: string
+}
+
+const EMOJI_QUERY = /^(r-[0-9a-f]{1,20}|[0-9a-f]{64})$/i
+
+/**
+ * Where the top-bar search (搜索包、表情 ID、用户) goes, as the ?q= filter of a list page: emoji ids
+ * (r-…) and SHA-256 hashes open 表情库, e-mail addresses open 用户与权限 (站长 only); anything else
+ * searches the list being viewed when that is 表情库 or 用户与权限, and 表情包 otherwise.
+ */
+export function adminSearchTarget(query: string, role: string | null | undefined, pathname: string): AdminSearchTarget {
+  const q = query.trim()
+  if (EMOJI_QUERY.test(q)) return { to: '/admin/emojis', q: q.toLowerCase() }
+  const users = can(role, 'users')
+  if (users && q.includes('@')) return { to: '/admin/users', q }
+  const here = activeNavItem(pathname)?.id
+  if (here === 'users' && users) return { to: '/admin/users', q }
+  if (here === 'emojis') return { to: '/admin/emojis', q }
+  return { to: '/admin/packs', q }
+}

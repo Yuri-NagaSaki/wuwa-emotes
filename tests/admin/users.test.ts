@@ -136,6 +136,6 @@ describe('impersonation', () => {
 })
 
 test('DATABASE_URL is the lane test database', async () => {
-  expect(DATABASE_URL).toMatch(/chaochi_(lane_h|test)/)
+  expect(DATABASE_URL).toMatch(/chaochi_(lane_[a-z0-9]+|test)/)
   await withClient(DATABASE_URL, (c) => c.query('select 1'))
 })
