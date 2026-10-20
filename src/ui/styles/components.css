@@ -1,8 +1,8 @@
 /* Components: buttons, chips, inputs, tiles, pack cards, overlays, comments, misc.
    Ported from design/prototype/src/tp-components.css + tp-v3.css (same class vocabulary). Overlays are
    position: fixed (the prototype positioned them inside a device frame); scrim z 50, dialogs z 51,
-   popovers z 45, toasts z 60, header z 30, tab bar z 35. Page-level layouts (home hero, pack detail,
-   投稿, 打包 page, ...) are not here: see the _site pages. */
+   popovers z 45, toasts z 60, header z 30, tab bar z 35. Status pills, the drop zone and the form grid
+   come from tp-admin.css because public pages (投稿, 个人中心) use them too. Page layouts are not here. */
 
 /* ============ brand + shared atoms ============ */
 .logo { display: inline-flex; align-items: center; gap: 10px; flex: none; color: var(--tp-ink); }
@@ -536,6 +536,30 @@ ul.rules li::before { content: ""; position: absolute; left: 2px; top: 0.62em; w
 .pop-layer { z-index: 45; }
 @media (max-width: 760px) {
   .drawer[data-closed], .em-card[data-closed] { animation: tp-sheet-out var(--t) var(--ease) both; }
+}
+
+/* ============ status pills, drop zone, form grid (used by public pages and the admin) ============ */
+.cols-2e { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.st { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 8px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.st::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.st.ok { background: var(--tp-ok-bg); color: var(--tp-ok); }
+.st.warn { background: var(--tp-warn-bg); color: var(--tp-warn); }
+.st.err { background: var(--tp-err-bg); color: var(--tp-err); }
+.st.info { background: var(--tp-teal-bg); color: var(--tp-teal-ink); }
+.st.mute { background: var(--tp-sunk); color: var(--tp-muted); }
+.st.run::before { animation: tp-blink 1s steps(2) infinite; }
+@keyframes tp-blink { 50% { opacity: 0.2; } }
+.form-sec { display: grid; gap: 14px; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.form-grid .full { grid-column: 1 / -1; }
+.drop { border: 3px dashed var(--tp-line-2); border-radius: var(--r-xl); padding: 28px; display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: center; background-color: var(--tp-input); background-image: radial-gradient(color-mix(in srgb, var(--tp-line-2) 55%, transparent) 1.4px, transparent 1.5px); background-size: 16px 16px; }
+.drop.is-over { border-color: var(--tp-teal); background-color: var(--tp-teal-bg); }
+.drop b { font-family: var(--tp-font-display); font-size: 20px; color: var(--tp-ink); }
+.drop p { color: var(--tp-muted); font-size: 13.5px; margin-top: 4px; }
+@media (max-width: 760px) {
+  .cols-2e { grid-template-columns: minmax(0, 1fr); }
+  .form-grid { grid-template-columns: 1fr; }
+  .drop { grid-template-columns: 1fr; text-align: center; justify-items: center; padding: 20px; }
 }
 
 /* ============ React port additions ============ */

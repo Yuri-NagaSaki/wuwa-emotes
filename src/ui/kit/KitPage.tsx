@@ -52,7 +52,7 @@ const TIDE: [string, string, string][] = [
   ['焦点 focus', 'var(--tp-focus)', '#ffcc00'],
 ]
 
-const TILES = sampleItems(8)
+const TILES = sampleItems(9)
 const MASONRY = sampleItems(120, 20)
 const CHARS = [
   { name: '爱弥斯', color: 'var(--c-pink)' },
@@ -348,7 +348,7 @@ export function KitPage() {
 
               <Card title="表情方块" code="Tile">
                 <TileGrid size={96} selecting={selecting}>
-                  {TILES.slice(0, 6).map((t, i) => (
+                  {TILES.slice(0, 9).map((t, i) => (
                     <Tile
                       key={t.id}
                       poster={t.poster}
