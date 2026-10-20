@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { eq } from 'drizzle-orm'
 import { db, schema } from '../../db/client'
 import { log } from '../../log'
-import { countFrames, dominantColor, posterFrame, probe, renderA160, renderFull, renderP240 } from '../../media/derive'
+import { countFrames, dominantColor, oneImageAtATime, posterFrame, probe, renderA160, renderFull, renderP240 } from '../../media/derive'
 import { IMMUTABLE } from '../../media/img'
 import { derivedKey, reviewKey } from '../../media/keys'
 import { getObjectBytes, headObject, putObject } from '../../media/s3'
@@ -31,15 +31,18 @@ export async function deriveEmoji({ emojiId, target }: JobData['media.derive']) 
     return
   }
   const buf = await getObjectBytes(e.originalKey)
-  const p = await probe(buf)
-  const poster = await posterFrame(buf, p)
-  const p240 = await renderP240(buf, poster)
-  let a160: Buffer | null = null
-  if (p.animated) {
-    a160 = await renderA160(buf, p)
-    const frames = await countFrames(a160)
-    if (frames < 2) throw new Error(`a160 for ${emojiId} came out with ${frames} frame(s)`)
-  }
+  const { p, poster, p240, a160, color } = await oneImageAtATime(async () => {
+    const p = await probe(buf)
+    const poster = await posterFrame(buf, p)
+    const p240 = await renderP240(buf, poster)
+    let a160: Buffer | null = null
+    if (p.animated) {
+      a160 = await renderA160(buf, p)
+      const frames = await countFrames(a160)
+      if (frames < 2) throw new Error(`a160 for ${emojiId} came out with ${frames} frame(s)`)
+    }
+    return { p, poster, p240, a160, color: await dominantColor(buf, poster) }
+  })
   if (target === 'review') {
     await putObject(reviewKey('p240', e.storagePackKey, e.id), p240, 'image/webp', 'private, no-store')
     if (a160) await putObject(reviewKey('a160', e.storagePackKey, e.id), a160, 'image/webp', 'private, no-store')
@@ -55,7 +58,7 @@ export async function deriveEmoji({ emojiId, target }: JobData['media.derive']) 
       frames: p.frames,
       durationMs: p.durationMs,
       posterFrame: poster,
-      dominantColor: await dominantColor(buf, poster),
+      dominantColor: color,
       // v1 imports have no hash yet; the original is already in memory here
       ...(e.sha256 ? {} : { sha256: createHash('sha256').update(buf).digest('hex') }),
       p240Bytes: p240.byteLength,
@@ -76,9 +79,12 @@ export async function generateFull({ emojiId }: JobData['media.full']) {
   const key = derivedKey('full', e.storagePackKey, e.id, e.variantRev)
   if (!(await headObject(key))) {
     const buf = await getObjectBytes(e.originalKey)
-    const p = await probe(buf)
-    const out = await renderFull(buf, p)
-    if (p.animated && (await countFrames(out)) !== p.frames) throw new Error(`full for ${emojiId} lost frames`)
+    const out = await oneImageAtATime(async () => {
+      const p = await probe(buf)
+      const out = await renderFull(buf, p)
+      if (p.animated && (await countFrames(out)) !== p.frames) throw new Error(`full for ${emojiId} lost frames`)
+      return out
+    })
     await putObject(key, out, 'image/webp', IMMUTABLE)
     await db().update(schema.emojis).set({ fullReady: true, fullBytes: out.byteLength }).where(eq(schema.emojis.id, e.id))
   } else if (!e.fullReady) {
