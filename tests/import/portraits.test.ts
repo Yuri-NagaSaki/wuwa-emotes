@@ -83,7 +83,7 @@ beforeAll(async () => {
       if (path === '/redirect-lupa') return new Response(null, { status: 302, headers: { location: '/lupa.png' } })
       if (path === '/page.html') return new Response('<html></html>', { headers: { 'content-type': 'text/html' } })
       const f = files.get(path)
-      return f ? new Response(f.body, { headers: { 'content-type': f.type } }) : new Response('not found', { status: 404 })
+      return f ? new Response(new Uint8Array(f.body), { headers: { 'content-type': f.type } }) : new Response('not found', { status: 404 })
     },
   })
   base = `http://127.0.0.1:${server.port}`
