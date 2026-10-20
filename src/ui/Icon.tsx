@@ -1,5 +1,5 @@
 import { cx } from './cx'
-import { ICONS, type IconName } from './icons'
+import type { IconName } from './icons'
 
 export type { IconName } from './icons'
 
@@ -20,8 +20,9 @@ export function Icon({ name, size = 'md', className, label }: IconProps) {
       role={label ? 'img' : undefined}
       aria-label={label}
       focusable="false"
-      // static, trusted path data from icons.ts
-      dangerouslySetInnerHTML={{ __html: ICONS[name] }}
-    />
+    >
+      {/* the paths live once in the sprite (BlobDefs, root layout) */}
+      <use href={`#tp-i-${name}`} />
+    </svg>
   )
 }

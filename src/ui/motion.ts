@@ -8,7 +8,6 @@ const PREF_KEY = 'tp-autoplay'
 type Connection = EventTarget & { saveData?: boolean }
 
 const listeners = new Set<() => void>()
-const emit = () => listeners.forEach((l) => l())
 
 function readEnv(): MotionEnv {
   const mm = (q: string) => typeof matchMedia === 'function' && matchMedia(q).matches
@@ -26,30 +25,59 @@ function readEnv(): MotionEnv {
   }
 }
 
-function subscribe(listener: () => void) {
-  listeners.add(listener)
+// The environment is read once and cached while anything subscribes: every tile and pack card asks for
+// it on every render, and reading it (two matchMedia queries and a localStorage read) per call cost
+// ~1,400 matchMedia calls and ~700 listeners for one 234-sticker pack page. One shared set of change
+// listeners refreshes the cache and notifies every subscriber.
+let cached: MotionEnv | null = null
+let detach: (() => void) | null = null
+
+function current(): MotionEnv {
+  cached ??= readEnv()
+  return cached
+}
+
+function refresh() {
+  cached = readEnv()
+  listeners.forEach((l) => l())
+}
+
+function attach(): () => void {
   const queries = ['(prefers-reduced-motion: reduce)', '(prefers-reduced-data: reduce)'].map((q) => matchMedia(q))
-  queries.forEach((q) => q.addEventListener('change', emit))
+  queries.forEach((q) => q.addEventListener('change', refresh))
   const conn = (navigator as Navigator & { connection?: Connection }).connection
-  conn?.addEventListener?.('change', emit)
-  const onStorage = (e: StorageEvent) => e.key === PREF_KEY && emit()
+  conn?.addEventListener?.('change', refresh)
+  const onStorage = (e: StorageEvent) => e.key === PREF_KEY && refresh()
   window.addEventListener('storage', onStorage)
   return () => {
-    listeners.delete(listener)
-    queries.forEach((q) => q.removeEventListener('change', emit))
-    conn?.removeEventListener?.('change', emit)
+    queries.forEach((q) => q.removeEventListener('change', refresh))
+    conn?.removeEventListener?.('change', refresh)
     window.removeEventListener('storage', onStorage)
+  }
+}
+
+function subscribe(listener: () => void) {
+  listeners.add(listener)
+  detach ??= attach()
+  return () => {
+    listeners.delete(listener)
+    if (!listeners.size && detach) {
+      detach()
+      detach = null
+      // nothing listens for changes any more: read afresh next time
+      cached = null
+    }
   }
 }
 
 /** Whether animated previews may play (false on the server and until hydration). */
 export function usePreviewsAllowed(): boolean {
-  return useSyncExternalStore(subscribe, () => canPlayPreviews(readEnv()), () => false)
+  return useSyncExternalStore(subscribe, () => canPlayPreviews(current()), () => false)
 }
 
 /** The 自动播放 preference ('on' unless the user turned it off). */
 export function useAutoplayPref(): boolean {
-  return useSyncExternalStore(subscribe, () => readEnv().pref === 'on', () => true)
+  return useSyncExternalStore(subscribe, () => current().pref === 'on', () => true)
 }
 
 export function setAutoplayPref(on: boolean) {
@@ -59,5 +87,5 @@ export function setAutoplayPref(on: boolean) {
   } catch {
     /* storage blocked: the switch resets on reload */
   }
-  emit()
+  refresh()
 }
