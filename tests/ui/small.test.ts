@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { swatch } from '#/ui/admin-pages/swatch'
 import { fmtB, fmtN, fmtW } from '#/ui/format'
 import { announcementGateScript, announcementId } from '#/ui/shell/announcement'
 import { createToastStore } from '#/ui/toast-store'
@@ -46,5 +47,14 @@ describe('toast store', () => {
     timers[1]![0]()
     expect(store.getSnapshot().map((t) => t.message)).toEqual(['三', '四'])
     expect(notified).toBe(5)
+  })
+})
+
+describe('admin swatch', () => {
+  test('palette names resolve through the --c-* tokens; saved tokens and hex colours pass through', () => {
+    expect(swatch('pink')).toBe('var(--c-pink, pink)')
+    expect(swatch(' yg ')).toBe('var(--c-yg, yg)')
+    expect(swatch('var(--c-teal)')).toBe('var(--c-teal)')
+    expect(swatch('#19c8b9')).toBe('#19c8b9')
   })
 })

@@ -4,6 +4,7 @@ import { Button } from '../Button'
 import { Chip } from '../Chip'
 import { Input } from '../Field'
 import { FilterPopover } from '../FilterPopover'
+import { swatch } from './swatch'
 
 // Multi-select for characters, artists and tags: the chosen ones as removable chips, the rest in the
 // kit's filter panel (a popover sized to its content; a bottom sheet on phones) with a search field.
@@ -35,7 +36,7 @@ export function Picker({
       <div className="chips">
         {chosen.map((o) => (
           <Chip key={o.id} size="sm" on removable aria-label={`移除 ${o.name}`} onClick={() => toggle(o.id)}>
-            {o.color ? <span className="adm-swatch" style={{ background: o.color, width: 12, height: 12, borderRadius: 4 }} aria-hidden="true" /> : null}
+            {o.color ? <span className="adm-swatch" style={{ background: swatch(o.color), width: 12, height: 12, borderRadius: 4 }} aria-hidden="true" /> : null}
             {o.name}
           </Chip>
         ))}
