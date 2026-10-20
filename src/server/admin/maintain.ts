@@ -78,23 +78,16 @@ export async function nextSortOrder(packId: number, runner: Runner = db()): Prom
   return Number(r?.n ?? 0)
 }
 
-export type ZipChange = 'content' | 'credits'
-
 /**
- * Keep the pack ZIP in step with the pack. The content hash only covers the published emojis, so a
- * credits change (title, artists, license, order) marks the artifact stale to force a rebuild; the old
- * object keeps serving until the new one replaces it. Packs that are not downloadable keep their
+ * Keep the pack ZIP in step with the pack: queue zip.build for packs that are published and
+ * downloadable. The content hash covers entry names, order, originals and the CREDITS.txt text
+ * (src/server/media/zip.ts), so the build skips packs whose ZIP is still current and /dl/p stops
+ * serving an artifact whose hash no longer matches. Packs that are not downloadable keep their
  * artifact (downloads are refused anyway) and are rebuilt when they come back.
  */
-export async function refreshZip(packIds: number[], change: ZipChange, deps: MediaDeps) {
+export async function refreshZip(packIds: number[], deps: MediaDeps) {
   if (!packIds.length) return
-  const { packs, zipArtifacts } = schema
-  if (change === 'credits') {
-    await db()
-      .update(zipArtifacts)
-      .set({ contentHash: sql`'stale:' || ${zipArtifacts.contentHash}` })
-      .where(and(inArray(zipArtifacts.packId, packIds), sql`${zipArtifacts.contentHash} NOT LIKE 'stale:%'`))
-  }
+  const { packs } = schema
   const live = await db()
     .select({ id: packs.id })
     .from(packs)
@@ -114,7 +107,7 @@ export async function dropZips(packIds: number[], deps: MediaDeps): Promise<stri
   const keys = rows.map((r) => r.objectKey)
   if (keys.length) await deleteObjects(keys)
   if (rows.length) await db().delete(zipArtifacts).where(inArray(zipArtifacts.packId, rows.map((r) => r.packId)))
-  await refreshZip(packIds, 'content', deps)
+  await refreshZip(packIds, deps)
   return keys
 }
 

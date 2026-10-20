@@ -4,6 +4,7 @@ import { audit } from '../audit'
 import { db, schema } from '../db/client'
 import { claimSlug, slugify } from '../import/slug'
 import { LICENSE_LABELS } from '../media/credits'
+import { loadPackZipSource } from '../media/zip'
 import { deleteEmojiFiles } from '../media/publish'
 import { deleteObjects, listKeys } from '../media/s3'
 import {
@@ -163,7 +164,8 @@ export async function getPackEditor(id: number): Promise<PackEditorData> {
     db().select({ id: tags.id, name: tags.name, slug: tags.slug, dimension: tags.dimension }).from(tags).orderBy(asc(tags.dimension), asc(tags.name)),
   ])
   const z = zip[0]
-  const published = ems.filter((e) => e.status === 'published').length
+  // what the ZIP should hold now (src/server/media/zip.ts); /dl/p serves the artifact only while it matches
+  const source = await loadPackZipSource(id)
   return {
     pack: {
       id: p.id,
@@ -215,9 +217,9 @@ export async function getPackEditor(id: number): Promise<PackEditorData> {
       objectKey: z?.objectKey ?? null,
       bytes: z ? z.bytes : null,
       builtAt: toIso(z?.builtAt),
-      stale: Boolean(z?.contentHash.startsWith('stale:')),
+      stale: Boolean(z && (!source.ok || source.source.hash !== z.contentHash)),
       queued: busy.has(String(id)),
-      eligible: p.status === 'published' && p.downloadable && published > 0,
+      eligible: source.ok,
     },
     oldSlugs: old.map((o) => o.from.replace(/^\/packs\//, '')).filter((s) => s && !s.includes('/')),
     options: {
@@ -228,7 +230,7 @@ export async function getPackEditor(id: number): Promise<PackEditorData> {
   }
 }
 
-const CREDIT_FIELDS = new Set(['title', 'slug', 'license', 'commissioner', 'creditsText', 'sourceUrl', 'artistIds', 'commissionerIds'])
+const ZIP_FIELDS = new Set(['title', 'slug', 'license', 'commissioner', 'creditsText', 'sourceUrl', 'artistIds', 'commissionerIds', 'status', 'downloadable', 'sourceKind'])
 
 function sameIds(a: number[], b: number[]) {
   const x = [...new Set(a)].sort((m, n) => m - n)
@@ -343,9 +345,8 @@ export async function updatePack(
 
   if (result.changed.length) {
     await refreshCounts()
-    const credits = result.changed.some((k) => CREDIT_FIELDS.has(k))
-    const content = result.changed.some((k) => k === 'status' || k === 'downloadable' || k === 'sourceKind')
-    if (credits || content) await refreshZip([result.packId], credits ? 'credits' : 'content', deps)
+    // credits (title, slug, license, people, …) and status changes both alter what the ZIP should be
+    if (result.changed.some((k) => ZIP_FIELDS.has(k))) await refreshZip([result.packId], deps)
   }
   return { updatedAt: result.updatedAt.toISOString(), slug: result.slug, changed: result.changed, notes }
 }
@@ -369,7 +370,7 @@ export async function setPacksStatus(actor: Actor, input: { ids: number[]; statu
   })
   if (changed.length) {
     await refreshCounts()
-    await refreshZip(changed, 'content', deps)
+    await refreshZip(changed, deps)
   }
   return { changed: changed.length }
 }
@@ -377,7 +378,7 @@ export async function setPacksStatus(actor: Actor, input: { ids: number[]; statu
 export async function rebuildPackZip(actor: Actor, id: number, deps: MediaDeps) {
   const ed = await getPackEditor(id)
   if (!ed.zip.eligible) throw badRequest('只有已发布、允许下载且有已发布表情的包才会生成 ZIP')
-  await refreshZip([id], 'credits', deps)
+  await refreshZip([id], deps)
   await audit(actor, 'pack.zip.rebuild', { type: 'pack', id })
   return { queued: true }
 }

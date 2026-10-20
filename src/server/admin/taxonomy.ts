@@ -12,9 +12,9 @@ import type { ArtistRow, CharacterRow, MergeResult, TagRow, TagDimension } from 
 
 const PATH: Record<'character' | 'artist', string> = { character: '/characters', artist: '/artists' }
 
-/** Slugs to clean up: Lane D's hash rules plus Halo submission terms (`submission-term-<hex>`). */
+/** Slugs to clean up in 角色 / 画师 (hash ids from Halo, numeric ids, non-ASCII). */
 export function needsCleanSlug(slug: string): boolean {
-  return isHashSlug(slug) || /(?:^|-)[0-9a-f]{12,}$/.test(slug)
+  return isHashSlug(slug)
 }
 
 function isUnique(err: unknown, constraint?: string): boolean {

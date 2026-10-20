@@ -152,7 +152,7 @@ export async function reorderEmojis(actor: Actor, input: { packId: number; emoji
       WHERE e.id = x.id AND e.pack_id = ${input.packId}`)
     await audit(actor, 'pack.reorder', { type: 'pack', id: input.packId }, { order: input.emojiIds }, tx)
   })
-  await refreshZip([input.packId], 'credits', deps)
+  await refreshZip([input.packId], deps)
   return { ok: true }
 }
 
@@ -179,7 +179,7 @@ export async function setEmojisStatus(actor: Actor, input: { ids: string[]; stat
   // un-hidden emojis whose derivatives were never rendered (or were regenerated meanwhile)
   if (input.status === 'published') for (const r of eligible) if (!r.derivedReady) await deps.enqueueDerive(r.id, 'derived')
   await refreshCounts()
-  await refreshZip([...groups.keys()], 'content', deps)
+  await refreshZip([...groups.keys()], deps)
   return { changed: eligible.length, skipped: rows.length - eligible.length }
 }
 
@@ -254,7 +254,7 @@ export async function publishPendingEmojis(actor: Actor, ids: string[], deps: Me
     for (const [packId, list] of groups) await audit(actor, 'emoji.publish', { type: 'pack', id: packId }, { emojis: list })
     await fixCovers([...groups.keys()])
     await refreshCounts()
-    await refreshZip([...groups.keys()], 'content', deps)
+    await refreshZip([...groups.keys()], deps)
   }
   return out
 }
@@ -393,7 +393,7 @@ export async function moveEmojis(actor: Actor, input: { ids: string[]; toPackId:
     await refreshCounts()
     // the source packs' ZIPs still hold the moved files under the wrong credits: rebuild or drop them
     await dropZips(sources, deps)
-    await refreshZip([target.id], 'content', deps)
+    await refreshZip([target.id], deps)
   }
   return { moved: moving.length, duplicates }
 }
