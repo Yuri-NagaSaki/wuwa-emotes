@@ -1,0 +1,100 @@
+# 潮池 edge proxy (Caddy 2). Cloudflare (proxied DNS, SSL "Full (strict)") connects here on :443.
+# - Host networking (compose.yaml), so the host nftables firewall (deploy/firewall.sh) filters it.
+# - Dials web-a / web-b at their fixed bridge IPs, never through published ports: a stopping replica
+#   then refuses the connection, and Caddy retries every refused request on the other replica.
+# - Every {$...} value is exported by caddy.sh (also on reload); do not start Caddy without it.
+{
+	# Admin API on a socket inside the container only (caddy.sh reload uses it).
+	admin unix//run/caddy/admin.sock
+	# Never ACME: certificates are the Cloudflare Origin CA pair or Caddy's internal CA.
+	local_certs
+	skip_install_trust
+	# No :80 listener and no HTTP->HTTPS redirect; Cloudflare "Always Use HTTPS" covers http://.
+	auto_https disable_redirects
+	https_port {$CHAOCHI_HTTPS_PORT}
+	{$CHAOCHI_DEFAULT_BIND}
+	grace_period 30s
+
+	servers {
+		protocols h1 h2
+		# Real client IP: CF-Connecting-IP, trusted only when the peer is a Cloudflare range.
+		# The header itself is passed to the app unchanged.
+		trusted_proxies static {$CHAOCHI_CF_RANGES}
+		client_ip_headers CF-Connecting-IP
+		timeouts {
+			read_header 15s
+			# longer than Cloudflare's origin keep-alive, so Cloudflare closes idle connections first
+			idle 16m
+		}
+	}
+
+	log {
+		output stderr
+		format json
+		level INFO
+	}
+}
+
+(tls_origin) {
+	tls /certs/origin.pem /certs/origin-key.pem
+}
+
+(tls_internal) {
+	tls internal
+}
+
+{$CHAOCHI_DOMAIN} {
+	import tls_{$CHAOCHI_TLS}
+
+	# deploy/rollout.sh asks through loopback which replica answered; nobody else sees the header.
+	@not_loopback not remote_ip 127.0.0.0/8 ::1
+	header @not_loopback -X-Chaochi-Upstream
+
+	reverse_proxy {$CHAOCHI_UPSTREAMS} {
+		lb_policy round_robin
+		# A request that meets a stopping or restarting replica is retried on the other one.
+		# Refused connections are always retried; after a connection was made only these methods are.
+		lb_try_duration 10s
+		lb_try_interval 100ms
+		lb_retry_match {
+			method GET HEAD OPTIONS
+		}
+
+		# passive: one failed connection takes the replica out for 5 s
+		fail_duration 5s
+		max_fails 1
+
+		# active: route only to replicas whose /api/health answers 2xx (checked every 2 s). Two failed
+		# checks in a row take a replica out, so one slow answer under load cannot flag both replicas;
+		# a stopped or drained replica is out at once through the passive check (connection refused).
+		health_uri /api/health
+		health_interval 2s
+		health_timeout 3s
+		health_fails 2
+		health_passes 1
+		health_status 2xx
+
+		transport http {
+			dial_timeout 1s
+			# One upstream connection per request. With pooled connections, a POST written to a pooled
+			# connection just as a stopping replica closes it fails and cannot be retried safely. Without
+			# them, rollout.sh's drain (new connections refused) moves every new request to the other
+			# replica as a retryable dial error. The cost is a local TCP handshake per request.
+			keepalive off
+		}
+
+		header_down X-Chaochi-Upstream {http.reverse_proxy.upstream.hostport}
+	}
+}
+
+www.{$CHAOCHI_DOMAIN} {
+	import tls_{$CHAOCHI_TLS}
+	redir https://{$CHAOCHI_DOMAIN}{uri} permanent
+}
+
+# Any other Host with a valid SNI (for example another *.sparxie.moe name covered by the Origin CA
+# wildcard): drop the connection without a response. Unknown SNI and bare-IP handshakes already fail,
+# because no certificate matches them.
+https:// {
+	abort
+}

@@ -1,0 +1,35 @@
+# Build context for the app image: source, lockfile and migrations only.
+.git
+.github
+.claude
+.agents
+.work
+.vscode
+.idea
+
+# secrets never enter the build context
+.env
+.env.*
+.secrets
+secrets
+*.pem
+*.key
+
+# installed / generated
+node_modules
+.output
+.vinxi
+.tanstack
+dist
+coverage
+public/cap
+src/routeTree.gen.ts
+*.log
+.DS_Store
+
+# not needed in the image
+data
+design
+docs
+DEVELOPMENT.md
+compose*.yaml
