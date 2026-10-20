@@ -50,7 +50,9 @@ describe('packDetail', () => {
     expect(p.commissioners).toEqual([{ slug: 'kuroba', name: '黑羽' }])
     expect(p.commissionerText).toBe('黑羽')
     expect(p.creditsText).toBe('画师：爱秧斯坦；约稿：黑羽')
-    expect(p.sourceUrl).toBe('https://example.com/feibi')
+    // the v1 source address stays in the database only: no public payload carries it
+    expect(p).not.toHaveProperty('sourceUrl')
+    expect(JSON.stringify(p)).not.toContain('example.com/feibi')
     expect(p.license).toBe('CC BY-NC-SA 4.0')
     expect(p.downloadable).toBe(true)
     expect(p.tags).toEqual({ group: [], tool: [{ dimension: 'tool', slug: 'ps', name: 'Photoshop' }], project: [], origin: [], custom: [] })

@@ -1,0 +1,55 @@
+/* 打包清单: the tray (Sheet) and /batch. Thumbnails, summary and the progress button come from
+   components.css (.bgroup, .bthumbs, .bthumb, .pk-sum, .btn.is-progress) and site.css (.pk-layout,
+   .pk-side). Loaded by BatchParts (<link precedence>). */
+
+/* ---- the tray: a content-height panel under the header on desktop, a bottom sheet on phones ---- */
+@media (min-width: 761px) {
+  .drawer.tray-drawer {
+    top: calc(var(--head-h) + 8px + var(--safe-top));
+    right: max(12px, calc((100vw - var(--maxw)) / 2 + var(--gutter) - 12px));
+    bottom: auto;
+    width: min(420px, calc(100vw - 24px));
+    max-height: calc(100dvh - var(--head-h) - 24px);
+    border: 0;
+    border-radius: var(--r-xl);
+    overflow: hidden;
+    box-shadow: var(--sh-lift), 0 0 0 1px color-mix(in srgb, var(--tp-line-2) 60%, transparent);
+    animation: tp-pop var(--t) var(--spring) both;
+    transform-origin: top right;
+  }
+  .drawer.tray-drawer[data-closed] { animation: tp-pop-out var(--t-fast) var(--ease) both; }
+  .drawer.tray-drawer .drawer-h { padding-top: 16px; }
+}
+.tray-drawer .drawer-b { flex: 0 1 auto; min-height: 0; }
+.tray-drawer .drawer-f .tray-links { display: flex; justify-content: space-between; align-items: center; gap: 12px; font-size: 13px; }
+
+/* ---- list ---- */
+.bgroup h4 a { color: var(--tp-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bgroup h4 a:hover { color: var(--tp-teal-ink); }
+.bgroup.is-off .bthumbs { opacity: 0.55; }
+.bgroup.is-off .note-box b { color: var(--tp-ink); }
+.bgroup-wrap { display: grid; }
+.bthumb button:hover { background: var(--tp-err); }
+.bg-loading { display: flex; gap: 10px; align-items: center; color: var(--tp-muted); font-size: 13px; font-weight: 700; }
+.bg-loading .wave-loader { height: 16px; }
+.bg-link { border: 0; background: none; padding: 0; margin-left: 6px; color: var(--tp-teal-ink); font-weight: 800; font-size: inherit; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; white-space: nowrap; }
+.bg-link:disabled { color: var(--tp-faint); cursor: default; }
+
+/* ---- action ---- */
+.batch-act { display: grid; gap: 10px; }
+.batch-status { display: flex; justify-content: space-between; align-items: center; gap: 10px; font-size: 12.5px; color: var(--tp-muted); font-weight: 700; }
+.batch-saved { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.batch-saved li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 9px 12px; border-radius: var(--r-sm); background: var(--tp-teal-bg); color: var(--tp-teal-ink); font-size: 12.5px; }
+.batch-saved b { display: block; color: var(--tp-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.batch-saved small { font: 700 11.5px var(--tp-font-num); color: var(--tp-muted); }
+
+/* ---- /batch ---- */
+.batch-page .page-h { margin-top: 18px; }
+.batch-list { display: grid; gap: 0; }
+.batch-page .pk-side .note-box { background: var(--tp-card); }
+.batch-page .pk-side .clear { justify-self: center; margin: 0; font-size: 12.5px; color: var(--tp-muted); }
+.batch-empty { margin-top: 12px; }
+@media (max-width: 760px) {
+  .batch-page { padding-bottom: 24px; }
+  .batch-list .bthumbs { grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); }
+}

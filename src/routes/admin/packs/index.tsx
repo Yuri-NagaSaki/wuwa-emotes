@@ -1,17 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { adminPacksFn } from '#/server/admin/fns/content'
 import { guarded } from '#/ui/admin-pages/bits'
 import { pageCss } from '#/ui/admin-pages/css'
+import { int, oneOf, searchParser, text } from '#/ui/admin/search'
 import { PacksPage } from '#/ui/admin-pages/PacksPage'
 
-const search = z.object({
-  q: z.string().max(100).optional().catch(undefined),
-  status: z.enum(['draft', 'published', 'hidden']).optional().catch(undefined),
-  kind: z.enum(['animated', 'static', 'mixed']).optional().catch(undefined),
-  source: z.enum(['community', 'official']).optional().catch(undefined),
-  sort: z.enum(['updated', 'created', 'title', 'downloads']).optional().catch(undefined),
-  page: z.coerce.number().int().min(1).max(10_000).optional().catch(undefined),
+const search = searchParser({
+  q: text(100),
+  status: oneOf(['draft', 'published', 'hidden']),
+  kind: oneOf(['animated', 'static', 'mixed']),
+  source: oneOf(['community', 'official']),
+  sort: oneOf(['updated', 'created', 'title', 'downloads']),
+  page: int(1, 10_000),
 })
 
 export const Route = createFileRoute('/admin/packs/')({

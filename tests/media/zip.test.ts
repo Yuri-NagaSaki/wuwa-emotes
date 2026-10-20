@@ -123,7 +123,8 @@ describe('zip.build', () => {
     expect(credits).toContain('画师：雾雪')
     expect(credits).toContain('约稿：某群友、约稿甲')
     expect(credits).toContain('许可：CC BY-NC-SA 4.0')
-    expect(credits).toContain('来源：https://emoji.wuwa.games/archives/zip-a')
+    expect(credits).not.toContain('来源')
+    expect(credits).not.toContain('wuwa.games')
     expect(credits).toContain('本站页面：http://localhost:3000/packs/zip-pack')
     expect(credits).toContain('转载请注明出处')
     expect(credits).toContain(`打包自 潮池（http://localhost:3000） · ${formatCreditsDate(NOW)}`)
@@ -299,7 +300,6 @@ describe('zip helpers', () => {
         { ...credits, packs: [{ ...p, commissioner: '约稿人' }] },
         { ...credits, packs: [{ ...p, license: 'cc-by-nc-sa-4.0' }] },
         { ...credits, packs: [{ ...p, note: '转载请注明' }] },
-        { ...credits, packs: [{ ...p, sourceUrl: 'https://src.test/x' }] },
       ]
       const hashes = new Set(variants.map((c) => packContentHash({ ...base, credits: c })))
       expect(hashes.size).toBe(variants.length)

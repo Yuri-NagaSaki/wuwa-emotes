@@ -1,5 +1,6 @@
 /* 模拟登录 bar (ImpersonationBar.tsx). Linked only while the bar is on the page: it sits fixed at the
-   top, and the page plus its sticky headers (site .head, admin .adm-top / .adm-side) move below it. */
+   top, and the page plus everything sticky to the top (site .head and the bars and asides that stick
+   under it, admin .adm-top / .adm-side / the pack editor's aside) move below it. */
 
 :root:has(.imp-bar) { --imp-h: calc(40px + env(safe-area-inset-top, 0px)); }
 :root:has(.imp-bar) body { padding-top: var(--imp-h); }
@@ -7,6 +8,9 @@
 :root:has(.imp-bar) .adm { min-height: calc(100dvh - var(--imp-h)); }
 :root:has(.imp-bar) .adm-side { height: calc(100dvh - var(--imp-h)); }
 :root:has(.imp-bar) :is(.pk-side, .sub-aside) { top: calc(var(--imp-h) + var(--head-h) + 16px); }
+:root:has(.imp-bar) .sticky-tools { top: calc(var(--imp-h) + var(--head-h)); }
+:root:has(.imp-bar) .toc { top: calc(var(--imp-h) + var(--head-h) + 20px); }
+:root:has(.imp-bar) .adm-editor aside.adm-col { top: calc(var(--imp-h) + 76px); }
 
 .imp-bar {
   position: fixed; top: 0; left: 0; right: 0; z-index: 40; height: var(--imp-h);

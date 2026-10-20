@@ -5,8 +5,8 @@
    character and artist names) uses the body font, so pages only download the UI-vocabulary shards. */
 
 .dyn { font-family: var(--tp-font-body); }
-/* inputs inside a pill (.input) and the palette show focus on the pill, not as a box on the field */
-.input input:focus-visible, .cmdk-in .q:focus-visible { outline: none; box-shadow: none; }
+/* the palette shows focus on its row, not as a box on the field (pill inputs: components.css) */
+.cmdk-in .q:focus-visible { outline: none; box-shadow: none; }
 .cmdk-in .q { flex: 1; min-width: 0; border: 0; background: none; outline: none; font-size: 18px; font-weight: 700; color: var(--tp-ink); }
 .cmdk-in:focus-within { box-shadow: inset 0 -2px 0 var(--tp-teal); }
 /* Font budget (≤ 150 KB a page): every display character outside the site vocabulary costs a ~7–20 KB
@@ -73,7 +73,16 @@
 .list-end { text-align: center; padding: 26px 0 6px; color: var(--tp-faint); font-size: 13px; font-weight: 700; }
 
 /* ============ 包详情 ============ */
-.pack-h { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 30px; align-items: start; margin-top: 18px; }
+.pack-h { display: grid; grid-template-columns: 236px minmax(0, 1fr); gap: 14px 30px; align-items: start; margin-top: 18px; }
+/* the 署名 card: under the info up to 1279 px, its own right-hand column from 1280 px (no empty right half) */
+.pack-h > .credit-card { grid-column: 2; }
+@media (min-width: 761px) and (max-width: 1279px) {
+  .pack-h > .pack-cover { grid-row: span 2; }
+}
+@media (min-width: 1280px) {
+  .pack-h { grid-template-columns: 236px minmax(0, 1fr) minmax(300px, 380px); column-gap: 32px; }
+  .pack-h > .credit-card { grid-column: 3; grid-row: 1; max-width: none; }
+}
 .pack-cover { aspect-ratio: 1; border-radius: var(--r-xl); background-color: color-mix(in srgb, var(--acc, var(--c-pink)) 26%, var(--tp-input)); background-image: radial-gradient(color-mix(in srgb, var(--acc, var(--c-pink)) 55%, transparent) 2px, transparent 2.2px); background-size: 16px 16px; border: 3px solid color-mix(in srgb, var(--acc, var(--c-pink)) 70%, var(--tp-card)); display: grid; place-items: center; position: relative; transform: rotate(-2deg); box-shadow: 0 8px 0 0 color-mix(in srgb, var(--acc, var(--c-pink)) 40%, var(--tp-shadow-3d)); }
 .pack-cover img { width: 84%; height: 84%; object-fit: contain; }
 .pack-cover .flag { position: absolute; top: -10px; right: -10px; transform: rotate(6deg); }
@@ -103,6 +112,8 @@
 .pn a.next { text-align: right; justify-items: end; }
 .pn span.none { border-radius: var(--r); border: 2px dashed var(--tp-line); }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 30px; align-items: start; }
+/* comments under the grid, full width with the page content (no side column); .sec spaces it */
+.pack-comments { min-width: 0; }
 .cm-slot { display: grid; gap: 12px; }
 .cm-slot .card.dashed { text-align: center; color: var(--tp-muted); font-size: 14px; }
 .side-stack { display: grid; gap: 22px; margin-top: 48px; }
@@ -132,6 +143,28 @@
 /* modal open: the page keeps its scrollbar gutter, so locking scroll moves nothing */
 html { scrollbar-gutter: stable; }
 html.em-lock { overflow: hidden; }
+/* the sticker's comment thread: a row under the strip, opened in place; the card grows and the layer
+   scrolls (no inner scroll box on desktop) */
+.em-card { grid-template-areas: "media info" "strip strip" "cm cm"; }
+.em-cm { grid-area: cm; border-top: 2px solid var(--tp-line); background: var(--tp-card); min-width: 0; }
+.em-cm-toggle { width: 100%; display: flex; align-items: center; gap: 8px; padding: 11px 18px; border: 0; background: none; font-weight: 800; font-size: 13.5px; color: var(--tp-ink); text-align: left; }
+.em-cm-toggle:hover { background: var(--tp-sand); }
+.em-cm-toggle svg.i:first-child { color: var(--tp-teal-ink); }
+.em-cm-toggle svg.i:last-child { margin-left: auto; color: var(--tp-muted); }
+.em-cm-wait { padding: 4px 18px 16px; color: var(--tp-muted); font-size: 13px; }
+.em-thread { margin-top: 0; padding: 2px 18px 18px; gap: 14px; }
+.em-thread .cm-head h2 { display: none; }
+.em-thread .cm-head .n::before { content: "共 "; }
+.em-thread .cm-head .n::after { content: " 条"; }
+.em-wrap.has-cm { overflow-y: auto; align-items: flex-start; overscroll-behavior: contain; }
+/* the sticker picker pops out below the composer: let it overflow the card (desktop; the phone
+   picker is a sheet) */
+@media (min-width: 761px) {
+  .em-card.has-cm { overflow: visible; }
+  .em-card.has-cm > .em-media { border-top-left-radius: var(--r-xl); }
+  .em-card.has-cm > .em-cm { border-radius: 0 0 var(--r-xl) var(--r-xl); }
+}
+.em-wrap.has-cm .em-nav { position: sticky; top: calc(50% - 22px); align-self: flex-start; margin-top: 160px; }
 
 /* ============ 画廊 ============ */
 .gal-tools { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 18px 0; }
@@ -244,7 +277,7 @@ html.em-lock { overflow: hidden; }
   .pack-cover { border-radius: 24px; border-width: 2px; box-shadow: 0 5px 0 0 color-mix(in srgb, var(--acc, var(--c-pink)) 40%, var(--tp-shadow-3d)); }
   .pack-info { display: contents; }
   .pack-info h1 { font-size: 21px; align-self: center; }
-  .pack-meta, .pack-ex, .pack-acts, .credit-card, .pack-chips, .pack-info > .note-box { grid-column: 1 / -1; }
+  .pack-meta, .pack-ex, .pack-acts, .pack-h > .credit-card, .pack-chips, .pack-info > .note-box { grid-column: 1 / -1; }
   .pack-acts .hide-sm { display: none; }
   .credit-card { grid-template-columns: 1fr; gap: 2px; }
   .credit-card dd { margin-bottom: 6px; }
@@ -257,6 +290,12 @@ html.em-lock { overflow: hidden; }
   .pack-page { padding-bottom: 64px; }
   .wx-note { display: flex; }
   .em-top .eyebrow { max-width: 22ch; }
+  .em-card { grid-template-areas: "grab" "media" "info" "strip" "cm"; }
+  .em-card.has-cm { max-height: 92dvh; }
+  .em-cm-toggle { padding: 11px 16px calc(11px + var(--safe-bottom)); }
+  .em-card.has-cm .em-cm-toggle { padding-bottom: 11px; }
+  .em-thread { padding: 2px 14px calc(16px + var(--safe-bottom)); }
+  .em-wrap.has-cm { overflow: hidden; align-items: flex-end; }
   .char-hero { padding: 20px 0 22px; }
   .char-hero .wrap { grid-template-columns: 96px minmax(0, 1fr); gap: 14px; }
   .char-hero .pool { width: 96px; height: 96px; border-width: 4px; box-shadow: 0 6px 0 0 color-mix(in srgb, var(--cc) 55%, var(--tp-shadow-3d)); }

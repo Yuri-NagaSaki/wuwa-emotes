@@ -35,7 +35,6 @@ interface DetailRow {
   memorial: boolean
   commissioner: string | null
   credits_text: string | null
-  source_url: string | null
   downloads: string | number
   favorites: number
   pub_at: Date
@@ -75,7 +74,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
   const [main, emojiRows] = await Promise.all([
     rows<DetailRow>(sql`
       select p.id, p.slug, p.title, p.excerpt, p.description_md, p.kind, p.source_kind, p.license, p.downloadable,
-        p.pin_level, p.memorial, p.commissioner, p.credits_text, p.source_url,
+        p.pin_level, p.memorial, p.commissioner, p.credits_text,
         p.download_count as downloads, p.favorite_count as favorites, ${PUB_AT} as pub_at, p.updated_at, p.cover_emoji_id,
         ${packCharactersJson('p')} as chars,
         ${packArtistsJson('p')} as arts,
@@ -149,7 +148,6 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
     commissioners,
     commissionerText: p.commissioner ?? null,
     creditsText: p.credits_text ?? null,
-    sourceUrl: p.source_url ?? null,
     tags: byDimension(p.tags ?? []),
     prev: neighbor(p.prev),
     next: neighbor(p.next),

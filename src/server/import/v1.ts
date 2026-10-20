@@ -11,7 +11,7 @@ import { claimSlug, isHashSlug, slugify } from './slug'
 
 // v1 snapshot → PostgreSQL (docs/ARCHITECTURE.md §6.4 and §7; DEVELOPMENT.md §3–4).
 //
-// Reads meta/v1/{packs,characters,artists,facets}.json plus each pack's emoji list from
+// Reads meta/v1/{packs,characters,artists,tags,facets}.json plus each pack's emoji list from
 // assets/v1/packs/<pk>/pack.json (the authoritative file list), falling back to
 // meta/v1/index/by-pack/<pk>.json. A pack with neither is imported as a draft. Objects are never moved.
 //
@@ -62,6 +62,10 @@ const V1PackItem = z.object({
 })
 export type V1Pack = z.infer<typeof V1PackItem>
 
+/** Halo tag dictionary entry (meta/v1/tags.json): displayName is "<facet>/<value>", e.g. 企划/Solar5. */
+const V1Tag = z.object({ name: nstr, displayName: nstr, slug: nstr, permalink: nstr })
+export type V1Tag = z.infer<typeof V1Tag>
+
 const V1Emoji = z.object({
   id: z.string(),
   objectKey: nstr,
@@ -86,6 +90,8 @@ export interface V1Snapshot {
   packs: V1Pack[]
   characters: V1Ref[]
   artists: V1Ref[]
+  /** Halo tags; only their /tags/<slug> addresses are used (redirects) */
+  tags: V1Tag[]
   facets: Record<string, string[]>
   manifests: Map<string, V1Manifest | null>
   warnings: string[]
@@ -157,6 +163,7 @@ export async function loadV1Snapshot(
   const packs = parseItems(packsRaw, V1PackItem, 'packs.json', warnings)
   const characters = parseItems(await read(`${prefix}characters.json`), V1Ref, 'characters.json', warnings)
   const artists = parseItems(await read(`${prefix}artists.json`), V1Ref, 'artists.json', warnings)
+  const tags = parseItems(await read(`${prefix}tags.json`), V1Tag, 'tags.json', warnings)
 
   const facets: Record<string, string[]> = {}
   const facetsRaw = Facets.safeParse(await read(`${prefix}facets.json`))
@@ -190,7 +197,7 @@ export async function loadV1Snapshot(
     manifests.set(pk, { source, emojis })
   })
 
-  return { packs, characters, artists, facets, manifests, warnings }
+  return { packs, characters, artists, tags, facets, manifests, warnings }
 }
 
 // ---------- planning (pure) ----------
@@ -311,6 +318,18 @@ function normFormat(f: string | null | undefined): string | null {
 function refName(r: V1Ref): string {
   const meta = clean(r.name)
   return clean(r.displayName) || (meta && !/^(?:character|artist|tag)-[0-9a-f]{8,}$/i.test(meta) ? meta : '') || clean(r.slug)
+}
+
+/** URL-encoded pathname of a v1 tag page (/tags/<slug>), from its permalink or else its slug; or null. */
+export function tagLegacyPath(t: Pick<V1Tag, 'permalink' | 'slug'>): string | null {
+  const raw = t.permalink?.trim() || (t.slug?.trim() ? `/tags/${encodeURIComponent(t.slug.trim())}` : '')
+  if (!raw) return null
+  try {
+    const p = new URL(raw, 'https://v1.invalid').pathname.replace(/\/+$/, '')
+    return /^\/tags\/[^/]+$/.test(p) ? p : null
+  } catch {
+    return null
+  }
 }
 
 /** /tags/character-<old> as used by v1 (a slug that already carries the prefix is used as is). */
@@ -565,6 +584,37 @@ export function planImport(snap: V1Snapshot, existing: ExistingState = EMPTY_STA
   }
 
   for (const c of characters) if (c.v1Slug) redirects.set(characterLegacyPath(c.v1Slug), `/characters/${encodeURIComponent(c.slug)}`)
+
+  // v1 tag pages (/tags/<halo slug>, e.g. /tags/qi-hua-solar5 for 企划/Solar5): facet tags go to the
+  // packs list filtered by that tag (the same targets as the /tags fallback in catalog/legacy.ts),
+  // 角色 / 画师 tags to the character or artist page, anything else to a search for the tag's name.
+  // A path already planned above (pack and character addresses) is never overwritten.
+  const tagSlug = new Map(tags.map((t) => [`${t.dimension}\u0000${t.name}`, t.slug]))
+  const charSlugByName = new Map<string, string>()
+  for (const c of characters) if (!charSlugByName.has(c.name)) charSlugByName.set(c.name, c.slug)
+  const artistSlugByName = new Map(artists.map((a) => [a.name, a.slug]))
+  for (const t of snap.tags) {
+    const from = tagLegacyPath(t)
+    const label = clean(t.displayName)
+    if (!from || !label || redirects.has(from)) continue
+    const m = /^([^/／]+)[/／](.+)$/.exec(label)
+    const facet = m ? m[1]!.trim() : ''
+    const name = m ? clean(m[2]) : label
+    const dimension = TAG_DIMENSIONS[facet]
+    let to: string | null = null
+    if (dimension) {
+      const slug = tagSlug.get(`${dimension}\u0000${name}`)
+      if (slug) to = dimension === 'group' ? `/packs?group=${encodeURIComponent(slug)}` : `/packs?tag=${encodeURIComponent(`${dimension}:${slug}`)}`
+    } else if (facet === CHARACTER_FACET) {
+      const slug = charSlugByName.get(name)
+      if (slug) to = `/characters/${encodeURIComponent(slug)}`
+    } else if (facet === ARTIST_FACET) {
+      const slug = artistSlugByName.get(name)
+      if (slug) to = `/artists/${encodeURIComponent(slug)}`
+    }
+    to ??= `/search?q=${encodeURIComponent(name)}`
+    if (to !== from) redirects.set(from, to)
+  }
 
   return {
     packs,

@@ -1,12 +1,14 @@
 import { createServerFn } from '@tanstack/react-start'
 import { HttpError, publicFn } from '../perm/fn'
 import { getArtistDetail, listArtists } from './artists'
+import { getBatchItems } from './batch'
 import { getCharacterDetail, listCharacters } from './characters'
 import { CatalogInputError } from './cursor'
 import { getExplore, getPackFacets } from './explore'
 import { getHome } from './home'
 import {
   artistDetailInput,
+  batchItemsInput,
   characterDetailInput,
   charactersInput,
   emojiIdInput,
@@ -108,6 +110,12 @@ export const searchFn = createServerFn({ method: 'GET' })
   .middleware([publicFn])
   .validator(searchInput)
   .handler(({ data }) => searchCatalog(data))
+
+/** 打包清单: thumbnails and packs for the ids kept in the browser. POST: a page of ids is too long for a URL. */
+export const batchItemsFn = createServerFn({ method: 'POST' })
+  .middleware([publicFn])
+  .validator(batchItemsInput)
+  .handler(({ data }) => getBatchItems(data))
 
 export const suggestFn = createServerFn({ method: 'GET' })
   .middleware([publicFn])

@@ -4,18 +4,19 @@ import { commentFormTokenFn, createCommentFn, editCommentFn, previewCommentFn } 
 import type { CommentItem, CreateResult, PreviewResult, Sticker, ThreadConfig } from '#/server/comments/types'
 import { Button, IconButton } from '../Button'
 import { capHeaders } from '../cap/load'
-import { CapWidget } from '../cap/CapWidget'
 import { cx } from '../cx'
 import { Input, Textarea } from '../Field'
 import { Icon } from '../Icon'
 import { toast } from '../Toast'
 import { StickerPicker } from './StickerPicker'
+import { type CapStatus, useGuestCap } from './useGuestCap'
 import { composeBody, errorMessage, guestIdentity, markersIn, rememberGuest, rememberStickers, splitBody, stickersInHtml } from './util'
 
 // The comment form (new comment, reply, or edit). Guests fill in a name (and optionally an email, of
-// which only a salted hash is stored) and pass Cap; the token goes in the x-cap-token header exactly
-// once, and the widget is remounted after every attempt because the server consumed the token.
+// which only a salted hash is stored) and pass Cap invisibly (useGuestCap: no widget, a status next to
+// 发布); the token goes in the x-cap-token header exactly once. Signed-in users never see Cap.
 // The hidden 「网站」 field is the honeypot; the form token proves the minimum fill time.
+// Markdown works (B / I / 引用 / 链接 in the toolbar, 预览 renders it on the server); no syntax hint.
 
 export interface ComposerViewer {
   id: string
@@ -50,8 +51,6 @@ export function Composer(props: ComposerProps) {
   const [text, setText] = useState(initial.text)
   const [stickers, setStickers] = useState<Sticker[]>(initial.stickers)
   const [guest, setGuest] = useState({ name: '', email: '' })
-  const [capToken, setCapToken] = useState<string | null>(null)
-  const [capKey, setCapKey] = useState(0)
   const [picker, setPicker] = useState(false)
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [busy, setBusy] = useState(false)
@@ -77,7 +76,8 @@ export function Composer(props: ComposerProps) {
   const tooLong = body.length > MAX_BODY
   const guestMode = !viewer && !editing
   const blocked = viewer?.banned || (!viewer && !config.guestsAllowed)
-  const canSend = !busy && !blocked && !!body && !tooLong && remaining >= 0 && now >= readyAt && (!guestMode || (!!guest.name.trim() && !!capToken))
+  const cap = useGuestCap(guestMode && !blocked)
+  const canSend = !busy && !blocked && !!body && !tooLong && remaining >= 0 && now >= readyAt && (!guestMode || !!guest.name.trim())
 
   function pick(s: Sticker) {
     if (remaining <= 0) {
@@ -145,6 +145,11 @@ export function Composer(props: ComposerProps) {
         result = await editCommentFn({ data: { id: editing.id, body } })
       } else {
         const token = await freshToken()
+        const capToken = guestMode ? await cap.take() : null
+        if (guestMode && !capToken) {
+          toast({ message: '人机验证没有通过，评论还没有发出', detail: '点「重试」再验证一次', icon: 'shield', duration: 3500 })
+          return
+        }
         const data = {
           threadType: props.threadType,
           threadId: props.threadId,
@@ -169,11 +174,6 @@ export function Composer(props: ComposerProps) {
       toast({ message: errorMessage(err, '发布失败，请稍后再试'), icon: 'warn', duration: 3500 })
     } finally {
       setBusy(false)
-      if (guestMode) {
-        // the token was sent (and consumed) or is no longer trustworthy: start over
-        setCapToken(null)
-        setCapKey((k) => k + 1)
-      }
     }
   }
 
@@ -224,6 +224,7 @@ export function Composer(props: ComposerProps) {
             maxLength={20}
             value={guest.name}
             onChange={(e) => setGuest({ ...guest, name: e.currentTarget.value })}
+            onFocus={() => cap.warm()}
             autoComplete="nickname"
           />
           <Input
@@ -260,7 +261,11 @@ export function Composer(props: ComposerProps) {
         <Textarea
           ref={textRef}
           value={text}
-          onChange={(e) => setText(e.currentTarget.value)}
+          onChange={(e) => {
+            setText(e.currentTarget.value)
+            cap.warm()
+          }}
+          onFocus={() => cap.warm()}
           placeholder={replyTo ? `回复 ${replyTo.name}` : '说点什么，或者直接甩一张贴纸'}
           aria-label={replyTo ? `回复 ${replyTo.name}` : '评论内容'}
           maxLength={MAX_BODY}
@@ -303,19 +308,11 @@ export function Composer(props: ComposerProps) {
         <button type="button" className="tbtn" aria-label="链接" onClick={() => wrap('[', '](https://)', '链接文字')} disabled={!!preview}>
           <Icon name="link" size="sm" />
         </button>
-        <button type="button" className={cx('tbtn', preview && 'is-on')} aria-pressed={!!preview} onClick={togglePreview}>
+        <button type="button" className={cx('tbtn tip', preview && 'is-on')} aria-label="预览" data-tip="预览" aria-pressed={!!preview} onClick={togglePreview}>
           <Icon name="eye" size="sm" />
-          预览
         </button>
-        {!compact ? (
-          <span className="md-hint">
-            支持 <code>**粗体**</code> <code>*斜体*</code> <code>&gt; 引用</code> <code>[链接](https://…)</code>
-          </span>
-        ) : null}
         <div className="send">
-          {guestMode ? (
-            <CapWidget key={capKey} onToken={setCapToken} onReset={() => setCapToken(null)} onError={() => setCapToken(null)} />
-          ) : null}
+          {guestMode ? <CapChip status={cap.status} error={cap.error} onRetry={cap.retry} /> : null}
           <span className={cx('count', tooLong && 'err')}>
             {body.length} / {MAX_BODY}
           </span>
@@ -341,5 +338,29 @@ export function Composer(props: ComposerProps) {
         anchorRef={pickerBtn}
       />
     </form>
+  )
+}
+
+/** Where the prototype shows 人机验证已通过 (.captcha): the state of the invisible check, with a retry. */
+function CapChip({ status, error, onRetry }: { status: CapStatus; error: string | null; onRetry: () => void }) {
+  if (status === 'idle') return null
+  if (status === 'failed') {
+    return (
+      <span className="captcha is-err" role="alert">
+        <span className="ok">
+          <Icon name="warn" size="sm" />
+        </span>
+        {error ?? '人机验证没有通过'}
+        <button type="button" onClick={onRetry}>
+          重试
+        </button>
+      </span>
+    )
+  }
+  return (
+    <span className={cx('captcha', status === 'solving' && 'is-busy')} role="status">
+      <span className="ok">{status === 'ready' ? <Icon name="check" size="sm" /> : null}</span>
+      {status === 'ready' ? '人机验证已通过' : '正在验证…'}
+    </span>
   )
 }

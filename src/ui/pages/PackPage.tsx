@@ -7,6 +7,7 @@ import { fmtB, fmtN } from '../format'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { setAutoplayPref, useAutoplayPref } from '../motion'
+import { tray } from '../batch/tray'
 import { Tile, TileGrid } from '../Tile'
 import { copyImage, copyLink } from './clipboard'
 import { CommentsSlot } from './CommentsSlot'
@@ -181,67 +182,57 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
                 </div>
               ) : null}
             </div>
-            <dl className="credit-card">
-              <dt>许可</dt>
-              <dd className="lic">
-                {lic.badge ? <span className="cc-badge">{lic.badge}</span> : null}
-                {pv && pack.sourceKind === 'official' ? '版权方未开放再分发' : lic.text}
-              </dd>
-              {pack.artists.length ? (
-                <>
-                  <dt>画师</dt>
-                  <dd>
-                    {pack.artists.map((a, i) => (
-                      <span key={a.slug}>
-                        {i ? '、' : ''}
-                        <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
-                      </span>
-                    ))}
-                  </dd>
-                </>
-              ) : null}
-              {pack.commissioners.length || pack.commissionerText ? (
-                <>
-                  <dt>约稿</dt>
-                  <dd>
-                    {pack.commissioners.map((a, i) => (
-                      <span key={a.slug}>
-                        {i ? '、' : ''}
-                        <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
-                      </span>
-                    ))}
-                    {pack.commissionerText && !pack.commissioners.some((c) => c.name === pack.commissionerText)
-                      ? `${pack.commissioners.length ? '、' : ''}${pack.commissionerText}`
-                      : null}
-                  </dd>
-                </>
-              ) : null}
-              {pack.creditsText ? (
-                <>
-                  <dt>署名</dt>
-                  <dd>{pack.creditsText}</dd>
-                </>
-              ) : null}
-              {pack.sourceUrl ? (
-                <>
-                  <dt>来源</dt>
-                  <dd>
-                    <a href={pack.sourceUrl} rel="nofollow noopener noreferrer" target="_blank">
-                      {pack.sourceUrl.replace(/^https?:\/\//, '')}
-                    </a>
-                  </dd>
-                </>
-              ) : null}
-              <dt>下载</dt>
-              <dd>{pv ? <><span className="flag static">仅预览</span> 不提供原图与打包</> : '无需登录，单张或整包都可直接下载'}</dd>
-              {!pv ? (
-                <>
-                  <dt>下载包含</dt>
-                  <dd>原图 {pack.count} 张 + CREDITS.txt（署名与许可原文）</dd>
-                </>
-              ) : null}
-            </dl>
           </div>
+          <dl className="credit-card">
+            <dt>许可</dt>
+            <dd className="lic">
+              {lic.badge ? <span className="cc-badge">{lic.badge}</span> : null}
+              {pv && pack.sourceKind === 'official' ? '版权方未开放再分发' : lic.text}
+            </dd>
+            {pack.artists.length ? (
+              <>
+                <dt>画师</dt>
+                <dd>
+                  {pack.artists.map((a, i) => (
+                    <span key={a.slug}>
+                      {i ? '、' : ''}
+                      <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
+                    </span>
+                  ))}
+                </dd>
+              </>
+            ) : null}
+            {pack.commissioners.length || pack.commissionerText ? (
+              <>
+                <dt>约稿</dt>
+                <dd>
+                  {pack.commissioners.map((a, i) => (
+                    <span key={a.slug}>
+                      {i ? '、' : ''}
+                      <AppLink to={artistHref(a.slug)}>{a.name}</AppLink>
+                    </span>
+                  ))}
+                  {pack.commissionerText && !pack.commissioners.some((c) => c.name === pack.commissionerText)
+                    ? `${pack.commissioners.length ? '、' : ''}${pack.commissionerText}`
+                    : null}
+                </dd>
+              </>
+            ) : null}
+            {pack.creditsText ? (
+              <>
+                <dt>署名</dt>
+                <dd>{pack.creditsText}</dd>
+              </>
+            ) : null}
+            <dt>下载</dt>
+            <dd>{pv ? <><span className="flag static">仅预览</span> 不提供原图与打包</> : '无需登录，单张或整包都可直接下载'}</dd>
+            {!pv ? (
+              <>
+                <dt>下载包含</dt>
+                <dd>原图 {pack.count} 张 + CREDITS.txt（署名与许可原文）</dd>
+              </>
+            ) : null}
+          </dl>
         </div>
       </div>
 
@@ -284,34 +275,8 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
           ))}
         </TileGrid>
 
-        <div className="split" style={{ marginTop: 36 }}>
+        <div className="pack-comments">
           <CommentsSlot packId={pack.id} stickers={pack.emojis} />
-          <aside className="side-stack" aria-label="更多表情包">
-            <div className="pn">
-              {pack.prev ? (
-                <AppLink to={packHref(pack.prev.slug)} className="prev">
-                  <small>
-                    <Icon name="left" size="sm" />
-                    上一组
-                  </small>
-                  <b>{pack.prev.title}</b>
-                </AppLink>
-              ) : (
-                <span className="none" />
-              )}
-              {pack.next ? (
-                <AppLink to={packHref(pack.next.slug)} className="next">
-                  <small>
-                    下一组
-                    <Icon name="right" size="sm" />
-                  </small>
-                  <b>{pack.next.title}</b>
-                </AppLink>
-              ) : (
-                <span className="none" />
-              )}
-            </div>
-          </aside>
         </div>
       </div>
 
@@ -322,6 +287,9 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
           </span>
           <Button variant="sun" size="sm" icon="bottle" onClick={() => (addToBatch([...sel]), endSelect())}>
             加入打包
+          </Button>
+          <Button size="sm" icon="box" className="hide-sm" onClick={() => (addToBatch([...sel]), endSelect(), tray.open())}>
+            打包所选
           </Button>
           <Button variant="ghost" size="sm" onClick={endSelect} style={{ color: '#cfe9e4' }}>
             取消
@@ -345,7 +313,7 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
         <Button icon="heart" aria-label="收藏" className={fav.favorited ? 'is-fav' : undefined} onClick={fav.toggle} />
       </div>
 
-      {open != null && items[open] ? <EmojiDialog items={items} index={open} onIndex={onIndex} onClose={onClose} priority={deepLink} /> : null}
+      {open != null && items[open] ? <EmojiDialog items={items} index={open} onIndex={onIndex} onClose={onClose} priority={deepLink} packId={pack.id} packStickers={pack.emojis} /> : null}
     </div>
   )
 }

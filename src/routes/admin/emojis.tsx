@@ -1,17 +1,17 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { adminEmojisFn, adminPackEditorFn } from '#/server/admin/fns/content'
 import { guarded } from '#/ui/admin-pages/bits'
 import { pageCss } from '#/ui/admin-pages/css'
+import { int, oneOf, searchParser, text } from '#/ui/admin/search'
 import { EmojisPage } from '#/ui/admin-pages/EmojisPage'
 
-const search = z.object({
-  q: z.string().max(100).optional().catch(undefined),
-  packId: z.coerce.number().int().positive().optional().catch(undefined),
-  status: z.enum(['pending', 'published', 'hidden']).optional().catch(undefined),
-  format: z.enum(['gif', 'png', 'webp', 'jpeg']).optional().catch(undefined),
-  derived: z.enum(['ready', 'missing']).optional().catch(undefined),
-  page: z.coerce.number().int().min(1).max(10_000).optional().catch(undefined),
+const search = searchParser({
+  q: text(100),
+  packId: int(1),
+  status: oneOf(['pending', 'published', 'hidden']),
+  format: oneOf(['gif', 'png', 'webp', 'jpeg']),
+  derived: oneOf(['ready', 'missing']),
+  page: int(1, 10_000),
 })
 
 export const Route = createFileRoute('/admin/emojis')({

@@ -91,10 +91,10 @@ export async function enqueuePackZip(packId: number) {
 }
 
 type PackRow = typeof schema.packs.$inferSelect
-export type CreditsPackFields = Pick<PackRow, 'id' | 'slug' | 'title' | 'sourceUrl' | 'commissioner' | 'license' | 'creditsText'>
+export type CreditsPackFields = Pick<PackRow, 'id' | 'slug' | 'title' | 'commissioner' | 'license' | 'creditsText'>
 
 /**
- * The CREDITS.txt block of each pack (artists, commissioners, license, source), one query for all of
+ * The CREDITS.txt block of each pack (artists, commissioners, license, this site's page), one query for all of
  * them. Used for pack ZIPs here and for batch ZIPs (POST /api/batch/sign hands the blocks to the browser).
  */
 export async function packCreditsEntries(packs: CreditsPackFields[]): Promise<Map<number, CreditsPack>> {
@@ -115,7 +115,6 @@ export async function packCreditsEntries(packs: CreditsPackFields[]): Promise<Ma
     out.set(pack.id, {
       title: pack.title,
       pageUrl: siteUrl(`/packs/${encodeURIComponent(pack.slug)}`),
-      sourceUrl: pack.sourceUrl,
       artists: mine.filter((p) => p.role === 'artist').map((p) => p.name),
       commissioner: [pack.commissioner, ...commissioners].filter(Boolean).join('、') || null,
       license: pack.license,

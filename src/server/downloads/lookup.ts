@@ -13,7 +13,6 @@ export interface PackInfo {
   status: string
   downloadable: boolean
   ownerId: string | null
-  sourceUrl: string | null
   commissioner: string | null
   license: string
   creditsText: string | null
@@ -35,7 +34,6 @@ const packColumns = {
   status: schema.packs.status,
   downloadable: schema.packs.downloadable,
   ownerId: schema.packs.ownerId,
-  sourceUrl: schema.packs.sourceUrl,
   commissioner: schema.packs.commissioner,
   license: schema.packs.license,
   creditsText: schema.packs.creditsText,
