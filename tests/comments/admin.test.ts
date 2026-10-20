@@ -274,6 +274,24 @@ describe('rate limits (per IP hash and per account)', () => {
     await rejects(post(deps, u, thread, '第 51 条'), 429, '明天')
   })
 
+  test('counter rows are keyed by the window end, so the hourly-stale prune never resets a day window', async () => {
+    const { hitWindowByEnd } = await import('#/server/comments/common')
+    const { db, schema } = await import('#/server/db/client')
+    const { and, eq } = await import('drizzle-orm')
+    const subject = `test:${nextIp()}`
+    expect(await hitWindowByEnd(subject, 'cm:1d', 86_400)).toBe(1)
+    expect(await hitWindowByEnd(subject, 'cm:1d', 86_400)).toBe(2)
+    const [row] = await db()
+      .select()
+      .from(schema.rateWindows)
+      .where(and(eq(schema.rateWindows.subject, subject), eq(schema.rateWindows.bucket, 'cm:1d')))
+    expect(row!.windowStart.getTime()).toBeGreaterThan(Date.now())
+    expect(row!.windowStart.getTime() % 86_400_000).toBe(0)
+    const { pruneWindows } = await import('#/server/ratelimit')
+    await pruneWindows(3600)
+    expect(await hitWindowByEnd(subject, 'cm:1d', 86_400)).toBe(3)
+  })
+
   test('the Cap token is verified before the rate counters are touched', async () => {
     const touched: string[] = []
     const deps = testDeps({ settings: { firstCommentReview: false }, hit: async (s, b) => (touched.push(`${s}|${b}`), 1) })

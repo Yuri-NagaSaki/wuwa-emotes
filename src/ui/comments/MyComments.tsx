@@ -3,7 +3,6 @@ import { myCommentsFn } from '#/server/comments/fns'
 import type { MyComment, MyCommentsPage } from '#/server/comments/types'
 import { Button } from '../Button'
 import { EmptyState } from '../EmptyState'
-import { AppLink } from '../link'
 import commentsCss from './comments.css?url'
 import { errorMessage, fullTime, relTime } from './util'
 
@@ -88,7 +87,7 @@ export function MyComments({ onCounts, className }: MyCommentsProps) {
               <div className="cm-li" key={c.id}>
                 <div>
                   <div className="where">
-                    在「{href ? <AppLink to={href}>{c.thread.title}</AppLink> : <span>{c.thread.title}</span>}」
+                    在「{href ? <a href={href}>{c.thread.title}</a> : <span>{c.thread.title}</span>}」
                     <small>
                       {' · '}
                       <time dateTime={c.createdAt} title={fullTime(c.createdAt)}>

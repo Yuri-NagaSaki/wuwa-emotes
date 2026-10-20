@@ -120,7 +120,16 @@ export function stickersInHtml(html: string | null): Map<string, Sticker> {
 export function errorMessage(err: unknown, fallback = '操作失败，请稍后再试'): string {
   const msg = (err as { message?: unknown } | null)?.message
   if (typeof msg !== 'string' || !msg) return fallback
-  // zod / internal messages are not for people
-  if (msg.startsWith('[') || msg.length > 120) return fallback
+  // a failed input validator arrives as the zod issue list (JSON); its messages are written for people
+  if (msg.startsWith('[')) {
+    try {
+      const first = (JSON.parse(msg) as { message?: unknown }[])[0]?.message
+      if (typeof first === 'string' && first.length <= 60 && /[\u4e00-\u9fff]/.test(first)) return first
+    } catch {
+      // not JSON
+    }
+    return fallback
+  }
+  if (msg.length > 120) return fallback
   return msg
 }

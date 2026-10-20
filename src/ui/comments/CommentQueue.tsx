@@ -8,7 +8,6 @@ import { Chip, Chips } from '../Chip'
 import { cx } from '../cx'
 import { EmptyState } from '../EmptyState'
 import { Check, Input } from '../Field'
-import { AppLink } from '../link'
 import { Switch } from '../Switch'
 import { Tabs } from '../Tabs'
 import { toast } from '../Toast'
@@ -243,7 +242,7 @@ function QueueCard({ item, tab, selected, onSelect, onAct, onPin, onBan, canBan,
             {relTime(item.createdAt)}
           </time>
           <span className="where">
-            {item.rootId ? '回复于' : '评论于'}「{item.thread.href ? <AppLink to={`${item.thread.href}#c-${item.id}`}>{item.thread.title}</AppLink> : item.thread.title}」
+            {item.rootId ? '回复于' : '评论于'}「{item.thread.href ? <a href={`${item.thread.href}#c-${item.id}`}>{item.thread.title}</a> : item.thread.title}」
           </span>
         </div>
         <div className="cmt-b" style={{ marginTop: 4 }}>

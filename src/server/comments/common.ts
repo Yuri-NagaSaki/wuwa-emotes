@@ -4,11 +4,11 @@ import { can } from '#/shared/roles'
 import type { Viewer } from '../auth/session'
 import { verifyCapToken, type CapResult } from '../auth/cap'
 import { rows } from '../catalog/sql'
+import { db, schema } from '../db/client'
 import { CatalogInputError, decodeCursor, encodeCursor } from '../catalog/cursor'
 import type { KeyCol } from '../catalog/sql'
 import type { CommentStatus, CommentThread } from '../db/schema/community'
 import { hashValue } from '../http/client'
-import { hitWindow } from '../ratelimit'
 import { getSetting, type SettingValue } from '../settings'
 import { BADGES, REACTION_KEYS, type Badge, type ReactionKey } from './constants'
 import { avatarColor, CommentError } from './moderation'
@@ -30,11 +30,28 @@ export interface CommentDeps {
   hit: (subject: string, bucket: string, windowSeconds: number) => Promise<number>
 }
 
+/**
+ * Fixed-window counter in rate_windows keyed by the window's END. The daily cleanup (pruneWindows)
+ * deletes rows whose window_start is over an hour old; keyed by the start, a 1-day window would be
+ * pruned (and reset) mid-day. Keyed by the end, a row lives until an hour after its window closes.
+ */
+export async function hitWindowByEnd(subject: string, bucket: string, windowSeconds: number): Promise<number> {
+  const ms = windowSeconds * 1000
+  const end = new Date(Math.floor(Date.now() / ms) * ms + ms)
+  const r = schema.rateWindows
+  const rows = await db()
+    .insert(r)
+    .values({ subject, bucket, windowStart: end, n: 1 })
+    .onConflictDoUpdate({ target: [r.subject, r.bucket, r.windowStart], set: { n: sql`${r.n} + 1` } })
+    .returning({ n: r.n })
+  return rows[0]?.n ?? 1
+}
+
 export const defaultDeps: CommentDeps = {
   now: () => new Date(),
   verifyCap: (token) => verifyCapToken(token),
   settings: () => getSetting('comments'),
-  hit: (subject, bucket, windowSeconds) => hitWindow(subject, bucket, windowSeconds),
+  hit: (subject, bucket, windowSeconds) => hitWindowByEnd(subject, bucket, windowSeconds),
 }
 
 export function withDeps(over: Partial<CommentDeps> = {}): CommentDeps {

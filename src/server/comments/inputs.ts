@@ -39,9 +39,9 @@ export const createInput = z.object({
   parentId: commentId.optional(),
   body,
   /** guests only */
-  guestName: z.string().max(80).optional(),
+  guestName: z.string().max(80, '昵称太长了').optional(),
   /** guests only, optional; only its salted hash is stored */
-  guestEmail: z.union([z.literal(''), z.email().max(254)]).optional(),
+  guestEmail: z.union([z.literal(''), z.email('邮箱格式不对').max(254, '邮箱格式不对')], { error: '邮箱格式不对' }).optional(),
   formToken: z.string().max(200),
   [HONEYPOT_FIELD]: z.string().max(500).optional(),
 })

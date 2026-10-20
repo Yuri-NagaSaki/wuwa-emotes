@@ -1,5 +1,6 @@
 import { goodToken, nextIp } from '../integration/setup'
 import { beforeAll, describe, expect, test } from 'bun:test'
+import { ZodError } from 'zod'
 import { issueFormToken } from '#/server/comments/form-token'
 import { hashValue } from '#/server/http/client'
 import {
@@ -82,6 +83,14 @@ describe('guests need a valid Cap token, verified before anything is written', (
     const ok = await post(deps, null, thread, '令牌还能用', { cap: token })
     expect(ok.status).toBe('published')
     expect(deps.capCalls).toBe(1)
+  })
+
+  test('a malformed guest email is rejected with a readable message, before Cap', async () => {
+    const deps = open()
+    const err = await post(deps, null, await freshThread(), '邮箱写错', { guestEmail: 'not-an-email' }).catch((e) => e)
+    expect(err).toBeInstanceOf(ZodError)
+    expect((err as ZodError).issues[0]?.message).toBe('邮箱格式不对')
+    expect(deps.capCalls).toBe(0)
   })
 
   test('Cap unavailable fails closed (503)', async () => {
