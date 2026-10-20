@@ -10,6 +10,7 @@ import { mailConfigured, sendMail } from '../mail'
 import { ac, authRoles } from './access'
 import { CAP_HEADER, capErrorMessage, verifyCapToken } from './cap'
 import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
+import { signedInHintHook } from './signed-in-hint'
 
 export { CAP_PROTECTED_PATHS } from './policy'
 
@@ -102,6 +103,9 @@ function createAuth() {
           })
         }
       }),
+      // the signed-in hint cookie follows the session cookie (src/server/auth/signed-in-hint.ts); runs
+      // before the plugins' after hooks, so tanstackStartCookies() below still forwards it
+      after: signedInHintHook,
     },
     plugins: [
       admin({ ac, roles: authRoles, adminRoles: ['admin'], defaultRole: 'user', impersonationSessionDuration: 60 * 30 }),

@@ -1,11 +1,13 @@
 import { createRootRoute, HeadContent, Outlet, ScriptOnce, Scripts } from '@tanstack/react-router'
 import { useEffect, type ReactNode } from 'react'
 import { getPublicConfig } from '#/server/ui/public-config'
+import { VIEWER_BOOT } from '#/shared/signed-in-hint'
 import { BlobDefs } from '#/ui/BlobDefs'
 import { setCapEndpoint } from '#/ui/cap/load'
 import { NotFoundPage } from '#/ui/NotFoundPage'
 import { ImpersonationBar } from '#/ui/shell/ImpersonationBar'
 import { THEME_BOOT } from '#/ui/shell/theme'
+import { useViewerRefresh } from '#/ui/shell/viewer-refresh'
 import { SiteConfigProvider } from '#/ui/site-config'
 import appCss from '#/ui/styles/app.css?url'
 import { Toaster } from '#/ui/Toast'
@@ -48,6 +50,8 @@ export const Route = createRootRoute({
 function RootComponent() {
   const config = Route.useLoaderData()
   useEffect(() => setCapEndpoint(config.cap.endpoint), [config.cap.endpoint])
+  // the HTML may be the edge cache's anonymous copy: re-check a signed-in browser's viewer
+  useViewerRefresh(config.viewer)
   return (
     <SiteConfigProvider value={config}>
       {config.viewer?.impersonated ? <ImpersonationBar name={config.viewer.name} /> : null}
@@ -61,12 +65,15 @@ const loadDisplayCss = `(function(){var l=document.createElement("link");l.rel="
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (
-    // suppressHydrationWarning: inline scripts mark <html> before hydration (ann-off, data-theme)
+    // suppressHydrationWarning: inline scripts mark <html> before hydration (ann-off, data-theme,
+    // data-viewer-pending)
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
         {/* data-theme and the theme-color meta (src/ui/shell/theme.ts), before first paint */}
         <ScriptOnce>{THEME_BOOT}</ScriptOnce>
+        {/* signed-in hint present: no 登录 in the header until the viewer is re-checked (src/shared/signed-in-hint.ts) */}
+        <ScriptOnce>{VIEWER_BOOT}</ScriptOnce>
         <ScriptOnce>{loadDisplayCss}</ScriptOnce>
         <noscript>
           <link rel="stylesheet" href={DISPLAY_CSS} />

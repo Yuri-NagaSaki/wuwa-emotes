@@ -39,6 +39,8 @@
 .bottle-btn.is-bump { animation: tp-bump 0.5s var(--spring); }
 @keyframes tp-bump { 0% { transform: scale(1); } 35% { transform: scale(1.14, 0.9); } 70% { transform: scale(0.96, 1.05); } 100% { transform: scale(1); } }
 .head .user-slot { flex: none; }
+/* signed-in hint present, viewer being re-checked (src/shared/signed-in-hint.ts): keep 登录's space, show nothing */
+html[data-viewer-pending] .head .user-slot[href="/login"] { visibility: hidden; }
 
 /* footer with the tide line */
 .foot { margin-top: 56px; background: var(--tp-deep); color: #cfe6e1; position: relative; padding-bottom: calc(28px + var(--safe-bottom)); }

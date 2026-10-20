@@ -106,6 +106,14 @@ flowchart LR
 
 另外两条规则：任何带 `Set-Cookie` 的响应都改为 `private, no-store`；5xx 页面和重定向没有显式缓存头时为 `no-store`。
 
+**登录提示 Cookie。** Cloudflare 的缓存键不含 Cookie：匿名请求把公开页放进边缘缓存后，带会话 Cookie 的请求也会命中这份匿名 HTML（`cf-cache-status: HIT`），源站的 `private, no-store` 根本没有机会生效。根路由下发的 viewer 于是为空，页头显示「登录」，没有模拟登录条，而且根配置不随页面切换刷新（`staleTime: Infinity`）。补救靠一个只表示「这个浏览器有会话」的 Cookie `tp_signed_in=1`（`src/shared/signed-in-hint.ts`）：
+
+- 不含身份信息，不是 HttpOnly（页面要读它），`Path=/`、`SameSite=Lax`，生产环境带 `Secure`，有效期与会话 Cookie 相同。
+- 服务端由 Better Auth 的 after 钩子维护（`src/server/auth/signed-in-hint.ts`），对 `/api/auth/*` 与服务端函数里的 `auth().api.*` 都生效：响应设置会话 Cookie 时设置它（登录、注册后直接登录、验证邮件自动登录、模拟登录与结束模拟、每日刷新会话），响应让会话 Cookie 过期时清除它（退出、会话已失效）；会话有效但请求里没有提示的 `get-session` 会补上它（上线前已登录的会话）。所以它的 `Set-Cookie` 只会和会话 Cookie 自己的 `Set-Cookie` 一起出现，或者出现在带有效会话 Cookie 的请求的响应上，这两种响应本来就不共享缓存。
+- 缓存规则不看它：只带提示的请求仍按匿名处理，匿名 HTML 照常共享。所以服务端从不在匿名响应上清除一个过期的提示，由浏览器自己删。
+- 浏览器端：`<head>` 里的启动脚本看到提示就给 `<html>` 加 `data-viewer-pending`，页头先隐藏「登录」但保留位置，3 秒后无论如何恢复。水合后如果根路由的 viewer 为空而提示还在，调用一次 `getPublicConfig()`（从不共享缓存）：拿到 viewer 就重新加载根路由，页头、模拟登录条和其他读根配置的组件随之更新；拿不到就删掉提示（`src/ui/shell/viewer-refresh.ts`）。没有提示的匿名访客不多发请求。重新加载根路由时，已超过 `staleTime` 的页面数据也会随之重新请求一次。评论区的身份来自评论服务端函数，每个访客各自请求，不受这个问题影响。
+- 可选的额外保险，目前没有配置：站长可以在 Cloudflare 加一条 Cache Rule，请求 Cookie 含 `better-auth.session_token`（也匹配 `__Secure-` 前缀的名字）时绕过缓存，只作用于页面，排除 `/img/`、`/assets/`、`/fonts/` 与 `/_serverFn/`。有了它，登录用户的页面请求直接回源；提示机制照样保留，规则缺失或失效时仍然有效。
+
 ### 2.2 `/img` 规则
 
 `/img` 是网页图片唯一的出口，只读 `derived/v1/` 下已发布表情的对象和 `characters/v1/portraits/` 下的角色立绘（`src/server/media/img.ts`、`src/routes/img/$.ts`）：
@@ -584,6 +592,8 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - Better Auth 1.7.11，只启用邮箱密码（8–128 位）。配置了 `SMTP_URL` 与 `MAIL_FROM` 时，注册后发送验证邮件、未验证不能登录；没有配置时不要求验证，开发环境把邮件内容写进日志。生产的邮件经邮件服务商的 SMTP 从服务器发出，凭据只在服务器的环境文件里。
 - 验证邮件和重置密码邮件里的链接都是 1 小时内有效，邮件正文写明有效期（`src/server/auth/policy.ts`）。重置密码后，该账号在所有设备上的会话都失效（`revokeSessionsOnPasswordReset`）。
 - 会话 30 天，每天刷新一次。Drizzle 适配器使用复数表名；`tanstackStartCookies()` 放在插件列表最后。
+- Cloudflare 的缓存键忽略 Cookie，登录用户可能拿到边缘缓存里的匿名 HTML（第 2.1 节）。这只影响界面上显示的登录状态，不影响权限：每个服务端函数和需要登录的页面都在源站按会话 Cookie 检查，而这些响应从不共享缓存。
+- 登录提示 Cookie `tp_signed_in=1`（第 2.1 节）只说明「这个浏览器有会话」，不含用户 ID 或其他身份信息，服务端从不拿它鉴权。伪造它最多让浏览器多发一次 `getPublicConfig()`，然后被删掉。它由 Better Auth 的 after 钩子跟随会话 Cookie 设置和清除；这个全局钩子先于插件的 after 钩子运行，所以 `tanstackStartCookies()` 仍能把它带到服务端函数的响应上。
 - Better Auth 自带限流存在数据库里，按 IP 计：默认每分钟 120 次；登录每分钟 10 次，注册每小时 10 次，申请重置密码每小时 5 次，重发验证邮件每 10 分钟 3 次（`AUTH_RATE_RULES`）。
 
 人机验证：
@@ -797,6 +807,8 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | `tests/unit/server-fn-guard.test.ts` | 每个服务端函数都声明了权限中间件（第 5.1 节） |
 | `tests/admin/matrix.test.ts`、`tests/admin/audit.test.ts` | 后台服务端函数在未登录与三种角色下的权限矩阵；每个写操作都写审计日志 |
 | `tests/integration/presign-put.test.ts` | 预签名 PUT 把大小和类型签进签名头，在 RustFS 上拒绝其他类型与无长度的流式请求体 |
+| `tests/integration/signed-in-hint.test.ts` | 登录提示 Cookie 跟随会话 Cookie 设置与清除（登录、注册、验证邮件、模拟登录、退出、会话失效、补设）；不带会话 Cookie 的请求不会收到任何 `Set-Cookie`（第 2.1 节） |
+| `tests/pages/cached-viewer.ts`（手动） | 本地生产构建上，把匿名请求得到的 HTML 回放给已登录的 Chromium，模拟边缘缓存命中：页头与评论框在 DOMContentLoaded 后 1 秒内显示登录状态，过程中不出现「登录」；匿名访客不请求 `getPublicConfig`；过期的提示被删除 |
 | `scripts/check-client-bundle.ts` | 构建的最后一步：浏览器包里没有服务端代码（第 8.4 节） |
 | `bun run typecheck` | 生成路由树后 `tsc --noEmit` |
 | CI（`.github/workflows/ci.yml`） | 每次推送和 pull request 运行类型检查、全部测试、构建与 gitleaks 全历史扫描（第 12.3 节） |
@@ -878,6 +890,7 @@ v2 → v3（按实现，2026-10-20）：
 - 人机验证改为后台无感求解（D27）；重发验证邮件不再需要人机验证，改为按 IP 限流；CSP 加入 `'unsafe-eval'`。
 - v1 来源地址不再出现在公开页面和 `CREDITS.txt` 里。
 - 发布流程从「`deploy/push-src.sh` 用 rsync 上传源码、服务器上 `rollout.sh --build`」改为「CI 推送 GHCR 镜像、`deploy/release.sh` 让服务器检出提交并拉取镜像」，`push-src.sh` 已删除，镜像名从 `chaochi/app` 改为 `ghcr.io/yuri-nagasaki/wuwa-emotes`（D23）。
+- 生产上发现登录用户会命中边缘缓存里的匿名 HTML（Cloudflare 的缓存键忽略 Cookie），页头一直显示「登录」。加入登录提示 Cookie `tp_signed_in` 与水合后的身份复查（第 2.1 节）。
 
 ## 附录 C：v2 文档中的测量与评估（本版未重新测量）
 

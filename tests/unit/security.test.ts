@@ -226,6 +226,13 @@ describe('HTML cache rule (§2.1)', () => {
     expect(decideCacheControl(input({ cookieHeader: 'theme=dark' }))).toBe(PUBLIC_HTML_CACHE)
   })
 
+  test('the signed-in hint alone stays out of the cache decision (src/shared/signed-in-hint.ts)', () => {
+    expect(hasSessionCookie('tp_signed_in=1')).toBe(false)
+    expect(decideCacheControl(input({ cookieHeader: 'tp_signed_in=1' }))).toBe(PUBLIC_HTML_CACHE)
+    // a catalog server function that marked itself shareable stays shareable
+    expect(decideCacheControl(input({ handlerType: 'serverFn', pathname: '/_serverFn/x', contentType: 'application/json', cacheControl: PUBLIC_FN_CACHE, cookieHeader: 'tp_signed_in=1' }))).toBeNull()
+  })
+
   test('Set-Cookie never leaves on a shareable response', () => {
     expect(decideCacheControl(input({ hasSetCookie: true }))).toBe(PRIVATE_NO_STORE)
     expect(decideCacheControl(input({ hasSetCookie: true, cacheControl: 'public, max-age=60' }))).toBe(PRIVATE_NO_STORE)
