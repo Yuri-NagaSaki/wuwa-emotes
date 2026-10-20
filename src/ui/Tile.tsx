@@ -1,4 +1,4 @@
-import type { AnimationEvent, CSSProperties, PointerEvent, ReactNode } from 'react'
+import { memo, useState, type AnimationEvent, type CSSProperties, type PointerEvent, type ReactNode } from 'react'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
 import { useAnimatedPreview } from './usePreview'
@@ -31,10 +31,16 @@ export interface TileProps {
 /**
  * Emoji tile. Shows the p240 poster; swaps to the a160 preview on hover/focus or when centered in the
  * viewport (≤ 4 at once page-wide; off for reduced motion, Save-Data, or the 自动播放 switch).
+ *
+ * The hover actions and the format badge are only rendered once the tile is first pointed at or
+ * focused: they are invisible until then (and never shown on phones), but were most of a tile's
+ * elements. They stay mounted afterwards so the CSS fade keeps working; @starting-style in
+ * components.css gives the first appearance the same fade.
  */
-export function Tile(props: TileProps) {
+export const Tile = memo(function Tile(props: TileProps) {
   const { poster, preview, alt, format, selected, selecting, favorite, previewOnly, big, enterIndex, className } = props
   const pv = useAnimatedPreview<HTMLElement>(poster, preview)
+  const [armed, setArmed] = useState(false)
 
   function squish(e: PointerEvent<HTMLElement>) {
     if ((e.target as Element).closest('.tile-acts')) return
@@ -66,17 +72,25 @@ export function Tile(props: TileProps) {
       onPointerDown={squish}
       onAnimationEnd={unsquish}
       {...pv.handlers}
+      onPointerEnter={(e: PointerEvent<HTMLElement>) => {
+        if (!armed) setArmed(true)
+        pv.handlers.onPointerEnter(e)
+      }}
+      onFocus={() => {
+        if (!armed) setArmed(true)
+        pv.handlers.onFocus()
+      }}
     >
       <button type="button" className="tile-hit" onClick={props.onOpen} aria-label={`查看 ${alt}`} aria-pressed={selecting ? Boolean(selected) : undefined}>
         <img src={pv.src} width={240} height={240} loading="lazy" decoding="async" alt={alt} draggable={false} />
       </button>
-      {format ? <span className="tile-fmt">{format.toUpperCase()}</span> : null}
+      {armed && format ? <span className="tile-fmt">{format.toUpperCase()}</span> : null}
       {selecting ? (
         <span className="tile-check" aria-hidden="true">
           <Icon name="check" />
         </span>
       ) : null}
-      {!selecting && shown.length ? (
+      {armed && !selecting && shown.length ? (
         <div className="tile-acts">
           {shown.map(([icon, label, fn, extra]) => (
             <button key={icon} type="button" className={cx('tip', extra)} data-tip={label} aria-label={label} onClick={fn}>
@@ -87,7 +101,7 @@ export function Tile(props: TileProps) {
       ) : null}
     </figure>
   )
-}
+})
 
 /** Auto-fill grid of square tiles (`--tile` is the minimum column width). */
 export function TileGrid({ size = 132, children, selecting, className }: { size?: 96 | 110 | 120 | 132 | 150; children: ReactNode; selecting?: boolean; className?: string }) {

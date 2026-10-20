@@ -2,6 +2,7 @@ import { createFileRoute, notFound, useNavigate } from '@tanstack/react-router'
 import { useCallback, useEffect } from 'react'
 import { emojiPageFn } from '#/server/catalog/fns'
 import { EMOJI_ID_RE } from '#/shared/ids'
+import { EmojiDialog } from '#/ui/pages/EmojiDialog'
 import { cachedPackOf, rememberPack } from '#/ui/pages/pack-cache'
 import { PackPage } from '#/ui/pages/PackPage'
 import { pageHead } from '#/ui/pages/seo'
@@ -53,5 +54,6 @@ function EmojiRoute() {
   )
   const close = useCallback(() => void navigate({ to: '/packs/$slug', params: { slug: pack.slug }, resetScroll: false }), [navigate, pack.slug])
 
-  return <PackPage pack={pack} open={index} onOpen={(i) => go(i, false)} onIndex={(i) => go(i, true)} onClose={close} deepLink />
+  // the dialog is this page's content (and its LCP): rendered directly, not loaded on demand
+  return <PackPage pack={pack} open={index} onOpen={(i) => go(i, false)} onIndex={(i) => go(i, true)} onClose={close} deepLink dialog={EmojiDialog} />
 }

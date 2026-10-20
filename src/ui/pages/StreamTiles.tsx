@@ -1,17 +1,27 @@
-import { lazy, Suspense, useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, type ReactNode } from 'react'
 import type { EmojiTile } from '#/server/catalog/types'
-import { Tile, TileGrid } from '../Tile'
+import { TileGrid } from '../Tile'
 import { copyImage } from './clipboard'
-import { fromTile } from './model'
+import { EmojiDialogHost, prefetchEmojiDialog } from './dialog-loader'
+import { type DialogEmoji, fromTile } from './model'
 import { useAddToBatch } from './useBatch'
 import { useDownload } from './useDownload'
 import { useEmojiParam } from './useEmojiParam'
 import { favoriteKey, toggleFavorite, useFavoriteKeys, useFavoriteStatus } from './useFavorite'
+import { TileItem, useStableActions } from './tile-items'
 
 // A square grid of stickers from many packs, opening the single-emoji dialog (?e=, masked as /e/<id>).
-// The dialog code loads on first open (these pages never render it on the server).
+// The dialog code is prefetched on the first press (these pages never render it on the server).
 
-const EmojiDialog = lazy(() => import('./EmojiDialog').then((m) => ({ default: m.EmojiDialog })))
+
+// one dialog item per catalog tile object: loading another page keeps the earlier items (and their
+// memoized tiles) as they are
+const asDialog = new WeakMap<EmojiTile, DialogEmoji>()
+const dialogItem = (t: EmojiTile): DialogEmoji => {
+  let d = asDialog.get(t)
+  if (!d) asDialog.set(t, (d = fromTile(t)))
+  return d
+}
 
 export interface StreamTilesProps {
   tiles: readonly EmojiTile[]
@@ -23,7 +33,7 @@ export interface StreamTilesProps {
 }
 
 export function StreamTiles({ tiles, current, size = 120, layout }: StreamTilesProps) {
-  const items = useMemo(() => tiles.map(fromTile), [tiles])
+  const items = useMemo(() => tiles.map(dialogItem), [tiles])
   const ids = useMemo(() => tiles.map((t) => t.id), [tiles])
   const dlg = useEmojiParam(ids, current)
   const dl = useDownload()
@@ -31,34 +41,31 @@ export function StreamTiles({ tiles, current, size = 120, layout }: StreamTilesP
   const favKeys = useFavoriteKeys()
   useFavoriteStatus(useMemo(() => tiles.map((t) => ({ type: 'emoji' as const, id: t.id })), [tiles]))
 
-  const rendered = items.map((e, i) => {
-    const pv = !e.pack.downloadable
-    return (
-      <Tile
-        key={e.id}
-        poster={e.poster}
-        preview={e.preview}
-        alt={`${e.pack.title} 的表情`}
-        format={e.format}
-        previewOnly={pv}
-        onOpen={() => dlg.onOpen(i)}
-        onCopy={pv ? undefined : () => void copyImage(e)}
-        onDownload={pv ? undefined : () => void dl.run({ kind: 'emoji', id: e.id, mode: 'save' })}
-        onAdd={pv ? undefined : () => add(e.id)}
-        favorite={favKeys.has(favoriteKey({ type: 'emoji', id: e.id }))}
-        onFavorite={() => void toggleFavorite({ type: 'emoji', id: e.id })}
-      />
-    )
+  useEffect(() => prefetchEmojiDialog(), [])
+  // stable handlers + memoized items: opening the dialog or a heart re-renders only what changed
+  const actions = useStableActions({
+    open: (i: number) => dlg.onOpen(i),
+    copy: (e: (typeof items)[number]) => void copyImage(e),
+    download: (id: string) => void dl.run({ kind: 'emoji', id, mode: 'save' }),
+    add: (id: string) => add(id),
+    favorite: (id: string) => void toggleFavorite({ type: 'emoji', id }),
   })
+  const rendered = items.map((e, i) => (
+    <TileItem
+      key={e.id}
+      e={e}
+      index={i}
+      alt={`${e.pack.title} 的表情`}
+      previewOnly={!e.pack.downloadable}
+      favorite={favKeys.has(favoriteKey({ type: 'emoji', id: e.id }))}
+      actions={actions}
+    />
+  ))
 
   return (
     <>
       {layout ? layout(rendered) : <TileGrid size={size}>{rendered}</TileGrid>}
-      {dlg.open != null && items[dlg.open] ? (
-        <Suspense fallback={null}>
-          <EmojiDialog items={items} index={dlg.open} onIndex={dlg.onIndex} onClose={dlg.onClose} linkPack />
-        </Suspense>
-      ) : null}
+      {dlg.open != null && items[dlg.open] ? <EmojiDialogHost items={items} index={dlg.open} onIndex={dlg.onIndex} onClose={dlg.onClose} linkPack /> : null}
     </>
   )
 }
