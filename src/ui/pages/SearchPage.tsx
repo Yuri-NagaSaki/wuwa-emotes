@@ -9,6 +9,7 @@ import { AppLink } from '../link'
 import { SectionHead } from '../Section'
 import { Tabs } from '../Tabs'
 import { characterCountText } from '#/shared/characters'
+import { CharacterCss, RingAvatar } from './character-art'
 import { artistHref, characterHref, tagHref, themeColor } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile, CharacterTile } from './people'
@@ -132,7 +133,10 @@ function BestHit({ best }: { best: NonNullable<SearchResult['best']> }) {
     const ch = best.character
     return (
       <div className="top-hit" style={{ '--cc': themeColor(ch.color) } as CSSProperties}>
-        <span className="pool">{ch.avatar ? <img src={ch.avatar.poster} width={96} height={96} alt="" decoding="async" /> : <span className="initial">{Array.from(ch.name)[0]}</span>}</span>
+        <CharacterCss />
+        <span className="pool">
+          <RingAvatar c={ch} priority portraitFirst />
+        </span>
         <div>
           <div className="eyebrow">最佳匹配 · 角色</div>
           <h3>{ch.name}</h3>

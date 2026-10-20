@@ -17,6 +17,7 @@ const outDir = process.argv[3] ?? '.work/shots-ch'
 const popular = process.argv[4] ?? 'aimisi'
 const shared = process.argv[5] ?? 'luokeke'
 const groupOnly = process.argv[6] ?? 'danjin'
+const groupOnlyName = process.argv[7] ?? '丹瑾'
 mkdirSync(outDir, { recursive: true })
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -51,7 +52,9 @@ async function settle(page: Page) {
 async function clipping(page: Page) {
   return page.evaluate(() => {
     const out: { selector: string; ok: boolean; why: string }[] = []
-    const frames = document.querySelectorAll<HTMLElement>('.acard-art, .acard-pool, .acard-badge, .char-portrait, .char-portrait .badge, .char-hero .pool, .cchip .pool')
+    const frames = document.querySelectorAll<HTMLElement>(
+      '.acard-art, .acard-pool, .acard-badge, .char-portrait, .char-portrait .badge, .char-hero .pool, .cchip .pool, .ccard .pool, .top-hit .pool, .ring-crop',
+    )
     for (const f of frames) {
       const cs = getComputedStyle(f)
       const rounded = parseFloat(cs.borderTopLeftRadius) > 0 || f.classList.contains('acard-art')
@@ -113,6 +116,23 @@ try {
         tabs: await page.$$eval('.tabs-row [role=tab]', (s) => s.map((x) => `${x.textContent}${x.getAttribute('aria-selected') === 'true' ? ' (open)' : ''}`)),
         packCards: await page.$$eval('.pcard', (s) => s.length),
         portrait: await page.$eval('.char-portrait img.portrait', (i) => (i as HTMLImageElement).currentSrc).catch(() => null),
+        clipping: (await clipping(page)).filter((x) => !x.ok),
+      }
+    }
+
+    // search: character tiles and the best match (portrait face, else sticker, else initial)
+    for (const [name, q] of [
+      ['search-group', groupOnlyName],
+      ['search-a', '阿'],
+    ] as const) {
+      await page.goto(`${base}/search?q=${encodeURIComponent(q)}`, { waitUntil: 'networkidle0' })
+      await settle(page)
+      await page.screenshot({ path: join(outDir, `${name}-${size.name}.png`), fullPage: true })
+      checks[`${name}-${size.name}`] = {
+        tiles: await page.$$eval('.ccard', (t) =>
+          t.map((x) => `${x.querySelector('b')?.textContent}: ${x.querySelector('.ring-portrait') ? 'portrait' : x.querySelector('.ring-img') ? 'sticker' : x.querySelector('.ring-initial') ? 'initial' : 'EMPTY'} · ${x.querySelector('b + span')?.textContent}`),
+        ),
+        best: await page.$eval('.top-hit', (x) => `${x.querySelector('h3')?.textContent}: ${x.querySelector('.ring-portrait') ? 'portrait' : x.querySelector('.ring-img') ? 'sticker' : x.querySelector('.ring-initial') ? 'initial' : 'EMPTY'}`).catch(() => null),
         clipping: (await clipping(page)).filter((x) => !x.ok),
       }
     }

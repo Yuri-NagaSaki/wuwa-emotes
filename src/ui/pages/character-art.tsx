@@ -14,8 +14,30 @@ export function initialOf(name: string): string {
   return Array.from(name.trim())[0] ?? '?'
 }
 
-/** Inside a round frame: the avatar sticker as a circle, else the initial. Never other art. */
-export function RingAvatar({ c, eager, priority }: { c: Pick<CharacterCard, 'name' | 'avatar'>; eager?: boolean; priority?: boolean }) {
+/**
+ * Inside a round frame: the avatar sticker as a circle, else the initial; never other art. With
+ * `portraitFirst`, the portrait's face (its top, enlarged in a clipped circle) comes before the sticker
+ * (search results; the home strip keeps stickers).
+ */
+export function RingAvatar({
+  c,
+  eager,
+  priority,
+  portraitFirst,
+}: {
+  c: Pick<CharacterCard, 'name' | 'avatar'> & Partial<Pick<CharacterCard, 'portrait'>>
+  eager?: boolean
+  priority?: boolean
+  portraitFirst?: boolean
+}) {
+  const loading = eager || priority ? 'eager' : 'lazy'
+  if (portraitFirst && c.portrait) {
+    return (
+      <span className="ring-crop">
+        <img className="ring-portrait" src={c.portrait.src} width={c.portrait.width} height={c.portrait.height} alt="" loading={loading} decoding="async" />
+      </span>
+    )
+  }
   if (!c.avatar) {
     return (
       <span className="ring-initial" aria-hidden="true">
@@ -30,7 +52,7 @@ export function RingAvatar({ c, eager, priority }: { c: Pick<CharacterCard, 'nam
       width={160}
       height={160}
       alt=""
-      loading={eager || priority ? 'eager' : 'lazy'}
+      loading={loading}
       fetchPriority={priority ? 'high' : undefined}
       decoding="async"
     />

@@ -5,8 +5,19 @@
 
 /* ---- round avatars: the image is the circle ---- */
 .ring-img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
-.cchip .pool .ring-img, .char-hero .pool .ring-img { width: 100%; height: 100%; }
+/* beat the older 86–88% contain rules of the shared pools (components.css, pages.css) */
+.cchip .pool img.ring-img, .char-hero .pool img.ring-img, .cgrid .ccard .pool img.ring-img, .top-hit .pool img.ring-img {
+  width: 100%; height: 100%; object-fit: cover; border-radius: 50%;
+}
+/* a portrait's face in a circle: its top, enlarged, clipped by its own round box */
+.ring-crop { display: block; width: 100%; height: 100%; border-radius: 50%; overflow: hidden; }
+.ring-crop img.ring-portrait {
+  display: block; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0;
+  transform: scale(1.9); transform-origin: 50% 14%;
+}
 .ring-initial { font-weight: 900; color: var(--tp-ink); line-height: 1; user-select: none; }
+.ccard .pool .ring-initial { font-size: 40px; }
+.top-hit .pool .ring-initial { font-size: 36px; }
 
 /* ---- 角色图鉴: tall cards for 3:4 portraits ---- */
 .atlas { display: grid; grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); gap: 18px 16px; }
