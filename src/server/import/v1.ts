@@ -499,8 +499,9 @@ export function planImport(snap: V1Snapshot, existing: ExistingState = EMPTY_STA
       if (e.bytes == null) warnings.push(`emoji ${id}: no byte size in v1 metadata; stored as 0`)
       const characterKeys: string[] = []
       for (const s of e.characters ?? []) {
-        const k = `slug:${s.trim()}`
-        if (charByKey.has(k)) characterKeys.push(k)
+        // some v1 emojis reference a character by its display name (e.g. 咕咕河豚) instead of its slug
+        const k = charByKey.has(`slug:${s.trim()}`) ? `slug:${s.trim()}` : charKeyByName.get(s.trim())
+        if (k && charByKey.has(k)) characterKeys.push(k)
         else warnings.push(`emoji ${id}: unknown character slug "${s}"; link skipped`)
       }
       emojis.push({

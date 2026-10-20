@@ -28,7 +28,7 @@ web-a、web-b、worker、migrate ──▶ db（PostgreSQL 18）      web、work
 
 ```text
 /opt/chaochi/
-├── src/          仓库检出（compose.yaml、deploy/）；docker compose 命令在这里执行
+├── src/          源码（compose.yaml、deploy/），由开发机的 deploy/push-src.sh 原地更新；docker compose 命令在这里执行
 ├── app-env       应用配置与密钥，root 所有，权限 600
 ├── certs/        Cloudflare Origin CA 证书：origin.pem、origin-key.pem，权限 600
 ├── deploy.conf   可选：compose 层面的覆盖项，不含密钥
@@ -68,10 +68,10 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 
 前置条件：已完成「服务器准备」，`app-env` 已填写。证书文件可以稍后再放。
 
-1. 检出代码：`git clone <仓库地址> /opt/chaochi/src`，然后 `cd /opt/chaochi/src`。
+1. 上传代码：服务器先安装 rsync（`apt-get install -y rsync`），再在开发机的仓库里执行 `deploy/push-src.sh`。之后在服务器上 `cd /opt/chaochi/src`。
 2. 安装防火墙，必须在首次启动容器之前执行：`deploy/firewall.sh install`。脚本安装开机加载的服务和每周刷新 Cloudflare 网段的定时器，并关闭 systemd-resolved 的 LLMNR（5355 端口）。如果 SSH 不在 22 端口，执行 `CHAOCHI_SSH_PORT=<端口> deploy/firewall.sh install`；否则脚本会拒绝执行，避免锁死 SSH。安装时的 SSH 端口和 HTTPS 端口保存在 `/etc/default/chaochi-firewall`，开机加载和每周刷新都读取这个文件。
 3. 检查防火墙：`deploy/firewall.sh status`。从另一台机器用 `curl -k --resolve sparxie.moe:443:<服务器IP> https://sparxie.moe/` 访问应当超时。
-4. 构建并启动：`deploy/rollout.sh --build <标签>`，标签建议用 `git rev-parse --short HEAD`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
+4. 构建并启动：`deploy/rollout.sh --build "$(cat REVISION)"`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
 5. 打开 `https://sparxie.moe/` 注册账号并完成邮箱验证。
 6. 把这个账号设为站长：`docker compose exec web-a bun src/cli.ts promote-admin <邮箱>`。
 7. 导入 v1 数据（首次上线时执行）。命令在一次性的 worker 容器里运行，内存与 CPU 限制与 worker 相同：
@@ -83,9 +83,11 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 ## 发布
 
 ```bash
-cd /opt/chaochi/src && git pull
-deploy/rollout.sh --build "$(git rev-parse --short HEAD)"
+deploy/push-src.sh                                                   # 开发机，上传当前提交
+cd /opt/chaochi/src && deploy/rollout.sh --build "$(cat REVISION)"   # 服务器
 ```
+
+`/opt/chaochi/src` 只能原地更新，`push-src.sh` 用 `rsync --delete` 同步。不要用 `mv` 或 `rm -rf` 整体替换这个目录：proxy 通过绑定挂载读取 `src/deploy`，目录被替换后它仍然读取已删除的旧目录，平滑重载会失败，只能重建 proxy（秒级中断）。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况时停止。
 
 `rollout.sh` 按以下顺序执行，任何一步失败都会停止：
 
@@ -122,6 +124,8 @@ deploy/rollout.sh <上一个标签>
 回滚同样是逐个替换，不中断访问。上一个标签打印在每次发布的结尾，也记录在 `/opt/chaochi/state/releases.log`。回滚不撤销迁移；遵守上面的兼容规则时，上一个版本可以在新结构上运行。
 
 发布中途失败时，脚本把 `chaochi/app:latest` 指回原镜像，打印各副本状态和回滚命令。Caddy 只把请求路由给 `/api/health` 返回 2xx 的副本，所以仍然健康的副本会继续服务。
+
+web-a、web-b 和 worker 都已切换、只有最后的 Caddy 重载失败时，发布已经生效：`chaochi/app:latest` 留在新镜像，发布记录照常写入，脚本以退出码 2 结束并打印校验和重载命令。Caddy 继续使用原来的配置服务。
 
 ## 证书与 TLS 模式
 

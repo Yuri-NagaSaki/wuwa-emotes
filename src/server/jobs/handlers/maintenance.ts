@@ -23,4 +23,5 @@ export async function rollupStats() {
 export async function dailyCleanup() {
   await pruneWindows(3600)
   log().info('cleanup: rate windows pruned')
+  await (await import('../../submissions/cleanup')).cleanupSubmissions()
 }
