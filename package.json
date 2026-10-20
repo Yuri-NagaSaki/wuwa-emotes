@@ -17,11 +17,12 @@
     "cli": "bun src/cli.ts",
     "routes": "tsr generate",
     "typecheck": "tsr generate && tsc --noEmit",
-    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:media",
+    "test": "bun test ./tests/unit && bun test ./tests/ui && bun test ./tests/integration && bun run test:catalog && bun run test:media",
     "test:unit": "bun test ./tests/unit",
     "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate",
-    "test:media": "DATABASE_URL=postgres://chaochi:chaochi@127.0.0.1:5432/chaochi_lane_d_test S3_BUCKET=chaochi-lane-d LOG_LEVEL=error bun test ./tests/media ./tests/import"
+    "test:media": "DATABASE_URL=postgres://chaochi:chaochi@127.0.0.1:5432/chaochi_lane_d_test S3_BUCKET=chaochi-lane-d LOG_LEVEL=error bun test ./tests/media ./tests/import",
+    "test:catalog": "CHAOCHI_TEST_DB=chaochi_test_catalog CHAOCHI_TEST_BUCKET=chaochi-test-catalog bun test ./tests/catalog"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1153.0",
