@@ -25,8 +25,8 @@ export const ME_TABS: readonly MeTab[] = [
     order: 20,
     count: (s) => s.submissions.approved + s.submissions.pending + s.submissions.returned + s.submissions.draft,
   },
-  // 我的评论 (src/routes/_site/me/comments.tsx); no count: MeSummary has none and the list loads its own
-  { id: 'comments', label: '我的评论', to: '/me/comments', order: 40 },
+  // 我的评论 (src/routes/_site/me/comments.tsx)
+  { id: 'comments', label: '我的评论', to: '/me/comments', order: 40, count: (s) => s.comments },
   { id: 'notifications', label: '通知', to: '/me/notifications', order: 50, count: (s) => s.unread || null, hot: true },
   { id: 'settings', label: '设置', to: '/me/settings', order: 60 },
 ]

@@ -184,3 +184,15 @@ export async function impersonateUser(actor: Actor, headers: Headers, input: { u
   await audit(actor, 'user.impersonate', { type: 'user', id: u.id }, { name: u.name, role: u.role })
   return { ok: true, role: roleOf(u.role), name: u.name, roleName: ROLES[roleOf(u.role)].name }
 }
+
+/**
+ * 结束模拟, called by the impersonated session itself: Better Auth deletes it and puts the 站长's own
+ * session cookie back (kept in its admin_session cookie). Audited as the 站长.
+ */
+export async function stopImpersonating(viewer: Actor, headers: Headers) {
+  if (!viewer.impersonatedBy) throw badRequest('当前没有在模拟登录')
+  const res = await call(() => auth().api.stopImpersonating({ headers }))
+  const admin = res.user as { id: string; role?: string | null }
+  await audit({ id: admin.id, role: roleOf(admin.role), impersonatedBy: null }, 'user.impersonate_stop', { type: 'user', id: viewer.id }, { name: viewer.name })
+  return { ok: true }
+}

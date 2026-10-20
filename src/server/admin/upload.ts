@@ -32,7 +32,7 @@ export async function signUploads(
     const id = crypto.randomUUID()
     const tmpKey = uploadTmpKey(id, f.name)
     await db().insert(uploadItems).values({ id, packId: pack.id, uploaderId: actor.id, tmpKey, filename: f.name.slice(0, 200), bytes: f.size, mime: f.type, status: 'signed' })
-    out.push({ id, filename: f.name, url: await presignPut(tmpKey, f.type), contentType: f.type })
+    out.push({ id, filename: f.name, url: await presignPut(tmpKey, f.type, f.size), contentType: f.type })
   }
   await audit(actor, 'upload.sign', { type: 'pack', id: pack.id }, { files: input.files.length, uploads: out.map((u) => u.id) })
   return out

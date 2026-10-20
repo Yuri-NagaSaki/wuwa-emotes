@@ -5,42 +5,12 @@ import { listNotificationsFn, markNotificationsReadFn } from '#/server/account/f
 import { Button } from '../Button'
 import { cx } from '../cx'
 import { EmptyState } from '../EmptyState'
-import { Icon, type IconName } from '../Icon'
+import { Icon } from '../Icon'
 import { toast } from '../Toast'
+import { noticeCopy } from './notice-copy'
 import { ago, errorText } from './text'
 
-// 通知: newest first; opening one marks it read and goes to the pack or the submission.
-
-interface Rendered {
-  icon: IconName
-  title: string
-  detail?: string
-  to?: string
-  action?: string
-}
-
-function render(n: NotificationItem): Rendered {
-  const p = n.payload
-  switch (n.kind) {
-    case 'submission.approved':
-      return {
-        icon: 'check',
-        title: `你的投稿「${p.title ?? ''}」${p.auto ? '已发布' : '已通过审核并发布'}`,
-        to: p.slug ? `/packs/${p.slug}` : undefined,
-        action: '查看',
-      }
-    case 'submission.returned':
-      return {
-        icon: 'reply',
-        title: `你的投稿「${p.title ?? ''}」被退回修改`,
-        detail: p.reason ? `原因：${p.reason}` : undefined,
-        to: p.submissionId ? `/me/submissions/${p.submissionId}` : undefined,
-        action: '去修改',
-      }
-    default:
-      return { icon: 'bell', title: '新通知' }
-  }
-}
+// 通知: newest first; opening one marks it read and goes to the pack, the submission or the reply.
 
 export function NotificationsPanel({ items: first, unread, more: firstMore }: { items: NotificationItem[]; unread: number; more: boolean }) {
   const router = useRouter()
@@ -57,7 +27,8 @@ export function NotificationsPanel({ items: first, unread, more: firstMore }: { 
         setRead((s) => new Set(s).add(n.id))
         await router.invalidate()
       }
-      if (to) await navigate({ to })
+      // href, not to: comment links carry a #c-<id> hash
+      if (to) await navigate({ href: to })
     } catch (err) {
       toast({ message: errorText(err), icon: 'warn' })
     }
@@ -96,7 +67,7 @@ export function NotificationsPanel({ items: first, unread, more: firstMore }: { 
       {items.length ? (
         <div className="list">
           {items.map((n) => {
-            const r = render(n)
+            const r = noticeCopy(n)
             const isRead = n.read || read.has(n.id)
             return (
               <div key={n.id} className={cx('li', !isRead && 'is-unread')}>
@@ -128,7 +99,7 @@ export function NotificationsPanel({ items: first, unread, more: firstMore }: { 
         </div>
       ) : (
         <EmptyState icon="bell" title="还没有通知">
-          投稿审核的结果会在这里通知你。
+          投稿审核的结果和评论收到的回复会在这里通知你。
         </EmptyState>
       )}
       {more ? (

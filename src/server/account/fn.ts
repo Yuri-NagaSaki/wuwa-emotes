@@ -1,9 +1,10 @@
 import { createServerFn } from '@tanstack/react-start'
+import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { requireUser } from '../perm/fn'
 
-// 个人中心 server functions (summary, 通知, 注销账号). Name, password and sessions go through Better
-// Auth's endpoints from the browser instead.
+// 个人中心 server functions (summary, 通知, 结束模拟, 注销账号). Name, password and sessions go through
+// Better Auth's endpoints from the browser instead.
 
 export const getMeSummaryFn = createServerFn({ method: 'GET' })
   .middleware([requireUser])
@@ -27,6 +28,15 @@ export const markNotificationsReadFn = createServerFn({ method: 'POST' })
   .handler(async ({ data, context }) => {
     const { markRead } = await import('./notifications')
     return { unread: await markRead(context.viewer.id, data.ids) }
+  })
+
+/** 结束模拟: back to the 站长's own session (Set-Cookie on this response). */
+export const stopImpersonatingFn = createServerFn({ method: 'POST' })
+  .middleware([requireUser])
+  .validator(z.object({}).optional())
+  .handler(async ({ context }) => {
+    const { stopImpersonating } = await import('../admin/users')
+    return stopImpersonating(context.viewer, getRequest().headers)
   })
 
 export const deleteAccountFn = createServerFn({ method: 'POST' })

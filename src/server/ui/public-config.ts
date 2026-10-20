@@ -12,6 +12,8 @@ export interface ViewerSummary {
   id: string
   name: string
   role: Role
+  /** a 站长 is browsing as this user (模拟登录) */
+  impersonated: boolean
 }
 
 export interface PublicConfig {
@@ -41,7 +43,7 @@ export const getPublicConfig = createServerFn({ method: 'GET' })
       site,
       announcement,
       cap: { endpoint: env().CAP_API_ENDPOINT },
-      viewer: v ? { id: v.id, name: v.name, role: v.role } : null,
+      viewer: v ? { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) } : null,
     }
   })
 
@@ -50,5 +52,5 @@ export const getAdminViewer = createServerFn({ method: 'GET' })
   .middleware([requireUser])
   .handler(async ({ context }): Promise<ViewerSummary> => {
     const v = context.viewer
-    return { id: v.id, name: v.name, role: v.role }
+    return { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) }
   })

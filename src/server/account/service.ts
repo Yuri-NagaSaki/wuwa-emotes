@@ -1,4 +1,4 @@
-import { and, count, eq, ne, sql } from 'drizzle-orm'
+import { and, count, eq, isNull, ne, sql } from 'drizzle-orm'
 import type { Role } from '#/shared/roles'
 import { audit } from '../audit'
 import { auth } from '../auth/auth'
@@ -23,16 +23,22 @@ export interface MeSummary {
   joinedAt: string
   submissions: { approved: number; pending: number; returned: number; draft: number }
   favorites: number
+  /** own comments that are not deleted (我的评论) */
+  comments: number
   unread: number
 }
 
 export async function meSummary(viewer: Pick<Viewer, 'id'>): Promise<MeSummary> {
   const d = db()
-  const { users, submissions } = schema
+  const { users, submissions, comments } = schema
   const [u] = await d.select().from(users).where(eq(users.id, viewer.id))
   if (!u) throw new HttpError(401, '请先登录')
   const grouped = await d.select({ status: submissions.status, n: count() }).from(submissions).where(eq(submissions.submitterId, viewer.id)).groupBy(submissions.status)
   const by = Object.fromEntries(grouped.map((g) => [g.status, g.n])) as Record<string, number>
+  const [own] = await d
+    .select({ n: count() })
+    .from(comments)
+    .where(and(eq(comments.authorId, viewer.id), ne(comments.status, 'deleted'), isNull(comments.deletedAt)))
   return {
     id: u.id,
     name: u.name,
@@ -43,6 +49,7 @@ export async function meSummary(viewer: Pick<Viewer, 'id'>): Promise<MeSummary> 
     joinedAt: u.createdAt.toISOString(),
     submissions: { approved: by.approved ?? 0, pending: by.pending ?? 0, returned: by.returned ?? 0, draft: by.draft ?? 0 },
     favorites: await favoriteTotal(viewer.id),
+    comments: own?.n ?? 0,
     unread: await unreadCount(viewer.id),
   }
 }

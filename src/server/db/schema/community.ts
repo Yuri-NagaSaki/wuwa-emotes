@@ -75,6 +75,9 @@ export const comments = pgTable(
     index('comments_thread_idx').on(t.threadType, t.threadId, t.createdAt),
     index('comments_status_idx').on(t.status, t.createdAt),
     index('comments_root_idx').on(t.rootId),
+    index('comments_author_idx').on(t.authorId),
+    index('comments_parent_idx').on(t.parentId),
+    index('comments_ip_hash_idx').on(t.ipHash),
   ],
 )
 

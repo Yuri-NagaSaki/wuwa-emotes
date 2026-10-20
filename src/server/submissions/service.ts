@@ -44,7 +44,8 @@ type Runner = ReturnType<typeof db> | Tx
 type SubmissionRow = typeof schema.submissions.$inferSelect
 
 export interface SubmissionDeps {
-  presignPut(key: string, contentType: string, expiresIn: number): Promise<string>
+  /** URL that accepts exactly `bytes` bytes of `contentType` */
+  presignPut(key: string, contentType: string, bytes: number, expiresIn: number): Promise<string>
   enqueueIngest(uploadItemId: string): Promise<void>
   /** after approval, per newly published emoji */
   publishDerivatives(emojiId: string): Promise<unknown>
@@ -52,7 +53,7 @@ export interface SubmissionDeps {
 }
 
 export const defaultDeps: SubmissionDeps = {
-  presignPut: (key, contentType, expiresIn) => presignPut(key, contentType, expiresIn),
+  presignPut: (key, contentType, bytes, expiresIn) => presignPut(key, contentType, bytes, expiresIn),
   async enqueueIngest(uploadItemId) {
     await sendJob(Q.ingest, { uploadItemId })
   },
@@ -305,7 +306,7 @@ export interface SignedUpload {
   id: string
   name: string
   url: string
-  /** must be sent as Content-Type: it is part of the signature */
+  /** must be sent as Content-Type, with the declared size as the body: both are part of the signature */
   contentType: string
 }
 
@@ -352,7 +353,7 @@ export async function presignUploads(actor: Actor, id: string, files: UploadRequ
     return values
   })
   return Promise.all(
-    rows.map(async (r) => ({ id: r.id, name: r.filename, url: await deps.presignPut(r.tmpKey, r.mime, UPLOAD_LIMITS.expiresIn), contentType: r.mime })),
+    rows.map(async (r) => ({ id: r.id, name: r.filename, url: await deps.presignPut(r.tmpKey, r.mime, r.bytes, UPLOAD_LIMITS.expiresIn), contentType: r.mime })),
   )
 }
 

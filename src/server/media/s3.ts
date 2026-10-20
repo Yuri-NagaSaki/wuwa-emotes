@@ -99,8 +99,16 @@ export async function presignGet(key: string, opts: { expiresIn?: number; filena
   })
 }
 
-export async function presignPut(key: string, contentType: string, expiresIn = 900) {
-  return getSignedUrl(s3Presign(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType }), { expiresIn })
+/**
+ * Presigned PUT locked to one body: Content-Length and Content-Type are signed headers
+ * (X-Amz-SignedHeaders=content-length;content-type;host), so storage rejects any other size or type
+ * with 403. The presigner signs ContentLength by default but always drops content-type unless asked.
+ */
+export async function presignPut(key: string, contentType: string, bytes: number, expiresIn = 900) {
+  return getSignedUrl(s3Presign(), new PutObjectCommand({ Bucket: bucket(), Key: key, ContentType: contentType, ContentLength: bytes }), {
+    expiresIn,
+    signableHeaders: new Set(['content-type']),
+  })
 }
 
 /** First bytes of an object (HTTP Range, inclusive end). Used to read image headers without the whole file. */

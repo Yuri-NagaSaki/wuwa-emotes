@@ -39,6 +39,7 @@ export const ACTION_LABELS: Record<string, string> = {
   'user.unban': '解除封禁',
   'user.revoke_sessions': '强制下线',
   'user.impersonate': '模拟登录',
+  'user.impersonate_stop': '结束模拟',
   'job.retry': '重试任务',
   'job.cancel': '取消任务',
   'settings.site': '修改站点设置',

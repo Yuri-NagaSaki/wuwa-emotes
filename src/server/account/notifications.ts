@@ -17,9 +17,26 @@ export interface SubmissionNotice {
   auto?: boolean
 }
 
+/** Someone replied to your comment (src/server/comments/write.ts notifyReply). */
+export interface CommentReplyNotice {
+  commentId: number
+  parentId: number
+  rootId: number | null
+  threadType: string
+  threadId: string
+  /** the replier's display name */
+  by: string
+  excerpt: string
+  /** where the thread lives, e.g. 爱弥斯动态表情包 */
+  title: string | null
+  /** the reply on its page (/packs/<slug>#c-<id>), null when the page is gone */
+  href: string | null
+}
+
 export interface NoticePayloads {
   'submission.approved': SubmissionNotice
   'submission.returned': SubmissionNotice
+  'comment.reply': CommentReplyNotice
 }
 
 export type NoticeKind = keyof NoticePayloads
@@ -28,11 +45,13 @@ export async function notify<K extends NoticeKind>(userId: string, kind: K, payl
   await runner.insert(schema.notifications).values({ userId, kind, payload: payload as unknown as Record<string, unknown> })
 }
 
+/** Fields of the known kinds; unknown kinds render a generic line. */
+export type NoticeFields = Partial<Omit<SubmissionNotice, 'title'> & Omit<CommentReplyNotice, 'title'>> & { title?: string | null }
+
 export interface NotificationItem {
   id: number
   kind: string
-  /** fields of the known kinds; unknown kinds render a generic line */
-  payload: Partial<SubmissionNotice>
+  payload: NoticeFields
   read: boolean
   createdAt: string
 }
@@ -49,7 +68,7 @@ export async function listNotifications(userId: string, before?: number): Promis
     .orderBy(desc(n.id))
     .limit(PAGE + 1)
   return {
-    items: rows.slice(0, PAGE).map((r) => ({ id: r.id, kind: r.kind, payload: r.payload as Partial<SubmissionNotice>, read: r.readAt != null, createdAt: r.createdAt.toISOString() })),
+    items: rows.slice(0, PAGE).map((r) => ({ id: r.id, kind: r.kind, payload: r.payload as NoticeFields, read: r.readAt != null, createdAt: r.createdAt.toISOString() })),
     unread: await unreadCount(userId),
     more: rows.length > PAGE,
   }

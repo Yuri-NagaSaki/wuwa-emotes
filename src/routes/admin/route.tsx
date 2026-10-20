@@ -1,6 +1,7 @@
 import { createFileRoute, Outlet, useLocation, useNavigate, useRouter } from '@tanstack/react-router'
 import { getAdminViewer, type PublicConfig, type ViewerSummary } from '#/server/ui/public-config'
 import { AdminShell } from '#/ui/admin/AdminShell'
+import { adminSearchTarget, isStaff } from '#/ui/admin/nav'
 import { EmptyState } from '#/ui/EmptyState'
 import { useSiteConfig } from '#/ui/site-config'
 import adminCss from '#/ui/styles/admin.css?url'
@@ -58,8 +59,19 @@ function AdminLayout() {
     }
   }
 
+  function search(q: string) {
+    const t = adminSearchTarget(q, viewer?.role, pathname)
+    void navigate({ to: t.to, search: { q: t.q } })
+  }
+
   return (
-    <AdminShell siteName={site.name} viewer={viewer} pathname={pathname} onSignOut={viewer ? signOut : undefined}>
+    <AdminShell
+      siteName={site.name}
+      viewer={viewer}
+      pathname={pathname}
+      onSearch={isStaff(viewer?.role) ? search : undefined}
+      onSignOut={viewer ? signOut : undefined}
+    >
       <Outlet />
     </AdminShell>
   )

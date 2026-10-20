@@ -1,0 +1,26 @@
+/* 模拟登录 bar (ImpersonationBar.tsx). Linked only while the bar is on the page: it sits fixed at the
+   top, and the page plus its sticky headers (site .head, admin .adm-top / .adm-side) move below it. */
+
+:root:has(.imp-bar) { --imp-h: calc(40px + env(safe-area-inset-top, 0px)); }
+:root:has(.imp-bar) body { padding-top: var(--imp-h); }
+:root:has(.imp-bar) :is(.head, .adm-top, .adm-side) { top: var(--imp-h); }
+:root:has(.imp-bar) .adm { min-height: calc(100dvh - var(--imp-h)); }
+:root:has(.imp-bar) .adm-side { height: calc(100dvh - var(--imp-h)); }
+:root:has(.imp-bar) :is(.pk-side, .sub-aside) { top: calc(var(--imp-h) + var(--head-h) + 16px); }
+
+.imp-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 40; height: var(--imp-h);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: env(safe-area-inset-top, 0px) 16px 0;
+  background: var(--tp-sun); color: var(--tp-on-sun); font-size: 13.5px; font-weight: 700;
+  box-shadow: 0 1.5px 0 0 color-mix(in srgb, var(--tp-on-sun) 18%, transparent);
+}
+.imp-bar .ico { flex: none; }
+.imp-bar .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-bar b { font-weight: 900; }
+.imp-bar .btn { flex: none; --b-bd: color-mix(in srgb, var(--tp-on-sun) 30%, transparent); }
+
+@media (max-width: 760px) {
+  .imp-bar { justify-content: space-between; font-size: 12.5px; padding-left: 14px; padding-right: 10px; }
+  .imp-bar .ico { display: none; }
+}
