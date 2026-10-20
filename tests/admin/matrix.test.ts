@@ -4,9 +4,10 @@ import { join } from 'node:path'
 import { can, type Perm } from '#/shared/roles'
 
 // Permission matrix (docs/ARCHITECTURE.md §5.1) for every server function exported from
-// src/server/admin/fns/*.ts: anonymous → 401, 用户 → 403, 管理员 allowed only for the permissions
-// in ROLES.manager, 站长 always allowed. "Allowed" means the request got past requirePerm: the input
-// validator or the (unattached) handler may still answer, but never with 401/403.
+// src/server/admin/fns/*.ts and src/server/downloads/admin-fns.ts (下载与风控): anonymous → 401,
+// 用户 → 403, 管理员 allowed only for the permissions in ROLES.manager, 站长 always allowed.
+// "Allowed" means the request got past requirePerm: the input validator or the (unattached) handler
+// may still answer, but never with 401/403.
 
 const EXPECTED: Record<string, Perm> = {
   adminDashboardFn: 'dash',
@@ -51,9 +52,18 @@ const EXPECTED: Record<string, Perm> = {
   adminAuditFn: 'audit',
   adminSettingsFn: 'settings',
   adminSaveSiteFn: 'settings',
+  getRiskOverview: 'downloads',
+  getRiskSettings: 'downloads',
+  saveRiskSettings: 'downloads',
+  listSuspiciousSources: 'downloads',
+  setSourceMode: 'downloads',
 }
 
 const FN_DIR = join(import.meta.dir, '..', '..', 'src', 'server', 'admin', 'fns')
+const FN_FILES = [
+  ...[...new Bun.Glob('*.ts').scanSync({ cwd: FN_DIR })].map((f) => join(FN_DIR, f)),
+  join(import.meta.dir, '..', '..', 'src', 'server', 'downloads', 'admin-fns.ts'),
+]
 const fns = new Map<string, unknown>()
 
 let owner: RoleUser
@@ -62,8 +72,8 @@ let user: RoleUser
 
 beforeAll(async () => {
   await setupAdminTests()
-  for (const file of new Bun.Glob('*.ts').scanSync({ cwd: FN_DIR })) {
-    const mod = (await import(join(FN_DIR, file))) as Record<string, unknown>
+  for (const file of FN_FILES) {
+    const mod = (await import(file)) as Record<string, unknown>
     for (const [name, value] of Object.entries(mod)) if (isServerFn(value)) fns.set(name, value)
   }
   owner = await userWithRole('admin', 'matrix-owner')
@@ -77,9 +87,9 @@ describe('admin server functions', () => {
   })
 
   test('the matrix covers the three roles of §5.1', () => {
-    // managers: packs, upload, taxonomy, dash; never users, storage, system, audit, settings
+    // managers: packs, upload, taxonomy, dash; never users, downloads, storage, system, audit, settings
     for (const p of ['dash', 'packs', 'upload', 'taxonomy'] as Perm[]) expect(can('manager', p)).toBe(true)
-    for (const p of ['users', 'storage', 'system', 'audit', 'settings'] as Perm[]) expect(can('manager', p)).toBe(false)
+    for (const p of ['users', 'downloads', 'storage', 'system', 'audit', 'settings'] as Perm[]) expect(can('manager', p)).toBe(false)
   })
 
   for (const [name, perm] of Object.entries(EXPECTED)) {

@@ -162,6 +162,27 @@ h1.adm-dyn, h3.adm-dyn { font-weight: 800; }
 .adm-int .rule-row > div:last-child { text-align: right; }
 .adm-int .mono { font-size: 12px; }
 
+/* downloads */
+.adm-emg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.adm-emg .set-row b { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.adm-emg .set-row.is-on { background: var(--tp-warn-bg); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--tp-warn) 45%, transparent); }
+.adm-num { display: inline-flex; align-items: center; gap: 8px; }
+.adm-num .input { width: 124px; }
+.adm-num > span { display: grid; font-size: 12.5px; font-weight: 800; color: var(--tp-muted); white-space: nowrap; min-width: 3.5em; }
+.adm-num > span small { font: 800 11.5px var(--tp-font-num); color: var(--tp-faint); }
+.rule-row small.adm-num-err { display: block; color: var(--tp-err); margin-top: 2px; }
+.adm-dl-note { display: block; margin-top: 10px; }
+.adm-src-who { display: grid; gap: 2px; justify-items: start; min-width: 0; }
+.adm-src-who b { max-width: 24ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adm-src-who > small { color: var(--tp-faint); font-size: 11.5px; font-weight: 700; }
+.adm-src-ph { display: none; }
+.adm-src-ph small { color: var(--tp-muted); font: 800 12px var(--tp-font-num); }
+.adm-src-state { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 2px; }
+.adm-src-state small { color: var(--tp-muted); font-size: 11.5px; font-weight: 700; }
+.adm-src-flags { display: flex; gap: 4px; flex-wrap: wrap; }
+.adm-src-acts { flex-wrap: wrap; }
+.panel ul.adm-dl-legend { padding: 14px 16px; border-top: 2px solid var(--tp-line); font-size: 12.5px; gap: 6px; }
+
 @media (max-width: 1100px) {
   .adm-editor aside.adm-col { position: static; }
 }
@@ -173,4 +194,9 @@ h1.adm-dyn, h3.adm-dyn { font-weight: 800; }
   .tbl .cell b { max-width: 16ch; }
   .drawer-f .adm-row-acts { grid-template-columns: 1fr 1fr; }
   .bulk .adm-bulk-clear { margin-left: 0; }
+  .adm-emg-grid { grid-template-columns: minmax(0, 1fr); }
+  .adm-num .input { width: 100px; }
+  .adm-src-who b { max-width: 20ch; }
+  .adm-src-ph { display: grid; gap: 4px; justify-items: start; margin-top: 2px; }
+  .adm-src-acts { flex-direction: column; align-items: stretch; }
 }

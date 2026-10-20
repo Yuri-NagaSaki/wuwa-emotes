@@ -26,6 +26,7 @@ const PAGES: { name: string; path: string }[] = [
   { name: 'artists', path: '/admin/artists' },
   { name: 'tags', path: '/admin/taxonomy' },
   { name: 'users', path: '/admin/users' },
+  { name: 'downloads', path: '/admin/downloads' },
   { name: 'storage', path: '/admin/storage' },
   { name: 'jobs', path: '/admin/jobs' },
   { name: 'audit', path: '/admin/audit' },
