@@ -1,0 +1,25 @@
+# secrets — never commit
+.env
+.env.*
+!.env.example
+.secrets/
+*.pem
+
+# deps / build
+node_modules/
+.output/
+.vinxi/
+.tanstack/
+dist/
+.wrangler/
+
+# local data snapshots
+/data/
+*.log
+.DS_Store
+
+# design prototype: sample images live in R2 design/v1/tidepool-ui/img/; generated outputs
+/design/prototype/img/
+/design/prototype/src/font.css
+/design/prototype/tidepool-ui.html
+/design/prototype/_preview.html

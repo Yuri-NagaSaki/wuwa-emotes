@@ -1,0 +1,72 @@
+/* 潮池 Tidepool · design tokens v1 (2026-10-20)
+   Source of truth: design/v1/tidepool-ui (UI 设计稿). Built on animal-island-ui (MIT) tokens.
+   Light theme on :root; 夜潮 night tokens are a preview layer, not a shipped theme. */
+:root {
+  /* surfaces */
+  --tp-bg: #f8f8f0;
+  --tp-sand: #f7f3df;
+  --tp-card: #fffdf4;
+  --tp-input: #fffbe7;
+  --tp-sunk: #efe8d2;
+  /* ink (never pure black) */
+  --tp-ink: #794f27;
+  --tp-body: #725d42;
+  --tp-muted: #7b6c56;
+  --tp-faint: #9f927d;
+  --tp-disabled: #c4b89e;
+  --tp-line: #e8e0cc;
+  --tp-line-2: #d9cdb2;
+  /* tide */
+  --tp-teal: #19c8b9;
+  --tp-teal-hover: #3dd4c6;
+  --tp-teal-press: #11a89b;
+  --tp-teal-bg: #e3f7f2;
+  --tp-teal-ink: #0b7d73;
+  --tp-on-teal: #06403a;
+  --tp-deep: #134a55;
+  --tp-deep-2: #0e3a43;
+  --tp-foam: #eafaf6;
+  --tp-sun: #f7cd67;
+  --tp-on-sun: #5a4012;
+  --tp-coral: #f2857a;
+  --tp-heart: #e8615a;
+  --tp-shadow-3d: #bdaea0;
+  --tp-focus: #ffcc00;
+  /* status */
+  --tp-ok: #5aa61f;
+  --tp-ok-bg: #e7f4d8;
+  --tp-warn: #a8780a;
+  --tp-warn-bg: #fbf0cc;
+  --tp-err: #d24b4b;
+  --tp-err-bg: #fbe3e0;
+  /* island palette (character + tag colors) */
+  --c-pink: #f8a6b2; --c-purple: #b77dee; --c-blue: #889df0; --c-yellow: #f7cd67; --c-orange: #e59266; --c-mint: #82d5bb;
+  --c-green: #8ac68a; --c-red: #fc736d; --c-lime: #d1da49; --c-yg: #ecdf52; --c-brown: #9a835a; --c-peach: #e18c6f; --c-teal: #19c8b9;
+  /* type */
+  --tp-font-display: "TP Rounded", "Nunito", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --tp-font-body: "Nunito", "PingFang SC", "HarmonyOS Sans SC", "MiSans", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+  --tp-font-num: "Nunito", ui-rounded, system-ui, sans-serif;
+  --tp-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  /* shape + motion */
+  --r-sm: 12px; --r: 18px; --r-lg: 24px; --r-xl: 32px; --pill: 999px;
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 150ms; --t: 250ms; --t-slow: 350ms;
+  --sh-soft: 0 2px 4px 0 rgba(61, 52, 40, 0.06);
+  --sh-base: 0 3px 10px 0 rgba(61, 52, 40, 0.1);
+  --sh-lift: 0 10px 28px -6px rgba(61, 52, 40, 0.22);
+  /* frame safe areas (set by the board for phone frames) */
+  --safe-top: 0px; --safe-bottom: 0px;
+  /* layout */
+  --gutter: 32px; --maxw: 1240px; --head-h: 64px;
+}
+
+[data-theme="night"] {
+  --tp-bg: #0f2228; --tp-sand: #13292f; --tp-card: #173039; --tp-input: #1b3640; --tp-sunk: #0c1c21;
+  --tp-ink: #fbecd0; --tp-body: #eadcc0; --tp-muted: #c2b293; --tp-faint: #93876f; --tp-disabled: #5f5a4c;
+  --tp-line: #24414a; --tp-line-2: #2f525c;
+  --tp-teal: #3ee0cf; --tp-teal-hover: #69ebdd; --tp-teal-press: #23c3b2; --tp-teal-bg: #123c3d; --tp-teal-ink: #6ff0e1; --tp-on-teal: #052e2a;
+  --tp-deep: #071419; --tp-deep-2: #050f13; --tp-foam: #133a3c; --tp-shadow-3d: #07171c; --tp-heart: #ff8a80;
+  --tp-ok-bg: #1d3a22; --tp-warn-bg: #3a3215; --tp-err-bg: #3e1f1e; --tp-ok: #9bd96f; --tp-warn: #f0c560; --tp-err: #ff8f8a;
+  --sh-soft: 0 2px 4px 0 rgba(0, 0, 0, 0.25); --sh-base: 0 3px 10px 0 rgba(0, 0, 0, 0.3); --sh-lift: 0 12px 30px -8px rgba(0, 0, 0, 0.55);
+}
