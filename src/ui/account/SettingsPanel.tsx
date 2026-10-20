@@ -1,5 +1,5 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
 import type { MeSummary } from '#/server/account/service'
 import { deleteAccountFn } from '#/server/account/fn'
 import { Button } from '../Button'
@@ -7,15 +7,18 @@ import { cx } from '../cx'
 import { Check, Field, Input } from '../Field'
 import { Icon } from '../Icon'
 import { Modal, ModalClose } from '../Modal'
+import { Seg } from '../Seg'
 import { Sheet } from '../Sheet'
+import { readPref, setPref, subscribeTheme, type ThemePref } from '../shell/theme'
 import { toast } from '../Toast'
 import { PasswordMeter } from './AuthLayout'
 import { authClient, authErrorText, passwordStrength, STRENGTH_TEXT } from './auth-client'
 import { ago, errorText, fullDate } from './text'
 
-// 设置: display name, password, signed-in devices, sign out, 注销账号. Name, password and sessions use
-// Better Auth's endpoints; sessions store only hashes of IP and user agent, so devices are listed by
-// time, with the current one marked.
+// 设置: display name, 夜潮 theme, password, signed-in devices, sign out, 注销账号. Name, password and
+// sessions use Better Auth's endpoints; sessions store only hashes of IP and user agent, so devices are
+// listed by time, with the current one marked. The theme is this browser's choice (tp-theme, the same
+// preference the header's moon / sun button sets).
 
 interface SessionRow {
   id: string
@@ -46,6 +49,7 @@ export function SettingsPanel({ summary }: { summary: MeSummary }) {
           </small>
         </div>
       </div>
+      <ThemeRow />
       <PasswordRow />
       <SessionsRow onAllRevoked={() => signedOut('已退出所有设备')} />
       <div className="set-row">
@@ -95,6 +99,26 @@ function NameRow({ summary, onSaved }: { summary: MeSummary; onSaved: () => void
         保存
       </Button>
     </form>
+  )
+}
+
+const THEME_OPTIONS = [
+  { value: 'system', label: '跟随系统', icon: 'monitor' },
+  { value: 'light', label: '白昼', icon: 'sun' },
+  { value: 'night', label: '夜潮', icon: 'moon' },
+] as const
+
+function ThemeRow() {
+  // the server cannot know the choice: it renders 跟随系统 and the browser corrects it after hydration
+  const pref = useSyncExternalStore(subscribeTheme, readPref, (): ThemePref => 'system')
+  return (
+    <div className="set-row">
+      <div>
+        <b>夜潮主题</b>
+        <small>深色界面；跟随系统，或在这台设备上固定白昼或夜潮</small>
+      </div>
+      <Seg size="sm" label="夜潮主题" value={pref} onChange={setPref} options={THEME_OPTIONS} />
+    </div>
   )
 }
 
