@@ -178,6 +178,8 @@ describe('path classes', () => {
     ['/api/health', 'api'],
     ['/api/auth/sign-in/email', 'api'],
     ['/apiary', 'page'],
+    ['/API/health', 'api'],
+    ['/IMG/v1/x', 'self-cached'],
     ['/img/v1/p240/a/r-0a7bf47f0ec26d3843bf.r1.webp', 'self-cached'],
     ['/images', 'page'],
     ['/review-img/v1/p240/a/r-0a7bf47f0ec26d3843bf.webp', 'self-cached'],
@@ -235,7 +237,9 @@ describe('HTML cache rule (§2.1)', () => {
   })
 
   test('signed-in-only pages are always private', () => {
-    for (const p of ['/admin', '/admin/packs', '/me', '/me/favorites', '/submit']) expect(decideCacheControl(input({ pathname: p }))).toBe(PRIVATE_NO_STORE)
+    for (const p of ['/admin', '/admin/packs', '/me', '/me/favorites', '/submit', '/ME', '/Admin/packs', '/SUBMIT']) {
+      expect(decideCacheControl(input({ pathname: p }))).toBe(PRIVATE_NO_STORE)
+    }
     expect(decideCacheControl(input({ pathname: '/members' }))).toBe(PUBLIC_HTML_CACHE)
   })
 

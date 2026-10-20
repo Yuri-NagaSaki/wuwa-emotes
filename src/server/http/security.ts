@@ -102,8 +102,10 @@ export function hasSessionCookie(cookieHeader: string | null | undefined): boole
   return false
 }
 
+/** Case-insensitive, like the router's default matching: /ME must be as private as /me. */
 function underPrefix(pathname: string, prefix: string): boolean {
-  return pathname === prefix || pathname.startsWith(prefix + '/')
+  const p = pathname.toLowerCase()
+  return p === prefix || p.startsWith(prefix + '/')
 }
 
 /** Routes that set their own caching (/img is immutable, /review-img and /dl are private). */
