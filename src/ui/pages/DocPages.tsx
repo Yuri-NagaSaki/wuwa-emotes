@@ -56,7 +56,7 @@ export function AboutPage({ siteName, stats }: { siteName: string; stats: Catalo
         <ul>
           <li>社区画师与约稿人的作品，由投稿者提交，管理员审核后发布。</li>
           <li>官方公开发布的表情，标注「官转」，只提供预览，不提供原图下载。</li>
-          <li>每个表情包页面都写明画师、约稿人、许可与来源。</li>
+          <li>每个表情包页面都写明画师、约稿人与许可。</li>
         </ul>
       ),
     },
@@ -66,7 +66,7 @@ export function AboutPage({ siteName, stats }: { siteName: string; stats: Catalo
       body: (
         <>
           <p>
-            社区作品多数采用 CC BY-NC-SA 4.0（署名、非商业、相同方式共享），具体以每个包标注的许可为准。整包与打包下载的压缩包里附带 CREDITS.txt，写有包名、画师、约稿人、许可与来源。
+            社区作品多数采用 CC BY-NC-SA 4.0（署名、非商业、相同方式共享），具体以每个包标注的许可为准。整包与打包下载的压缩包里附带 CREDITS.txt，写有包名、画师、约稿人与许可。
           </p>
           <p>是否开放原图下载由每个包单独决定。作者未同意公开下载的包只提供预览。</p>
         </>

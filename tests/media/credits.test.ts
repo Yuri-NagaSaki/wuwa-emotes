@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { buildCreditsText, formatCreditsDate, licenseLabel, parseLicense } from '../../src/server/media/credits'
 
 describe('CREDITS.txt', () => {
-  test('one pack: title, artists, commissioner, license, source, site and date', () => {
+  test('one pack: title, artists, commissioner, license, site and date; never the v1 source', () => {
     const text = buildCreditsText({
       siteName: '潮池',
       siteUrl: 'https://chaochi.example/',
@@ -11,7 +11,8 @@ describe('CREDITS.txt', () => {
         {
           title: '  爱弥斯动态表情包（板牌） ',
           pageUrl: 'https://chaochi.example/packs/aimisi-01',
-          sourceUrl: 'https://emoji.wuwa.games/archives/aimisi-01',
+          // a caller passing extra fields (e.g. a whole pack row) must not leak the source address
+          ...({ sourceUrl: 'https://emoji.wuwa.games/archives/aimisi-01' } as object),
           artists: ['猫屋敷梨梨&春也Haruya', ' 雾雪 '],
           commissioner: '爱弥一生一世',
           license: 'cc-by-nc-sa-4.0',
@@ -24,7 +25,8 @@ describe('CREDITS.txt', () => {
     expect(text).toContain('画师：猫屋敷梨梨&春也Haruya、雾雪')
     expect(text).toContain('约稿：爱弥一生一世')
     expect(text).toContain('许可：CC BY-NC-SA 4.0')
-    expect(text).toContain('来源：https://emoji.wuwa.games/archives/aimisi-01')
+    expect(text).not.toContain('来源')
+    expect(text).not.toContain('wuwa.games')
     expect(text).toContain('本站页面：https://chaochi.example/packs/aimisi-01')
     expect(text).toContain('感谢群友约稿\n转载请注明出处')
     expect(text).toContain('打包自 潮池（https://chaochi.example） · 2026-10-20')

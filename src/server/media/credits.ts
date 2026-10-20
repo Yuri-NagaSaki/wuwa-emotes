@@ -34,10 +34,8 @@ export function parseLicense(text: string | null | undefined): string {
 
 export interface CreditsPack {
   title: string
-  /** this site's page for the pack */
+  /** this site's page for the pack (the v1 source address is never printed: packs.source_url stays internal) */
   pageUrl?: string | null
-  /** original publication (e.g. the v1 source page) */
-  sourceUrl?: string | null
   artists?: string[]
   commissioner?: string | null
   /** license code (packs.license) */
@@ -71,7 +69,6 @@ function packBlock(p: CreditsPack): string[] {
   lines.push(`画师：${artists.length ? artists.join('、') : '未注明'}`)
   if (clean(p.commissioner)) lines.push(`约稿：${clean(p.commissioner)}`)
   lines.push(`许可：${licenseLabel(p.license)}`)
-  if (clean(p.sourceUrl)) lines.push(`来源：${clean(p.sourceUrl)}`)
   if (clean(p.pageUrl)) lines.push(`本站页面：${clean(p.pageUrl)}`)
   if (p.files?.length) lines.push(`文件：${p.files.join('、')}`)
   const note = (p.note ?? '').trim()

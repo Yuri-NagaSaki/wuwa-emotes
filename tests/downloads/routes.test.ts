@@ -372,7 +372,6 @@ describe('POST /api/batch/sign', () => {
       artists: ['测试画师'],
       commissioner: '群友甲',
       license: 'cc-by-nc-sa-4.0',
-      sourceUrl: 'https://emoji.wuwa.games/archives/dl-pub',
       pageUrl: `${SITE_URL}/packs/${pub.slug}`,
       files: j.items.map((i) => i.filename),
     })

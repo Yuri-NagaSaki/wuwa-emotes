@@ -149,7 +149,6 @@ export interface PackDetail {
   /** packs.commissioner: free-text 约稿 credit, shown as is; may duplicate a commissioner entry. */
   commissionerText: string | null
   creditsText: string | null
-  sourceUrl: string | null
   tags: TagsByDimension
   /** Publication order: prev = the pack published just before this one, next = just after. */
   prev: PackNeighbor | null
@@ -170,6 +169,16 @@ export interface EmojiPermalink {
 export interface EmojiTile extends EmojiImage {
   format: string
   bytes: number
+  pack: { slug: string; title: string; downloadable: boolean }
+}
+
+/** A sticker in the 打包清单 (tray and /batch): what to show and how to group it. */
+export interface BatchItem extends EmojiImage {
+  format: string
+  /** original size in bytes */
+  bytes: number
+  /** 0-based position in its pack */
+  index: number
   pack: { slug: string; title: string; downloadable: boolean }
 }
 

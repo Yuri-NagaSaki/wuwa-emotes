@@ -223,16 +223,6 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink }: Pac
                 <dd>{pack.creditsText}</dd>
               </>
             ) : null}
-            {pack.sourceUrl ? (
-              <>
-                <dt>来源</dt>
-                <dd>
-                  <a href={pack.sourceUrl} rel="nofollow noopener noreferrer" target="_blank">
-                    {pack.sourceUrl.replace(/^https?:\/\//, '')}
-                  </a>
-                </dd>
-              </>
-            ) : null}
             <dt>下载</dt>
             <dd>{pv ? <><span className="flag static">仅预览</span> 不提供原图与打包</> : '无需登录，单张或整包都可直接下载'}</dd>
             {!pv ? (
