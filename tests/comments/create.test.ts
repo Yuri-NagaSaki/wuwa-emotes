@@ -210,6 +210,8 @@ describe('notifications on reply', () => {
       threadId: thread.threadId,
       by: 'erin',
       excerpt: '回复 dave [贴纸]',
+      href: expect.stringMatching(new RegExp(`^/packs/cm-thread-.+#c-${reply.comment.id}$`)),
+      title: expect.stringContaining('测试包'),
     })
     // the payload is plain text, never HTML
     expect(JSON.stringify(after[0]!.payload)).not.toContain('<')

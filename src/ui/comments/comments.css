@@ -70,8 +70,8 @@
 .cm-li:last-child { border-bottom: 0; }
 .cm-li .where { font-size: 13px; color: var(--tp-muted); }
 .cm-li .where a { color: var(--tp-ink); font-weight: 800; }
-.cm-li .cmt-b { margin-top: 4px; font-size: 14px; max-height: 5.4em; overflow: hidden; }
-.cm-li .cmt-b img.cmt-stk:not(.is-inline) { width: 40px; height: 40px; padding: 2px; border-radius: 10px; }
+.cm-li .cmt-b { margin-top: 4px; font-size: 14px; line-height: 1.6; max-height: 8.6em; overflow: hidden; }
+.cm-li .cmt-b img.cmt-stk:not(.is-inline) { width: 36px; height: 36px; padding: 2px; border-radius: 10px; margin: 2px 4px 0 0; }
 .cm-li .r { display: flex; gap: 8px; align-items: center; }
 .cm-li small { color: var(--tp-faint); font-size: 12px; }
 .cm-counts { display: flex; gap: 8px; flex-wrap: wrap; }

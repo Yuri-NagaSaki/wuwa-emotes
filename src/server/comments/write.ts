@@ -6,7 +6,7 @@ import { db, schema } from '../db/client'
 import type { CommentStatus } from '../db/schema/community'
 import { hashValue } from '../http/client'
 import { HONEYPOT_FIELD, HOT_THREAD_PER_HOUR, MAX_STICKERS, NEW_ACCOUNT_MS, RATE } from './constants'
-import { ipHashOf, isStaff, n, reactionCounts, threadIsPublic, withDeps, type CommentDeps, type RequestCtx } from './common'
+import { ipHashOf, isStaff, n, reactionCounts, threadIsPublic, threadRefs, withDeps, type CommentDeps, type RequestCtx } from './common'
 import { checkFormToken } from './form-token'
 import { createInput, editInput, guestNameSchema, idInput, reactInput, reportInput, threadInput } from './inputs'
 import { blocklistMatch, CommentError, holdReasons } from './moderation'
@@ -106,6 +106,7 @@ export async function notifyReply(
     sql`select 1 from notifications where user_id = ${to} and kind = 'comment.reply' and payload->>'commentId' = ${String(reply.id)} limit 1`,
   )
   if (already.rows.length) return
+  const ref = (await threadRefs([{ type: reply.threadType as 'pack' | 'emoji', id: reply.threadId }])).get(`${reply.threadType}:${reply.threadId}`)
   await tx.insert(schema.notifications).values({
     userId: to,
     kind: 'comment.reply',
@@ -117,6 +118,10 @@ export async function notifyReply(
       threadId: reply.threadId,
       by: reply.byName,
       excerpt: reply.text.slice(0, 80),
+      /** where the thread lives, e.g. 爱弥斯动态表情包 */
+      title: ref?.title ?? null,
+      /** link to the reply (/packs/<slug>#c-<id> or /e/<emojiId>#c-<id>); null when the page is gone */
+      href: ref?.href ? `${ref.href}#c-${reply.id}` : null,
     },
   })
 }

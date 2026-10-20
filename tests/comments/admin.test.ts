@@ -246,7 +246,7 @@ describe('rate limits (per IP hash and per account)', () => {
     await rejects(post(deps, null, thread, '超了', { ip }), 429)
     // another IP is not affected
     expect((await post(deps, null, thread, '换个 IP', { ip: nextIp() })).status).toBe('published')
-  })
+  }, 20_000) // freshMinute() may wait up to 11 s
 
   test(`${RATE.perMinute} per minute per account, across IPs`, async () => {
     const deps = testDeps({ settings: { firstCommentReview: false }, realRateLimits: true })
@@ -255,7 +255,7 @@ describe('rate limits (per IP hash and per account)', () => {
     await freshMinute()
     for (let i = 0; i < RATE.perMinute; i++) await post(deps, spammer, thread, `第 ${i} 条`)
     await rejects(post(deps, spammer, thread, '换 IP 也不行'), 429)
-  })
+  }, 20_000)
 
   test(`${RATE.perDay} per day`, async () => {
     const counts = new Map<string, number>()
