@@ -219,7 +219,7 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
               <>
                 <div className="note-box warn">
                   <Icon name="lock" size="sm" />
-                  <span>这个包暂不提供下载，只能浏览与收藏。</span>
+                  <span>这个包只提供预览：不提供原图下载，也不能加入打包，可以浏览、收藏和复制链接。</span>
                 </div>
                 <div className="em-acts">
                   {act('heart', fav.favorited ? '已收藏' : '收藏', fav.toggle, fav.favorited ? 'is-fav' : undefined)}

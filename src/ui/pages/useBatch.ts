@@ -20,9 +20,14 @@ export function useInBatch(id: string): boolean {
   return useSyncExternalStore(subscribe, () => batchStore().has(id), () => false)
 }
 
-/** Add stickers and confirm with a toast. */
+/** Add stickers and confirm with a toast. Stickers of a preview-only pack (packs.downloadable off) are
+ *  refused with the reason: /api/batch/sign would refuse them anyway. */
 export function useAddToBatch() {
-  return useCallback((ids: string | readonly string[]) => {
+  return useCallback((ids: string | readonly string[], opts: { previewOnly?: boolean } = {}) => {
+    if (opts.previewOnly) {
+      toast({ message: '这个包只提供预览，不能加入打包', detail: '可以浏览、收藏和复制链接，不提供原图', icon: 'lock', duration: 3500 })
+      return 0
+    }
     const list = typeof ids === 'string' ? [ids] : ids
     const added = batchStore().add(list)
     const total = batchStore().count()
