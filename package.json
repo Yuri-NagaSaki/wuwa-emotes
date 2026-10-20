@@ -1,0 +1,61 @@
+{
+  "name": "chaochi",
+  "private": true,
+  "type": "module",
+  "imports": {
+    "#/*": "./src/*"
+  },
+  "engines": {
+    "bun": ">=1.4.3"
+  },
+  "scripts": {
+    "dev": "bun --bun vite dev --port 3000",
+    "build": "bun scripts/copy-cap-assets.ts && bun --bun vite build",
+    "start": "bun .output/server/index.mjs",
+    "worker": "bun src/worker.ts",
+    "migrate": "bun src/migrate.ts",
+    "cli": "bun src/cli.ts",
+    "routes": "tsr generate",
+    "typecheck": "tsr generate && tsc --noEmit",
+    "test": "bun test",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.1153.0",
+    "@aws-sdk/s3-request-presigner": "3.1153.0",
+    "@base-ui/react": "1.9.0",
+    "@cap.js/wasm": "0.0.8",
+    "@cap.js/widget": "0.1.58",
+    "@fontsource-variable/nunito": "5.3.0",
+    "@tanstack/react-query": "5.104.5",
+    "@tanstack/react-router": "1.170.45",
+    "@tanstack/react-start": "1.169.3",
+    "@tanstack/react-virtual": "3.14.21",
+    "better-auth": "1.7.11",
+    "drizzle-orm": "0.45.4",
+    "nitro": "3.0.260903-beta",
+    "nodemailer": "10.1.7",
+    "pako": "3.0.2",
+    "pg": "8.23.1",
+    "pg-boss": "12.38.0",
+    "pino": "10.4.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "sharp": "0.35.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@tanstack/router-cli": "1.167.45",
+    "@types/bun": "1.4.3",
+    "@types/node": "24.19.2",
+    "@types/nodemailer": "8.0.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "6.1.2",
+    "drizzle-kit": "0.31.11",
+    "typescript": "6.0.3",
+    "vite": "8.3.4"
+  },
+  "packageManager": "bun@1.4.3"
+}
