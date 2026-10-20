@@ -1,0 +1,3 @@
+# Characters outside GB2312 that headings on this site use (character names, pack titles).
+# Lines starting with # are ignored; whitespace is ignored. Rebuild with `bun scripts/fonts/build.ts`.
+咲嗞菈
