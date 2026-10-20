@@ -79,7 +79,7 @@ export function SearchPage({ result, q, current }: { result: SearchResult | null
           {show('characters') && r.characters.length && !dupChar ? (
             <section className="sec">
               <SectionHead plain title="角色" sub={`${c!.characters} 位`} />
-              <div className="cgrid">
+              <div className="cgrid sr-cgrid">
                 {r.characters.map((ch) => (
                   <CharacterTile key={ch.slug} c={ch} />
                 ))}

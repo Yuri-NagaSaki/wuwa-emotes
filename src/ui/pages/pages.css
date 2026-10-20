@@ -36,7 +36,9 @@
 [data-theme="night"] .pool-art .pebble { fill: #3f514c; } [data-theme="night"] .pool-art .pebble.b { fill: #33443f; } [data-theme="night"] .pool-art .pebble.c { fill: #4a5d58; }
 .pool-art .star { fill: var(--tp-coral); stroke: #c9584c; stroke-width: 2.5; stroke-linejoin: round; }
 .floaty { position: absolute; width: 23%; aspect-ratio: 1; border-radius: 50%; background: rgba(255, 253, 244, 0.92); border: 3px solid #fff; box-shadow: 0 10px 20px -8px rgba(10, 60, 66, 0.45); display: grid; place-items: center; animation: tp-float 5s ease-in-out infinite; animation-delay: var(--fd, 0s); transition: transform var(--t) var(--spring); }
-.floaty img { width: 84%; height: 84%; object-fit: contain; }
+/* small round avatars outside the characters pages (hero bubbles, search): the avatar sticker fills the
+   circle and is clipped by it */
+.floaty img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .floaty:hover { transform: scale(1.12) rotate(-6deg); animation-play-state: paused; }
 .floaty::after { content: ""; position: absolute; left: 12%; right: 12%; bottom: -16%; height: 14%; border-radius: 50%; background: rgba(255, 255, 255, 0.35); filter: blur(2px); animation: tp-float-sh 5s ease-in-out infinite; animation-delay: var(--fd, 0s); }
 @keyframes tp-float { 0%, 100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-10px) rotate(3deg); } }
@@ -206,6 +208,7 @@ html.em-lock { overflow: hidden; }
 .toolbar .grow { flex: 1; }
 .toolbar .input { width: 240px; }
 .cgrid .ccard .pool img { width: 88%; height: 88%; }
+.sr-cgrid .ccard .pool img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 /* full-bleed banner: flush under the header, cancelling <main>'s top padding */
 .char-hero { margin-top: calc(-1 * var(--page-pt, 0px)); position: relative; background-color: color-mix(in srgb, var(--cc) 34%, var(--tp-bg)); background-image: radial-gradient(color-mix(in srgb, var(--cc) 70%, transparent) 3px, transparent 3.3px); background-size: 22px 22px; border-bottom: 3px solid var(--cc); padding: 34px 0 30px; overflow: hidden; }
 .char-hero .wrap { display: grid; grid-template-columns: 200px minmax(0, 1fr) auto; gap: 30px; align-items: center; }
@@ -247,7 +250,7 @@ html.em-lock { overflow: hidden; }
 .explore-top .pcard { max-width: 340px; }
 .top-hit { display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center; padding: 18px; border-radius: var(--r-lg); background-color: color-mix(in srgb, var(--cc, var(--c-purple)) 22%, var(--tp-card)); border: 2px solid var(--cc, var(--c-purple)); margin-top: 20px; }
 .top-hit .pool { width: 96px; height: 96px; border-radius: 50%; background: var(--tp-well); border: 4px solid var(--cc, var(--c-purple)); display: grid; place-items: center; overflow: hidden; }
-.top-hit .pool img { width: 86%; height: 86%; object-fit: contain; }
+.top-hit .pool img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
 .top-hit .pool .initial { font-family: var(--tp-font-display); font-weight: 900; font-size: 36px; color: var(--tp-ink); }
 .top-hit h3 { font-size: 24px; }
 .search-form { margin-top: 0; max-width: 720px; }

@@ -170,7 +170,6 @@
 .tile.big, .pcard { --media-r: 12px; }
 .pack-cover, .em-media, .adm-drawer-img { --media-r: 14px; }
 .em-th, .picker-grid { --media-r: 7px; }
-.pool img, .floaty img { border-radius: 50%; }
 
 /* ============ pack card (masonry item) ============ */
 .masonry { display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--mcol, 248px), 1fr)); gap: var(--mgap, 20px); align-items: start; }
