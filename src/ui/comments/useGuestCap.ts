@@ -64,7 +64,7 @@ export function useGuestCap(enabled: boolean, solver: Solver = defaultSolver): G
         token.current = null
         if (alive.current) {
           setStatus('failed')
-          setError(err?.message === 'timeout' ? '人机验证超时了，请重试' : '人机验证没有通过，请重试')
+          setError(err?.message === 'timeout' ? '人机验证超时了' : '人机验证没有通过')
         }
         return null
       })
