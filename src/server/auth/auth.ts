@@ -9,9 +9,9 @@ import { hashValue } from '../http/client'
 import { mailConfigured, sendMail } from '../mail'
 import { ac, authRoles } from './access'
 import { CAP_HEADER, capErrorMessage, verifyCapToken } from './cap'
+import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
 
-/** Endpoints that create accounts, check passwords or send mail: each needs a fresh Cap token. */
-export const CAP_PROTECTED_PATHS = new Set(['/sign-up/email', '/sign-in/email', '/request-password-reset', '/send-verification-email'])
+export { CAP_PROTECTED_PATHS } from './policy'
 
 function createAuth() {
   const e = env()
@@ -37,15 +37,25 @@ function createAuth() {
       maxPasswordLength: 128,
       // Without SMTP nobody could ever verify, so only require verification when mail works.
       requireEmailVerification: mailConfigured(),
+      resetPasswordTokenExpiresIn: RESET_PASSWORD_EXPIRES_IN,
       sendResetPassword: async ({ user, url }) => {
-        await sendMail(user.email, `${e.SITE_NAME} · 重置密码`, `点击下面的链接重置密码（1 小时内有效）：\n\n${url}\n\n如果不是你本人操作，请忽略这封邮件。`)
+        await sendMail(
+          user.email,
+          `${e.SITE_NAME} · 重置密码`,
+          `点击下面的链接重置密码（${durationText(RESET_PASSWORD_EXPIRES_IN)}内有效）：\n\n${url}\n\n如果不是你本人操作，请忽略这封邮件。`,
+        )
       },
     },
     emailVerification: {
       sendOnSignUp: mailConfigured(),
       autoSignInAfterVerification: true,
+      expiresIn: VERIFY_EMAIL_EXPIRES_IN,
       sendVerificationEmail: async ({ user, url }) => {
-        await sendMail(user.email, `${e.SITE_NAME} · 验证邮箱`, `欢迎来到${e.SITE_NAME}。点击下面的链接验证邮箱：\n\n${url}`)
+        await sendMail(
+          user.email,
+          `${e.SITE_NAME} · 验证邮箱`,
+          `欢迎来到${e.SITE_NAME}。点击下面的链接验证邮箱（${durationText(VERIFY_EMAIL_EXPIRES_IN)}内有效）：\n\n${url}\n\n如果不是你本人注册，请忽略这封邮件。`,
+        )
       },
     },
     user: {
@@ -62,11 +72,8 @@ function createAuth() {
       storage: 'database',
       window: 60,
       max: 120,
-      customRules: {
-        '/sign-in/email': { window: 60, max: 10 },
-        '/sign-up/email': { window: 3600, max: 10 },
-        '/request-password-reset': { window: 3600, max: 5 },
-      },
+      // per IP; /send-verification-email has no Cap check, so its rule is the strict one
+      customRules: { ...AUTH_RATE_RULES },
     },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
