@@ -3,6 +3,7 @@ import { charactersFn, galleryFn, homeFn } from '#/server/catalog/fns'
 import { type GallerySearch, GalleryPage } from '#/ui/pages/GalleryPage'
 import { emojiParam } from '#/ui/pages/search-params'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 const SEED_RE = /^[0-9a-z]{1,16}$/
 const SLUG_MAX = 200
@@ -24,6 +25,7 @@ export const Route = createFileRoute('/_site/gallery')({
     ])
     return { page, characters, total: home.stats.emojis }
   },
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) =>
     pageHead(matches, {
       title: '潮汐画廊',

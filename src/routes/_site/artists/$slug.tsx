@@ -2,6 +2,7 @@ import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { artistDetailFn } from '#/server/catalog/fns'
 import { ArtistPage } from '#/ui/pages/ArtistsPages'
 import { pageHead } from '#/ui/pages/seo'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/artists/$slug')({
   loader: async ({ params }) => {
@@ -10,6 +11,7 @@ export const Route = createFileRoute('/_site/artists/$slug')({
     if (r.kind === 'missing') throw notFound()
     return r
   },
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData: d }) =>
     d
       ? pageHead(matches, {

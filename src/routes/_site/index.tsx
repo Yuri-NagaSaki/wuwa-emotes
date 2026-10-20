@@ -3,6 +3,7 @@ import { exploreFn, homeFn } from '#/server/catalog/fns'
 import { HomePage } from '#/ui/pages/HomePage'
 import { pageHead } from '#/ui/pages/seo'
 import { emojiParam } from '#/ui/pages/search-params'
+import { CATALOG_STALE_MS } from '#/ui/pages/catalog-stale'
 
 export const Route = createFileRoute('/_site/')({
   validateSearch: emojiParam,
@@ -10,6 +11,7 @@ export const Route = createFileRoute('/_site/')({
     const [home, explore] = await Promise.all([homeFn(), exploreFn().catch(() => null)])
     return { home, explore }
   },
+  staleTime: CATALOG_STALE_MS,
   head: ({ matches, loaderData }) => {
     const s = loaderData?.home.stats
     return pageHead(matches, {
