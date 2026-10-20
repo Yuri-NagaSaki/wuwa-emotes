@@ -2,9 +2,11 @@
 // 1440 px, plus checks that no two cards share an avatar or a portrait and that every rounded frame
 // clips its media. Writes PNGs and checks.json into the output directory.
 //
-//   bun tests/pages/characters-shots.ts [baseUrl=http://localhost:3197] [outDir=.work/shots-ch] [popular=aimisi] [shared=luokeke]
+//   bun tests/pages/characters-shots.ts [baseUrl=http://localhost:3197] [outDir=.work/shots-ch] [popular=aimisi] [shared=luokeke] [group=danjin]
 //
-// `shared` is a character whose avatar used to be a group pack's cover (see characters-fixture.ts).
+// `shared` is a character whose avatar used to be a group pack's cover, `group` one that only appears
+// in group packs (see characters-fixture.ts). No two atlas rows may read the same (art + count line),
+// and no count line may say 0 张.
 // The strip is also shot with portraits cropped into the circles instead of stickers, for comparison.
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,6 +16,7 @@ const base = process.argv[2] ?? 'http://localhost:3197'
 const outDir = process.argv[3] ?? '.work/shots-ch'
 const popular = process.argv[4] ?? 'aimisi'
 const shared = process.argv[5] ?? 'luokeke'
+const groupOnly = process.argv[6] ?? 'danjin'
 mkdirSync(outDir, { recursive: true })
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
@@ -78,11 +81,14 @@ try {
         avatar: a.querySelector<HTMLImageElement>('.acard-badge img, .acard-pool img')?.currentSrc || null,
         portrait: a.querySelector<HTMLImageElement>('img.portrait')?.currentSrc || null,
         placeholder: a.querySelector('.ring-initial')?.textContent ?? null,
+        label: a.querySelector('.acard-meta span')?.textContent ?? '',
         color: getComputedStyle(a).getPropertyValue('--cc').trim(),
       })),
     )
     const avatars = cards.flatMap((c) => (c.avatar ? [new URL(c.avatar).pathname] : []))
     const portraits = cards.flatMap((c) => (c.portrait ? [new URL(c.portrait).pathname.replace(/-\d+\.webp$/, '')] : []))
+    // a row as a reader sees it: the art (portrait, else sticker, else initial) and the count line
+    const rows = cards.map((c) => `${c.portrait ? new URL(c.portrait).pathname.replace(/-\d+\.webp$/, '') : c.avatar ? new URL(c.avatar).pathname : `initial:${c.placeholder}`}|${c.label}`)
     checks[`characters-${size.name}`] = {
       cards: cards.length,
       avatarsUnique: new Set(avatars).size === avatars.length,
@@ -90,18 +96,22 @@ try {
       portraitsUnique: new Set(portraits).size === portraits.length,
       portraits: portraits.length,
       placeholders: cards.filter((c) => c.placeholder).map((c) => `${c.slug}:${c.placeholder}`),
+      rowsUnique: new Set(rows).size === rows.length,
+      zeroCounts: cards.filter((c) => /^0 张/.test(c.label)).map((c) => c.slug),
+      labels: cards.map((c) => `${c.slug}: ${c.label}`),
       clipping: (await clipping(page)).filter((x) => !x.ok),
       cardsDetail: cards,
     }
 
-    for (const slug of [popular, shared]) {
+    for (const slug of [popular, shared, groupOnly]) {
       await page.goto(`${base}/characters/${slug}`, { waitUntil: 'networkidle0' })
       await settle(page)
       await page.screenshot({ path: join(outDir, `character-${slug}-${size.name}.png`), fullPage: true })
       checks[`character-${slug}-${size.name}`] = {
         title: await page.title(),
         stats: await page.$$eval('.char-hero .stat', (s) => s.map((x) => x.textContent)),
-        tabs: await page.$$eval('.tabs-row [role=tab]', (s) => s.map((x) => x.textContent)),
+        tabs: await page.$$eval('.tabs-row [role=tab]', (s) => s.map((x) => `${x.textContent}${x.getAttribute('aria-selected') === 'true' ? ' (open)' : ''}`)),
+        packCards: await page.$$eval('.pcard', (s) => s.length),
         portrait: await page.$eval('.char-portrait img.portrait', (i) => (i as HTMLImageElement).currentSrc).catch(() => null),
         clipping: (await clipping(page)).filter((x) => !x.ok),
       }
@@ -142,9 +152,10 @@ try {
     await page.close()
   }
 
-  // a character that only appears in a group pack is not listed; its page sends people to a search
-  const res = await fetch(`${base}/characters/danjin`, { redirect: 'manual' })
-  checks.unlisted = { status: res.status, location: res.headers.get('location'), cacheControl: res.headers.get('cache-control') }
+  // a character that only appears in group packs has a normal page on its 合集包
+  const res = await fetch(`${base}/characters/${groupOnly}`, { redirect: 'manual' })
+  const html = await res.text()
+  checks.groupOnly = { status: res.status, location: res.headers.get('location'), mentions合集包: html.includes('合集包') }
 } finally {
   await browser.close()
 }
