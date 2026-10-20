@@ -71,13 +71,13 @@
 .cm-li .where { font-size: 13px; color: var(--tp-muted); }
 .cm-li .where a { color: var(--tp-ink); font-weight: 800; }
 .cm-li .cmt-b { margin-top: 4px; font-size: 14px; max-height: 5.4em; overflow: hidden; }
-.cm-li .cmt-b img.cmt-stk { width: 40px; height: 40px; padding: 2px; border-radius: 10px; }
+.cm-li .cmt-b img.cmt-stk:not(.is-inline) { width: 40px; height: 40px; padding: 2px; border-radius: 10px; }
 .cm-li .r { display: flex; gap: 8px; align-items: center; }
 .cm-li small { color: var(--tp-faint); font-size: 12px; }
 .cm-counts { display: flex; gap: 8px; flex-wrap: wrap; }
 
 /* 评论审核 */
-.qcard .cmt-b img.cmt-stk { width: 64px; height: 64px; padding: 4px; }
+.qcard .cmt-b img.cmt-stk:not(.is-inline) { width: 64px; height: 64px; padding: 4px; }
 .qcard .sel { padding-top: 8px; }
 .qcard .where { color: var(--tp-muted); font-size: 12.5px; }
 .qcard .where a { color: var(--tp-teal-ink); font-weight: 700; }
@@ -100,7 +100,7 @@
 .ban-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
 
 @media (max-width: 760px) {
-  .cmt-b img.cmt-stk { width: 76px; height: 76px; }
+  .cmt-b img.cmt-stk:not(.is-inline) { width: 76px; height: 76px; }
   .composer .send { width: 100%; justify-content: flex-end; flex-wrap: wrap; }
   .composer .md-hint { display: none; }
 }
