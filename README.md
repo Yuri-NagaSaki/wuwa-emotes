@@ -1,6 +1,6 @@
 # 潮池
 
-潮池是一个鸣潮表情图鉴：按瀑布流浏览表情包，注册用户投稿、管理员审核后发布，评论里可以插入表情贴纸，原图下载与打包受一组可在后台配置的风控规则约束。
+潮池是一个鸣潮表情图鉴：按瀑布流浏览表情包和角色，注册用户投稿、管理员审核后发布，评论里可以插入表情贴纸，打包清单在浏览器里打成 ZIP；原图下载与打包受一组可在后台配置的风控规则约束。
 
 本仓库是网站的全部源码：公开站、后台、API、后台任务和部署脚本。架构说明见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
@@ -13,7 +13,7 @@
 | 数据 | PostgreSQL 18、Drizzle ORM 0.45.4（drizzle-kit 0.31.11）、pg-boss 12.38.0 |
 | 认证与人机验证 | Better Auth 1.7.11、自托管 Cap Standalone（`@cap.js/widget` 0.1.58） |
 | 图片与存储 | sharp 0.35.5、Cloudflare R2（`@aws-sdk/client-s3` 3.1153.0） |
-| 界面 | Base UI 1.9.0、TanStack Query 5.104.5、TanStack Virtual 3.14.21 |
+| 界面 | Base UI 1.9.0、TanStack Query 5.104.5、client-zip 2.5.1（浏览器端打包） |
 | 其他 | zod 4.6.7、markdown-it 15.0.3、pino 10.4.0、TypeScript 6.0.3 |
 | 入口 | Cloudflare 代理、Caddy 2.11.7、Docker Compose |
 
@@ -53,8 +53,8 @@
 
 本地开发不需要 `.env` 文件：开发环境的默认值（数据库、RustFS 地址与密钥、站点地址）写在 `src/server/env.ts`。
 
-- 本地注册与登录：注册、登录等接口要求人机验证令牌，服务端没有 `CAP_SECRET_KEY` 时拒绝所有令牌。账号页面的表单先从 `CAP_API_ENDPOINT` 指向的 Cap Standalone 服务器取得令牌；默认端点是生产的 Cap 服务器，按 `deploy/README.md` 它只允许站点源跨域，本地页面取不到令牌。两种做法：
-  - 在浏览器里使用账号页面：把 `CAP_API_ENDPOINT`、`CAP_SITE_KEY`、`CAP_SECRET_KEY` 指向一台允许 `http://localhost:3000` 的 Cap Standalone 服务器。组件的 WASM 由 `bun run build` 复制到 `public/cap/`，`bun run dev` 不复制，先执行一次 `bun scripts/copy-cap-assets.ts`。
+- 本地注册与登录：注册、登录、申请重置密码要求人机验证令牌，服务端没有 `CAP_SECRET_KEY` 时拒绝所有令牌。账号页面在后台向 `CAP_API_ENDPOINT` 指向的 Cap Standalone 服务器求解令牌（不显示组件）；默认端点是生产的 Cap 服务器，按 `deploy/README.md` 它只允许站点源跨域，本地页面取不到令牌。两种做法：
+  - 在浏览器里使用账号页面：把 `CAP_API_ENDPOINT`、`CAP_SITE_KEY`、`CAP_SECRET_KEY` 指向一台允许 `http://localhost:3000` 的 Cap Standalone 服务器。求解用的 WASM 由 `bun run build` 复制到 `public/cap/`，`bun run dev` 不复制，先执行一次 `bun scripts/copy-cap-assets.ts`。
   - 只需要账号时：用 `CAP_DISABLED=1 bun run dev` 启动，服务端接受任意非空令牌（生产环境拒绝这个设置）；再直接调用 Better Auth 接口注册，`x-cap-token` 头填任意值，做法见 `tests/admin/dev-accounts.ts`。
 - 邮件：没有配置 `SMTP_URL` 和 `MAIL_FROM` 时，邮件内容写进日志，注册也不要求验证邮箱。
 - 设为站长：先用上一条的方法注册账号，再执行 `bun run cli promote-admin <邮箱>`。

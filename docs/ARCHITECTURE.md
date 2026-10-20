@@ -10,16 +10,19 @@
 2. **入口**：Cloudflare 代理 DNS → 源站 443（Cloudflare Origin CA 证书，SSL「完全（严格）」）→ 主机网络上的 Caddy 2.11.7 → 两个 web 副本。nftables 只允许 Cloudflare 网段连接 443，所有容器都不映射端口。不使用 Cloudflare Tunnel。
 3. **构建与发布**：GitHub Actions 检查每次推送，通过后把镜像推送到公开的 GHCR 包；服务器不构建镜像。开发机执行 `deploy/release.sh`，服务器检出该提交，由 `deploy/rollout.sh` 先迁移、再逐个排空并替换两个副本。生产上经 Cloudflare 做健康探测的 11 次发布每次 19–52 秒，探测失败 0 次。
 4. **存储**：所有文件放在 R2 桶 `wuwa`。网页图片只走 `/img`（一年期 immutable，由 Cloudflare 缓存）；原图、ZIP 和上传用预签名链接直连 R2。下载链接 2 分钟有效；上传链接 15 分钟有效，并签入文件大小和类型。
-5. **图片**：网页只显示 WebP（海报 `p240`、动图预览 `a160`、弹窗大图 `full`）。原图只在查看、保存和打包时下载，GIF 原样给出。
-6. **角色**：站长、管理员、用户。每个服务端函数都必须声明权限中间件，单元测试检查遗漏；最后一位站长由数据库触发器保护；每次写操作都写审计日志。
-7. **投稿**：所有注册用户都能投稿：草稿 → 审核中 → 已发布或已退回。待审核的图只经需要登录的 `/review-img` 预览，不进 CDN。用户投稿的图片只能经「投稿审核」上线，后台的「发布」不会绕过。
-8. **下载与风控**：默认对所有人开放，不需要登录。限额和速率在后台「下载与风控」里配置，留空即不限制；另有两个紧急开关。可疑来源可以封禁或观察，可疑请求要先通过人机验证。
-9. **人机验证**：自托管的 Cap Standalone。服务端在注册、登录、重置密码、发送验证邮件、游客评论和被挑战的下载上校验令牌，不依赖 Cloudflare 的挑战服务。
-10. **评论**：楼中楼、贴纸 `:s[r-…]`、回应、举报。markdown-it 关闭 HTML，链接只放行白名单协议；游客评论需要人机验证；站长和管理员的评论不进审核。
-11. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
-12. **仓库公开**：仓库里没有服务器地址和密钥。密钥只在服务器的环境文件和开发机的 `.env.local` 里；GitHub secret scanning 与 push protection 已开启。
+5. **图片**：网页只显示 WebP（海报 `p240`、动图预览 `a160`、弹窗大图 `full`）。原图只在查看、保存和打包时下载，GIF 原样给出。表情在衍生图就绪之后才公开，包至少有一张公开表情才公开。
+6. **公开页**：服务端渲染。瀑布流的位置是列宽的函数，由 CSS 定位，服务端 HTML、水合和图片加载都不移动布局。单张弹窗记在 `?e=`，地址栏显示为 `/e/<id>`。旧站地址 301 到新页面。白昼与夜潮两套配色。
+7. **打包清单**：清单只存在浏览器里。`/batch` 在浏览器里用 client-zip 打包：每次签名 20 张，每 200 张一个 ZIP，附 `CREDITS.txt`；只提供预览的包不能加入。
+8. **角色归属**：一张贴纸归哪个角色由一处规则决定：用贴纸自己的角色标签，整包复制的标签不算，单角色包归这个角色。张、包、合集包三种计数全站一致；角色可有官方立绘与按立绘取的主题色。
+9. **权限**：站长、管理员、用户三种角色。每个服务端函数都必须声明权限中间件，单元测试检查遗漏；最后一位站长由数据库触发器保护；每次写操作都写审计日志。
+10. **投稿**：所有注册用户都能投稿：草稿 → 审核中 → 已发布或已退回。待审核的图只经需要登录的 `/review-img` 预览，不进 CDN。用户投稿的图片只能经「投稿审核」上线，后台的「发布」不会绕过。
+11. **下载与风控**：默认对所有人开放，不需要登录；社区包允许下载原图，官方包只提供预览。限额和速率在后台「下载与风控」里配置，留空即不限制；另有两个紧急开关。可疑来源可以封禁或观察，可疑请求要先通过人机验证。v1 来源地址不出现在公开页面和 `CREDITS.txt` 里。
+12. **人机验证**：自托管的 Cap Standalone，在后台无感求解，不显示组件。服务端在注册、登录、申请重置密码、游客评论和被挑战的下载上校验令牌；重发验证邮件不需要人机验证，按 IP 限每 10 分钟 3 次。不依赖 Cloudflare 的挑战服务。
+13. **评论**：楼中楼、贴纸 `:s[r-…]`、回应、举报。markdown-it 关闭 HTML，链接只放行白名单协议；游客评论需要人机验证；站长和管理员的评论不进审核。
+14. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
+15. **仓库公开**：仓库里没有服务器地址和密钥。密钥只在服务器的环境文件和开发机的 `.env.local` 里；CI 用 gitleaks 扫描全部历史，GitHub secret scanning 与 push protection 已开启。
 
-公开浏览页与打包清单界面正在开发（第 8.3 节）。
+性能优化还在进行（第 8.5 节）。
 
 ---
 
@@ -28,8 +31,8 @@
 | 类别 | 现状 |
 |---|---|
 | 技术栈 | TanStack Start + Bun、PostgreSQL 18、Cloudflare（DNS、CDN、R2）、WebP |
-| 已实现 | 注册登录、投稿与审核、后台 16 个页面、单张原图下载、整包 ZIP、打包清单分批签名接口、评论与贴纸、个人中心 |
-| 开发中 | 公开浏览页、打包清单与批量下载界面（第 8.3 节） |
+| 已实现 | 公开浏览页（首页、目录、包详情、单张表情、角色、画师、画廊、探索、搜索、说明页）、打包清单与浏览器端打包、单张原图下载、整包 ZIP、评论与贴纸、注册登录、个人中心、投稿与审核、后台 16 个页面、白昼与夜潮两套配色 |
+| 进行中 | 性能优化（第 8.5 节） |
 | 部署 | 单机 Docker Compose，两个 web 副本滚动发布 |
 | 存储 | 只用 R2 桶 `wuwa`，按对象种类分前缀 |
 
@@ -48,8 +51,9 @@
 | 表情包 | 310 个：已发布 309、草稿 1、官方 40 | 生产导入 `import-v1`，2026-10-20 |
 | 表情 | 15,272 张 | 生产导入 `import-v1`，2026-10-20 |
 | 角色 / 画师 / 标签 | 71 / 31 / 6；41 个哈希 slug 已替换为可读 slug | 生产导入，2026-10-20 |
-| 旧链接重定向 | 690 条；导入警告 0 条 | 生产导入，2026-10-20 |
+| 旧链接重定向 | 首次导入 690 条、导入警告 0 条；加入 v1 标签页后 `redirects` 共 779 条 | 生产导入，2026-10-20 |
 | 原图尺寸 | `backfill-dims` 更新 15,272 张、失败 0 张 | 生产，2026-10-20 |
+| 衍生图回填 | `backfill-derived` 完成 15,272 / 15,272 张 | 生产，2026-10-20 |
 | 原图体积 | 15,028,946,607 字节（约 14.0 GiB） | `DEVELOPMENT.md` 第 3 节，R2 上传统计，2026-10-20 |
 
 格式分布、尺寸分布和源站下载量沿用 v2 文档的统计，本版没有重新测量，见附录 C。
@@ -85,10 +89,12 @@ flowchart LR
 
 | 路由 | 用途 | 缓存 |
 |---|---|---|
-| `/` 与公开浏览页 | `/` 目前是占位首页；其他公开页见第 8.3 节 | 按上面的 Cookie 规则 |
+| `/`、`/packs`、`/packs/:slug`、`/e/:emojiId`、`/characters`、`/characters/:slug`、`/artists`、`/artists/:slug`、`/gallery`、`/explore`、`/search`、`/batch`、`/about`、`/links`、`/legal`、`/legal/:doc` | 公开页，服务端渲染（第 8.3 节） | 按上面的 Cookie 规则 |
 | `/login`、`/register`、`/forgot-password`、`/reset-password`、`/verify-email` | 账号页面 | 按上面的 Cookie 规则 |
 | `/submit`、`/me/*`、`/admin/*` | 投稿、个人中心、后台，需要登录 | 一律 `private, no-store`（路径前缀不区分大小写） |
-| `/img/v1/:variant/:packKey/:file` | 已发布表情的 WebP 衍生图 | `public, max-age=31536000, immutable`，不看 Cookie（第 2.2 节） |
+| `/archives/*`、`/tags/*` | 旧站地址（第 8.3 节） | 查到时重定向，`public, max-age=86400`（带会话 Cookie 时 `private, no-store`）；查不到时渲染 404 页 |
+| 其他未匹配的地址 | 站点外壳里的 404 页，状态码 404 | 按上面的 Cookie 规则 |
+| `/img/v1/:variant/:packKey/:file`、`/img/v1/portrait/:file` | 已发布表情的 WebP 衍生图、角色立绘 | `public, max-age=31536000, immutable`，不看 Cookie（第 2.2 节） |
 | `/review-img/v1/:variant/:packKey/:file` | 待审核表情的预览图，只对审核人、包的所有者和上传者开放 | `private, no-store`；拒绝时一律 404 |
 | `/dl/e/:emojiId?mode=view\|save` | 查看或保存原图 | 检查后 302 到预签名链接（`Accept: application/json` 时返回 JSON）；`private, no-store` |
 | `/dl/p/:slug.zip` | 整包 ZIP | 同上；ZIP 未生成或已过期时排队并返回 202，`?poll=1` 只查询状态 |
@@ -102,7 +108,7 @@ flowchart LR
 
 ### 2.2 `/img` 规则
 
-`/img` 是网页图片唯一的出口，只读 `derived/v1/` 下已发布表情的对象（`src/server/media/img.ts`、`src/routes/img/$.ts`）：
+`/img` 是网页图片唯一的出口，只读 `derived/v1/` 下已发布表情的对象和 `characters/v1/portraits/` 下的角色立绘（`src/server/media/img.ts`、`src/routes/img/$.ts`）：
 
 | 项 | 规则 |
 |---|---|
@@ -111,6 +117,7 @@ flowchart LR
 | 映射 | 只拼成 `derived/v1/<variant>/<packKey>/<emojiId>.r<rev>.webp`，不接受其他前缀 |
 | 命中 | 流式转发 R2 对象，`Cache-Control: public, max-age=31536000, immutable`，带 `ETag` 与 `X-Content-Type-Options: nosniff`；`If-None-Match` 命中时返回 304；支持 HEAD，其他方法返回 405 |
 | `full` 未生成 | 只有这一步查库：表情和包都已发布、URL 的 `packKey` 等于 `storage_pack_key`、`rev` 等于 `variant_rev`，否则 404。条件满足才入队 `media.full`（单例键为表情 ID，重复请求只排一次），并 302 到同一张图的 `a160`（动图）或 `p240`（静态图），`Cache-Control: no-store`。worker 只按库里的字段拼对象键，拒绝处理未发布的表情，所以待审核的图不会被人按 ID 请求进 `derived/` |
+| 角色立绘 | `/img/v1/portrait/<name>.<hash8>-<w>.webp`，`<name>` 是导入时的角色 slug，`<w>` 为 240 或 480。严格匹配后直接读 `characters/v1/portraits/` 下的同名对象，立绘本身公开，不查库；命中时同样是一年期 immutable |
 | 其他缺失 | 404，`Cache-Control: public, max-age=60`，避免长期缓存 404 |
 | Cookie | 注册为独立的服务端路由，不调用会话接口，响应不带 `Set-Cookie`。Cloudflare 不缓存带 `Set-Cookie` 的响应 |
 
@@ -135,6 +142,7 @@ wuwa/
 ├── zips/v1/packs/<packKey>/<packKey>.<hash8>.zip      # 整包 ZIP，按内容哈希命名
 ├── uploads/tmp/<yyyy>/<mm>/<dd>/<uploadId>/<文件名>    # 直传暂存（UTC 日期）· 生命周期 7 天
 ├── backups/postgres/<yyyy>/<mm>/<dd>/<时间戳>.dump     # 数据库备份（UTC 日期）· 生命周期 30 天
+├── characters/v1/portraits/<slug>.<hash8>-<240|480>.webp  # 角色立绘（第 7.2 节），经 /img/v1/portrait/ 提供
 └── design/v1/                                         # 设计稿归档（design/prototype/README.md）
 ```
 
@@ -231,7 +239,7 @@ stateDiagram-v2
 - **上传**：浏览器为每个文件申请预签名 PUT（每次最多 50 个，每个投稿最多 200 张，单个 ≤ 20 MB，GIF、PNG、WebP、JPEG），直传 `uploads/tmp/…`，完成后通知服务端排队 `media.ingest`。ingest 校验格式、尺寸与帧数（第 4 节），计算 SHA-256（同一包内重复直接跳过），把原图复制到 `assets/v1/packs/<packKey>/emojis/`，建一张 `pending` 状态的表情，再排队生成 `p240` 与 `a160` 预览图到 `review/v1/`。投稿者和审核人经 `/review-img` 预览。
 - **顺序**：上传列表保持选择文件时的顺序；投稿者可以拖动排序，顺序存在 `payload.addEmojiIds`。
 - **提交**：缺少标题、表情、画师（新包）、授权说明，或者还有图片在上传或处理中时，不能提交。
-- **审核通过**：在一个事务里应用 `payload`：投稿自己的表情转为 `published` 并排在已有表情之后；修改投稿移除的表情转为 `hidden`；更新包信息、角色与画师（按名称或别名匹配已有画师，没有则新建）、计数、类型和封面；新包同时生成 slug 并发布。「允许下载」由审核人确认，官方表情固定关闭。随后发送通知、写审计日志。事务提交后再把预览图复制到 `derived/v1/`（最多 6 个并行），包允许下载时排队重建 ZIP。
+- **审核通过**：在一个事务里应用 `payload`：投稿自己的表情转为 `published` 并排在已有表情之后；修改投稿移除的表情转为 `hidden`；更新包信息、角色与画师（按名称或别名匹配已有画师，没有则新建）、计数、类型和封面；新包同时生成 slug 并发布。「允许下载」由审核人确认，官方表情固定关闭。随后发送通知、写审计日志。事务提交后再把预览图复制到 `derived/v1/`（最多 6 个并行），包允许下载时排队重建 ZIP。衍生图就绪（`derived_ready`）之后，表情和包才在公开页出现（第 8.3 节）。
 - **修改已发布的包**：`submissions.base_updated_at` 记录创建时包的 `updated_at`。审核通过前线上一直显示旧版本；如果期间包已被别人改过，审核通过失败，需要退回重新提交（重新提交时以包的当前版本为基准）。下载计数等不改变包内容的更新不会移动 `updated_at`。
 - **免审用户**：提交后立即以投稿者本人身份执行「审核通过」，「允许下载」取投稿者的声明；审计日志记为 `auto`。自动通过失败（例如包已被改过）时投稿留在审核中，等待审核人处理。
 - **后台「发布」不绕过审核**：「上传中心」里由站长或管理员直接传进已有包的图片，生成预览图后直接发布。属于用户投稿的待审核表情（上传记录指向投稿，或仍在某个未结束投稿的 `addEmojiIds` 里）在表情库和包编辑页上不能「发布」，只能经「投稿审核」上线，因为只有审核会应用授权声明和「允许下载」。
@@ -271,7 +279,7 @@ stateDiagram-v2
 
 整包 ZIP（`src/server/media/zip.ts`）：
 
-- 每个已发布且允许下载的包一个 ZIP，存储模式（GIF、PNG 不再压缩），原图一张一张流式写入并分片上传，内存只占几个分片，与包的大小无关。压缩包里附 `CREDITS.txt`：包名、页面地址、画师、约稿人、许可、说明与来源。
+- 每个已发布且允许下载的包一个 ZIP，存储模式（GIF、PNG 不再压缩），原图一张一张流式写入并分片上传，内存只占几个分片，与包的大小无关。压缩包里附 `CREDITS.txt`：站点名与地址、包名、本站页面地址、画师、约稿人、许可与说明。v1 的来源地址（`packs.source_url`）只留在数据库和后台编辑器里，不出现在公开页面、页面数据、整包 ZIP 和打包清单的 `CREDITS.txt` 里。
 - 内容哈希（`chaochi-zip-v2`）覆盖压缩包的全部内容：每个条目的文件名、顺序、表情 ID 与原图 SHA-256（没有 SHA-256 时用字节数），以及去掉生成日期的 `CREDITS.txt` 正文。对象键取哈希前 8 位；`/dl/p` 只在记录的哈希等于当前哈希时提供 ZIP。哈希不变时跳过重建，新 ZIP 生成后删除旧对象。
 - 重建时机：投稿审核通过、后台修改包或表情、下架，以及 `/dl/p` 发现 ZIP 过期。`zip.build` 是独占队列，每个包同时最多一个排队或运行中的任务。
 
@@ -320,12 +328,11 @@ stateDiagram-v2
 
 | 内容 | 处理 |
 |---|---|
-| CC BY-NC-SA 4.0 社区包 | 核对许可后开启「允许下载」；页面与 ZIP 展示署名 |
-| 「个人非商用约定」类包 | 默认只提供预览，取得画师授权后开启 |
+| 社区包 | 2026-10-20 起允许下载原图；页面与 ZIP 展示署名 |
 | 官方表情（官转） | 「允许下载」固定关闭，只提供预览：导入、审核通过和包编辑页都强制关闭 |
 | 投稿 | 投稿者声明身份、许可与凭证；审核人确认「允许下载」 |
 
-- v1 导入时所有包的「允许下载」都关闭；重复导入不会改动已开启的开关，官方包除外。
+- v1 导入时所有包的「允许下载」都关闭，社区包随后由站长开启；重复导入不会改动已开启的开关，官方包除外。
 - 许可只取 `src/server/media/credits.ts` 中 `LICENSE_LABELS` 的 6 个代码：`cc-by-nc-sa-4.0`、`cc-by-nc-4.0`、`cc-by-sa-4.0`、`cc-by-4.0`、`personal-noncommercial`、`unknown`。投稿表单和包编辑页都只接受这些代码；导入时把 v1 的文字许可映射到代码，认不出的记为 `unknown`。
 
 ---
@@ -352,12 +359,13 @@ upload_items     id, submission_id (上传中心的上传为空), pack_id, uploa
 users, sessions, accounts, verifications, rate_limits           -- Better Auth（复数表名）
                  users: role (admin|manager|user), banned, ban_reason, ban_expires, submit_mode (review|trusted|blocked)
                  sessions: ip_address 与 user_agent 存加盐哈希, impersonated_by
-characters, character_aliases, artists, artist_aliases          -- 别名唯一，用于搜索与合并后的旧名
+characters       slug, name, theme_color, avatar_emoji_id, portrait_key (0002), sort, pack_count, emoji_count, legacy_slug
+character_aliases, artists, artist_aliases                     -- 别名唯一，用于搜索与合并后的旧名
 pack_characters, emoji_characters, pack_artists (role artist|commissioner)   -- 多对多
 tags (dimension group|tool|project|origin|custom), pack_tags
 collections, collection_packs                                   -- 精选合集（首页读取）
 favorite_folders, favorites (target_type pack|emoji)
-batch_lists      user_id, items jsonb                           -- 打包清单同步，表已建，尚未使用（第 8.3 节）
+batch_lists      user_id, items jsonb                           -- 表已建，尚未使用：打包清单只存在浏览器里（第 8.3 节）
 notifications    user_id, kind, payload jsonb, read_at
 download_counters (UNLOGGED)  subject, day, kind (orig|batch_item|batch|zip), n
 rate_windows (UNLOGGED)       subject, bucket, window_start, n
@@ -381,20 +389,49 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - 迁移文件由 drizzle-kit 从 `src/server/db/schema/` 生成，放在 `drizzle/`。`src/migrate.ts` 应用迁移，再安装或升级 pg-boss 的表和队列，然后退出。
 - `drizzle/0000_init.sql` 有三处手工修改：开头 `CREATE EXTENSION IF NOT EXISTS pg_trgm`；把 `download_counters` 与 `rate_windows` 设为 UNLOGGED；函数 `keep_last_admin()` 与触发器 `users_keep_last_admin`。
 - `drizzle/0001_comment_indexes.sql` 为 `comments` 增加 `author_id`、`parent_id`、`ip_hash` 三个索引。
+- `drizzle/0002_character_portraits.sql` 为 `characters` 增加可空列 `portrait_key`（只扩展）。
 - 迁移在副本切换前执行，旧版本会和新结构一起运行一段时间，所以每个发布只做「扩展」（新表、可空列或带默认值的列、索引），「收缩」（删列、改名、收紧约束）放到下一个发布。完整规则见 `deploy/README.md`「迁移的兼容规则」。
+
+### 7.2 角色归属、头像与立绘
+
+一张贴纸归哪个角色，只在 `src/server/catalog/attribution.ts` 决定；角色图鉴、角色页、目录的角色筛选、首页、搜索、筛选项和画师页都经过它，所以各处的数字一致。规则：
+
+1. 贴纸自己的角色标签算数。例外：一个包里至少两张贴纸有标签，而且它们的标签都是同一组两个以上的角色，说明标签是整包复制的，不算。
+2. 没有可用标签的贴纸，在只有一个角色的包里，归这个角色。
+3. 其余（多角色包里没有逐张标签的贴纸）不归属任何角色。
+
+规则 1 的例外来自 v1 数据：v1 在多角色包里给每张贴纸贴同一份角色列表（例如一个包 31 张 × 24 个角色），这样的标签说明不了每张是谁。
+
+- **计数**：张 = 归属这个角色的公开贴纸；包 = 至少含其中一张的公开包；合集包 = 角色出现但没有自己贴纸的公开包。显示为「N 张 · M 包」；只出现在合集包里时为「出现在 M 个合集包」；都没有时为「暂无表情」，从不显示「0 张」或合集包本身的张数（`src/shared/characters.ts`）。
+- **列出条件**：有公开的包或合集包，或者有官方立绘。
+- **头像**：只属于这个角色的公开贴纸，且不与其他角色共用，也不与其他角色的头像是同一张图（按 SHA-256，没有时按格式与字节数）。后台指定的 `avatar_emoji_id` 优先，否则取下载最多的包里第一张可用的；都没有时显示角色色底上的首字，从不借用别的图。
+- **立绘**：`bun src/cli.ts import-portraits <manifest.json>` 读取 `{ name, url, slug?, crop? }` 列表，按 slug、名称、别名或去掉分隔符的名称匹配角色；逐个下载（顺序进行、有间隔、不带 Referer），从顶部裁成 3:4，写 240 px 宽的 WebP（来源够大时另写 480 px），放在 `characters/v1/portraits/<slug>.<hash8>-<w>.webp`，最大宽度的键写入 `characters.portrait_key`（迁移 `0002`）。`<hash8>` 覆盖来源字节、裁切和处理流程，同一来源重跑不做任何改动；同一来源不会成为两个角色的立绘。立绘经 `/img/v1/portrait/…` 提供（第 2.2 节）。
+- **主题色**：`characters.theme_color` 为空时，`import-portraits`（除非加 `--no-colors`）或 `bun src/cli.ts derive-colors` 从立绘取色，没有立绘时用头像贴纸（`src/server/import/colors.ts`）：在 OKLab 空间里跳过背景、近黑、灰色和浅肤色像素，其余像素按彩度平方加权投票给最近的设计色（13 色），彩色像素太少时按中间调的平均色决定，结果以调色板名写入。已有的值不会被覆盖，后台的选择优先。前端的读取规则见第 8.1 节。
 
 ---
 
 ## 8. 前端
 
-### 8.1 已实现的界面规则
+### 8.1 界面规则
 
-- **瀑布流**：`src/ui/Masonry.tsx` 用 `useWindowVirtualizer` 的 `lanes`，每个条目的高度由数据库里的宽高和列宽算出，不量 DOM，图片加载时布局不移动。最小列宽桌面 248 px、手机 150 px。服务端按假定宽度渲染，挂载后量到的列数不同时只重排一次。
+- **页面容器**：最大宽度 1440 px，两侧留白 `clamp(16px, 3vw, 32px)`。说明类页面（`/about`、`/links`、`/legal`）用 1200 px 的阅读栏，左缘与页头对齐（`src/ui/styles/tokens.css` 的 `--maxw`、`--gutter`、`--maxw-narrow`）。
+- **瀑布流**（`src/ui/masonry-layout.ts`、`src/ui/Masonry.tsx`）：服务端不知道视口宽度，匿名 HTML 又经 CDN 共享，所以布局不能依赖量出来的宽度。每个条目的高度是列宽的仿射函数（媒体按列宽缩放，加上固定高度的文字行），每种列数在一个参考列宽下分配一次列，于是条目的位置也是列宽的仿射函数，由 CSS 的 `calc()` 和容器查询定位。服务端 HTML、水合、改变窗口大小、图片加载和字体替换都不移动任何东西。挂载后只渲染视口附近的条目。
+
+  | 模式 | 最小列宽 | 间距 | 列数 |
+  |---|---|---|---|
+  | 桌面 | 248 px | 20 px | 1–5 |
+  | 手机（视口 ≤ 760 px） | 150 px | 12 px | 2–4 |
+
+- **包卡片高度档位**（`src/ui/pack-card-tiers.ts`）：卡片高度必须不经测量就能算出，但所有卡片一样高会让瀑布流变成网格。所以每张卡片按自己的文字估算标题（1–2 行）、简介、角色标签和统计各占几行（中日韩字符按 1em、拉丁字母约 0.56em 估算），CSS 把文字截到选定的行数；角色标签按最窄的卡片宽度排行，不会出现被切掉一半的标签行。估算略有偏差时只会留出一点空白或出现省略号。
+- **潮汐画廊**（`src/ui/pages/stream-layout.ts`、`StreamGrid.tsx`）：方形贴纸格、每第 11 张一个 2×2 焦点格、包卡片和「潮汐小记」混排在 `grid-auto-flow: dense` 网格里。服务端 HTML 由浏览器排版；挂载后脚本按同一套 dense 算法自行定位，位置不变，然后只挂载视口附近的行。
+- **圆角规则**（`src/ui/styles/components.css`）：贴纸多是方形且常有不透明底，所以圆角框里的图片不留直角。内嵌的图片取同心圆角（框的圆角 − 边框 − 内边距，至少 6 px，经 `--media-r` 传递）；贴到框边的图片由框裁切；圆框里放圆图。`tests/pages/corner-audit.ts` 检查。
+- **字体**：页面主标题、包名、角色名、画师名和卡片标题用 `TP Rounded`（寒蝉圆黑体 v3.750 的 Bold 与 Heavy，OFL-1.1）；正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，去掉 `locl` 与 `aalt`，用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
+- **白昼与夜潮**（`src/ui/shell/theme.ts`）：两套设计令牌，夜潮在 `html[data-theme="night"]`。偏好存在 `localStorage` 的 `tp-theme`，默认跟随系统，页头的月亮 / 太阳按钮切换。`<head>` 里的内联脚本在首次绘制前设置主题和 `theme-color`，夜间页面不会先闪白。贴纸底板（`--tp-well`）在两套主题里都是浅色纸面，因为很多贴纸有深色描边或不透明的白底。
+- **角色颜色**（`src/ui/pages/model.ts`）：`characters.theme_color`（调色板名或 CSS 颜色）有值时用它；没有时按 slug 做 31 进制哈希，从 13 个设计色里取一个。服务端和客户端结果相同，封面、标签和描边因此不会全是同一种颜色。
 - **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
-- **字体**：正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体；标题用寒蝉圆黑体 v3.750 的 Bold 与 Heavy（OFL-1.1），以别名 `TP Rounded` 发布。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，去掉 `locl` 与 `aalt`，用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
-- **页面外壳**：页头、手机底部标签栏、页脚、站点公告条，以及模拟登录时置顶的「结束模拟」条。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
-- **已上线的页面**：注册、登录、找回与重置密码、邮箱验证；个人中心（收藏夹、我的投稿、我的评论、通知、设置）；投稿页 `/submit`；后台 16 个页面（第 8.2 节）。
-- **人机验证组件**：`@cap.js/widget` 在需要时才加载；WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
+- **页面外壳**：页头（含主题切换和「打包」按钮）、手机底部标签栏、页脚（显示目录总数）、站点公告条，模拟登录时置顶的「结束模拟」条，`Ctrl K` 命令面板（首次打开时才加载，联想来自 `suggestFn` 的进程内索引）。任何未匹配的地址都在站点外壳里渲染 404 页，并返回 404 状态码（`src/routes/_site/$.tsx`）。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
+- **人机验证**：账号表单、游客评论和被挑战的下载都在后台求解（`src/ui/cap/invisible.ts`、`useInvisibleCap.ts`），不显示组件。表单出现时就开始工作量证明，提交时令牌通常已就绪，未就绪时按钮显示「验证中…」并等待；每次求解失败静默重试一次，仍失败时显示一行提示和「重试」。只因令牌被拒（过期或已用过）的请求换新令牌重发一次。`@cap.js/widget` 在需要时才加载，WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
+- **复制图片**（`src/ui/pages/clipboard.ts`）：剪贴板只能写入 PNG，静态贴纸先画到 canvas 再复制；动图复制后只剩一帧，所以提示改用「保存原图」。
 - **组件样张**：`/kit` 展示全部组件，只在开发环境存在。
 
 ### 8.2 后台页面
@@ -414,39 +451,71 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 ### 8.3 公开浏览页与打包清单
 
-<!-- 待补：公开浏览页（lane I）与打包清单 / 批量下载界面（lane J2）上线后，按实现改写本节 -->
+公开页都由服务端渲染，数据来自 `src/server/catalog/` 的服务端函数。
 
-公开浏览页和打包清单界面正在开发。本节写的是已经实现的服务端接口和已经确定的设计。
+| 页面 | 路径 | 内容 |
+|---|---|---|
+| 首页 | `/` | 潮汐主视觉（统计与浮动贴纸，内联 SVG）、角色潮汐、站长精选、新上架、潮汐流（随机贴纸，含两个 2×2 焦点格）、官方表情 |
+| 表情包目录 | `/packs` | 顶部筛选条：角色、合集包、画师、类型（动图、静图、混合）、社区或官方、分组与标签；排序：最新、最热、收藏、随机。手机上合成一个「筛选」面板 |
+| 包详情 | `/packs/:slug` | 包信息、全部贴纸、评论（整宽，位于贴纸网格下方）。改名后的旧 slug 301 到新地址 |
+| 单张表情 | `/e/:emojiId` | 服务端渲染所属包的页面，单张弹窗已打开 |
+| 角色图鉴、角色页 | `/characters`、`/characters/:slug` | 立绘或头像、计数（第 7.2 节）；角色页分「包」「全部表情」「合集包」三个标签，只出现在合集包里的角色直接打开「合集包」 |
+| 画师 | `/artists`、`/artists/:slug` | 画师的包，以及在这些包里有自己贴纸的角色 |
+| 潮汐画廊 | `/gallery` | 跨包贴纸流（第 8.1 节） |
+| 探索 | `/explore` | 随机一个包和一张表情、按当天日期固定的今日推荐、筛选项 |
+| 搜索 | `/search` | 按类型分组的结果；`Ctrl K` 命令面板给即时联想 |
+| 打包清单 | `/batch` | 见下文 |
+| 说明页 | `/about`、`/links`、`/legal`、`/legal/:doc` | 阅读栏，目录随滚动高亮 |
 
-目录接口（`src/server/catalog/`）。全部是 GET 服务端函数，中间件为 `publicFn`：
+**公开的定义**（`src/server/catalog/sql.ts`，唯一写出这个规则的地方）：表情公开 = 已发布且衍生图已就绪（`emojis.derived_ready`），所以页面渲染的每个图片地址都存在；包公开 = 已发布且至少有一张公开表情。衍生图还在生成的包在列表、搜索、筛选项和详情页里都不出现。计数、封面和缩略图只用公开表情；角色、画师、标签和合集只在有公开内容时出现。
+
+**目录接口**：全部经 `publicFn`，返回值与访客身份无关（同一份对象会渲染进可共享缓存的匿名 HTML），与身份相关的状态由浏览器另行请求。时间是 ISO-8601 字符串，图片字段是可直接使用的 `/img` 地址，并带原图宽高。
 
 | 函数 | 用途 | 主要参数 |
 |---|---|---|
-| `homeFn` | 首页：最新、置顶、精选合集与统计 | — |
-| `packsFn` | 表情包目录 | `character`、`artist`、`kind`、`source`、`group`、`tag`（`<维度>:<slug>`）、`sort`（`hot`、`new`、`fav`、`random`）、`seed`、`cursor`、`limit`（默认 24） |
-| `packDetailFn` | 包详情 `/packs/:slug` | `slug` |
-| `emojiPermalinkFn` | 单张表情 `/e/:emojiId` | `emojiId` |
-| `charactersFn`、`characterDetailFn` | 角色列表与角色页（包或全部表情两个标签） | `sort`、`tab`、`type`、`cursor` |
+| `homeFn` | 首页 | — |
+| `packsFn`、`packsPageFn` | 表情包目录；`packsPageFn` 是首屏，另带筛选项 | `character`、`groupOf`（合集包）、`artist`、`kind`、`source`、`group`、`tag`（`<维度>:<slug>`）、`sort`（`hot`、`new`、`fav`、`random`）、`seed`、`cursor`、`limit`（默认 24） |
+| `packDetailFn` | 包详情；未知 slug 时查旧地址 | `slug` |
+| `emojiPermalinkFn`、`emojiPageFn` | 单张表情所在的包与位置；`emojiPageFn` 同时返回整个包 | `emojiId` |
+| `charactersFn`、`characterDetailFn` | 角色图鉴与角色页 | `sort`、`tab`（`packs`、`emojis`、`groups`）、`type`、`cursor` |
 | `artistsFn`、`artistDetailFn` | 画师列表与画师页 | `slug`、`sort`、`cursor` |
-| `galleryFn` | 跨包表情流（潮汐画廊） | `sort`（`new`、`random`）、`character`、`type`、`limit`（默认 48） |
-| `exploreFn` | 探索页：随机一个包和一张表情、按当天日期固定的今日推荐、筛选项列表 | — |
-| `searchFn`、`suggestFn` | 搜索结果与输入联想 | `q`、`limit` |
+| `galleryFn` | 潮汐画廊 | `sort`（`new`、`random`）、`character`、`type`、`limit`（默认 48） |
+| `exploreFn` | 探索页 | — |
+| `searchFn`、`suggestFn` | 搜索结果与命令面板联想 | `q`、`limit` |
+| `batchItemsFn` | 打包清单里各 ID 的缩略图、大小和所属包（POST，一次最多 500 个） | `ids` |
 
-已经确定的规则：
-
-- **返回值与身份无关**：同一个对象会渲染进可共享缓存的匿名 HTML，所以不含「是否已收藏」这类字段；与身份相关的状态由浏览器另行请求。只出现已发布包里的已发布表情；角色、画师、标签和合集只在有已发布内容时出现。时间是 ISO-8601 字符串，图片字段是可直接使用的 `/img` 地址，并带原图宽高，供瀑布流预留空间。
 - **分页**：游标分页（keyset），每种排序最后都按 ID 排，顺序稳定；游标不透明，格式错误时返回 400。`random` 排序按种子对 ID 做哈希，种子放在游标里，翻页不重复，也可以放进可分享的 URL。`hot` 按下载量，`fav` 按收藏数，`new` 按发布时间。
-- **缓存**：首页、角色、画师、筛选项和联想索引在进程内缓存 30 秒；后台写操作会清空这份缓存。
-- **旧链接**：`resolveLegacyPath`（`legacy.ts`）先查 `redirects` 表（最多跟随 5 跳，目标必须公开），再用内置规则：`/archives/:postName` → `/packs/:slug`；`/tags/:slug` → 角色页、画师页或按标签筛选的目录；改名后的角色、画师和包的旧 slug → 新地址。包、角色和画师的详情查询遇到未知 slug 时已经调用它；对任意旧路径统一返回 301 的路由尚未接入。
-- **单张表情**：`/e/:emojiId` 是单张表情的分享链接，服务端渲染所属包的页面并打开单张弹窗；关闭弹窗时用 `history.pushState` 回到 `/packs/:slug`，浏览器后退可关闭弹窗。弹窗按贴纸原尺寸（约 300 px）显示，不铺满屏幕；手机上是底部面板，高度不超过屏幕的 72%。
-- **筛选**：目录页用顶部筛选条和按内容定高的下拉面板，不用带边框、内部滚动的侧栏。页面内的滚动区域隐藏滚动条，只有页面本身保留细滚动条。
-- **打包清单**：清单存在浏览器里，登录后同步到账号（`batch_lists`）。浏览器边打包边调用 `POST /api/batch/sign`（第 6.1 节），每 200 张一个压缩包，每个压缩包附带 `CREDITS.txt`。微信、QQ 内置浏览器无法下载压缩包，检测到时提示「在浏览器打开」。
-- **其他**：动效只用 CSS 与 Web Animations API，页面切换用原生 View Transitions，`prefers-reduced-motion` 时关闭；剪贴板只能写入 PNG，复制动图时提示改用「保存原图」。
-- **性能预算**（目标值，公开页上线后实测）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。
+- **进程内缓存**：首页、角色、画师、筛选项和联想索引缓存 30 秒；后台写操作清空这份缓存。
+
+**单张弹窗**（`src/ui/pages/EmojiDialog.tsx`、`useEmojiParam.ts`）：
+
+- 在包详情、首页潮汐流、潮汐画廊、角色「全部表情」、探索和搜索里，打开的贴纸记在当前地址的 `?e=<id>`，地址栏用路由遮罩显示为 `/e/<id>`。打开时推入一条历史记录，后退即关闭；←/→ 替换这条记录；刷新时加载 `/e/<id>` 本身。
+- `/e/<id>` 由服务端渲染，弹窗和图片请求都在 HTML 里；关闭后回到 `/packs/<slug>`。
+- 弹窗是贴纸大小（300 px）的卡片，不是全屏查看器；手机上是底部面板，高度不超过视口的 72%。焦点限制在弹窗内，Esc 关闭。
+- 弹窗下方有收起的「这张表情的评论」，评论区是这张表情自己的（`thread_type = emoji`）；`/e/<id>#comments` 或 `#c-<n>` 直接展开。
+
+**旧站地址**（`src/routes/archives/$.tsx`、`src/routes/tags/$.tsx`、`src/server/catalog/legacy-route.ts`）：两个服务端路由用 `resolveLegacyPath` 查目标。查到时按 `redirects.code` 返回重定向（导入写入的都是 301），缓存头 `public, max-age=86400`；查不到时交给页面路由，渲染 404 页。`resolveLegacyPath` 先查 `redirects` 表（最多跟随 5 跳，目标必须公开），再用内置规则：`/archives/:postName` → `/packs/:slug`；`/tags/:slug` → 角色页、画师页或按标签筛选的目录。导入时 `import-v1` 读取 `meta/v1/tags.json`，为 v1 的标签页写入重定向：分组、工具、企划、原设四类标签指向按该标签筛选的目录，角色、画师标签指向对应页面，其余指向 `/search?q=<名称>`；已经规划好的包和角色地址不会被覆盖。
+
+**下载按钮**（`src/ui/pages/download.ts`）：请求 `/dl/e` 和 `/dl/p` 时总带 `Accept: application/json`，拿到预签名链接而不跟随跨域 302。保存原图和整包 ZIP 直接跳转到链接（链接带 `attachment`，浏览器下载后留在原页）；查看原图把链接放进 `<img>`。428 时在后台求解一次人机验证，带 `&cap=<令牌>` 重发；202（ZIP 生成中）时按 `Retry-After`（至少 2 秒）用 `?poll=1` 轮询，最多 3 分钟，就绪后再请求签名。微信、QQ 内置浏览器下载整包 ZIP 时提示在浏览器打开。
+
+**打包清单**（`src/ui/batch/`）：
+
+- 清单只存在这个浏览器里：`localStorage` 的 `tp-batch-v1`，按加入顺序保存表情 ID，最多 2000 个，多个标签页同步；不同步到账号，`batch_lists` 表尚未使用。服务端渲染时清单为空，由浏览器填入，匿名 HTML 与访客无关。
+- 入口：页头「打包」按钮（手机另有按钮）打开托盘，托盘是页头下方按内容定高的面板（手机为底部面板），首次打开时才加载；按包分组，可移除、清空、下载。`/batch` 是同一份清单的整页版本，另有摘要和 `CREDITS.txt` 说明。包详情的选择栏有「打包所选」。
+- 只提供预览的包（「允许下载」关闭）不能加入，界面说明原因；清单里已有的这类贴纸单独列出，从不签名。
+- 打包在浏览器里完成（`runner.ts`，client-zip）：每个 ZIP 最多 200 张；轮到时才签一批 20 张（`POST /api/batch/sign`），再直接从存储取原图（不带自定义头的简单 CORS 请求），流式写入 ZIP，最后加上 `CREDITS.txt`（内容来自签名响应里的署名块）。需要多个 ZIP 时，每个后续 ZIP 等访客点击再开始。文件名为 `<站点名>-<张数>-stickers.zip`，多个时加 `-part<k>`。
+- 签名应答的处理：428 时在后台求解一次人机验证后重发；分钟限速时按 `retryAfter` 等待再试，几次后放弃；`volume_full`（达到「单次打包张数上限」）时其余贴纸转入下一个 ZIP；每日限额、暂停、封禁和「仅限登录」时停止，用已取到的文件完成 ZIP。过程显示进度，可以取消。
+- 微信、QQ 内置浏览器无法下载压缩包，检测到时提示在浏览器打开。
 
 ### 8.4 客户端包检查
 
 `bun run build` 的最后一步是 `scripts/check-client-bundle.ts`：在 `.output/public` 的脚本里查找服务端才有的标记（`pg-boss`、`DATABASE_URL`、`IP_HASH_SALT`、`S3_SECRET_ACCESS_KEY`、`CAP_SECRET_KEY`），找到就让构建失败。起因是 `src/start.ts` 静态引入了关闭数据库连接的模块，把 pg 和 pg-boss 带进了浏览器包，页面在水合前就报错。改为只在 SSR 分支动态引入后，客户端入口包从约 870 KB 降到约 250 KB。
+
+### 8.5 性能
+
+<!-- 待补：性能 -->
+
+性能预算（目标值，尚未在公开页上实测）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。
 
 ---
 
@@ -454,7 +523,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 评论（`src/server/comments/`）：
 
-- **评论区**：挂在表情包或单张表情上。包的评论区 ID 是 `String(pack.id)`，不用会改名的 slug；表情的评论区 ID 是表情 ID。评论区必须公开才能评论。
+- **评论区**：挂在表情包或单张表情上。包的评论区 ID 是 `String(pack.id)`，不用会改名的 slug；表情的评论区 ID 是表情 ID。评论区必须公开才能评论。包详情的评论整宽排在贴纸网格下方；单张贴纸的评论在弹窗里展开（第 8.3 节）。
 - **结构**：楼中楼（`root_id`、`parent_id`），每楼先显示 3 条回复，其余点「展开」；每页 20 楼。三种排序：最热（回应数 + 2 × 可见回复数，同分时新的在前，默认）、最新、最早。
 - **正文**：最多 1000 字。markdown-it：`html: false`（原始 HTML 被转义），自动识别链接，换行保留；图片、标题、表格、分隔线、引用式链接和缩进代码都关闭。链接先过 markdown-it 默认的 `validateLink`，再只放行 `http:`、`https:`、`mailto:` 和站内相对地址，被拒的链接显示为文字；每个链接加 `rel="nofollow ugc noopener"` 和 `target="_blank"`。渲染只在服务端，结果按（评论 ID，编辑时间）放进进程内的 LRU 缓存（4000 条）。
 - **贴纸**：正文写作 `:s[r-0a7bf47f0ec26d3843bf]`，解析为行内标记（写在代码里的不算）。每条最多 6 张；表情和包都已发布、衍生图已生成才能用；显示为 `p240`。渲染时先输出占位，读取时再换成图片，所以贴纸后来被隐藏时评论里随之消失，缓存不会过期失效。贴纸可以在审核规则里整体关闭。
@@ -466,7 +535,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
   2. 是否允许游客评论、是否被禁止评论。
   3. 昵称（游客）、正文、贴纸、评论区与回复对象。
   4. 审核判定：首次评论（开启「首评审核」时；登录用户按账号，游客按 IP 哈希）、2 个以上链接（含裸域名和邮箱）、命中屏蔽词（正文或游客昵称；NFKC 归一化、不区分大小写，`*` 匹配至多 20 个字符，也检查去掉空白后的文本）、新用户（游客或注册不满 24 小时）在热帖（最近一小时 20 条以上）里评论。命中任意一条进入审核队列，不静默丢弃。拥有 `comments` 权限的站长和管理员从不进审核。
-  5. 游客必须通过 Cap 验证。令牌只能用一次，所以放在所有可能拒绝的检查之后、任何写入之前。
+  5. 游客必须通过 Cap 验证。令牌只能用一次，所以放在所有可能拒绝的检查之后、任何写入之前。游客开始输入后，浏览器在后台求解；点「发布」时未完成就等待，失败时提示并可重试，失败或超时时不发送任何内容。
   6. 限流：按 IP 哈希和账号，每分钟 5 条、每天 50 条；回应每分钟 30 次，举报每小时 10 次，预览每分钟 30 次，编辑每分钟 10 次。窗口存在 `rate_windows`，按窗口结束时间作键，所以一天的窗口不会被每天的清理提前清掉。
 - **审核后台**（`/admin/comments`）：按状态分标签的队列，通过、标为垃圾、删除、恢复，可批量；审核规则（游客评论、贴纸、首评审核、编辑窗口、屏蔽词、举报阈值、回应贴纸）；禁止某账号评论。每个操作写审计日志。
 - **通知**：回复别人的评论时，被回复的人收到带链接的通知；个人中心有「我的评论」。
@@ -488,15 +557,16 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 账号：
 
-- Better Auth 1.7.11，只启用邮箱密码（8–128 位）。配置了 `SMTP_URL` 与 `MAIL_FROM` 时，注册后发送验证邮件、未验证不能登录；没有配置时不要求验证，开发环境把邮件内容写进日志。重置密码邮件里的链接 1 小时内有效。
+- Better Auth 1.7.11，只启用邮箱密码（8–128 位）。配置了 `SMTP_URL` 与 `MAIL_FROM` 时，注册后发送验证邮件、未验证不能登录；没有配置时不要求验证，开发环境把邮件内容写进日志。生产的邮件经邮件服务商的 SMTP 从服务器发出，凭据只在服务器的环境文件里。
+- 验证邮件和重置密码邮件里的链接都是 1 小时内有效，邮件正文写明有效期（`src/server/auth/policy.ts`）。重置密码后，该账号在所有设备上的会话都失效（`revokeSessionsOnPasswordReset`）。
 - 会话 30 天，每天刷新一次。Drizzle 适配器使用复数表名；`tanstackStartCookies()` 放在插件列表最后。
-- Better Auth 自带限流存在数据库里：默认每分钟 120 次；登录每分钟 10 次，注册每小时 10 次，申请重置密码每小时 5 次。
+- Better Auth 自带限流存在数据库里，按 IP 计：默认每分钟 120 次；登录每分钟 10 次，注册每小时 10 次，申请重置密码每小时 5 次，重发验证邮件每 10 分钟 3 次（`AUTH_RATE_RULES`）。
 
 人机验证：
 
 - 自托管 Cap Standalone。端点 `CAP_API_ENDPOINT`（路径里含站点键）与站点键 `CAP_SITE_KEY` 是公开配置，端点由根路由下发给浏览器；`CAP_SECRET_KEY` 只在服务器上，生产环境缺少它时配置校验报错（`src/server/env.ts`）。
-- 浏览器在 Cap 服务器上完成工作量证明，把得到的令牌放在 `x-cap-token` 头里随请求发送。服务端用密钥调用 `<CAP_API_ENDPOINT>siteverify`（5 秒超时）校验，令牌只能用一次。
-- 校验位置：Better Auth 的 before 钩子保护 `CAP_PROTECTED_PATHS` 中的注册、登录、申请重置密码、发送验证邮件四个接口；游客评论；被挑战的下载（第 6.2 节）。
+- 浏览器在后台向 Cap 服务器完成工作量证明，不显示组件（第 8.1 节），把得到的令牌放在 `x-cap-token` 头里随请求发送。服务端用密钥调用 `<CAP_API_ENDPOINT>siteverify`（5 秒超时）校验，令牌只能用一次。
+- 校验位置：Better Auth 的 before 钩子保护 `CAP_PROTECTED_PATHS` 中的注册、登录、申请重置密码三个接口；游客评论；被挑战的下载（第 6.2 节）。重发验证邮件（`/send-verification-email`）不需要令牌：Better Auth 只给已存在且未验证的账号发信，这个接口另有每个 IP 每 10 分钟 3 次的限制，页面上还有 60 秒的冷却。
 - 任何错误都按失败处理：没有令牌或令牌无效返回 400（下载返回 428），Cap 服务不可用时账号接口和评论返回 503。
 - Cap 服务器上的 `CORS_ORIGIN` 只设为站点源（`deploy/README.md`）。`CAP_DISABLED=1` 只在非生产环境跳过校验，生产环境设置它时配置校验报错。
 
@@ -505,7 +575,8 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - 客户端 IP 取 `cf-connecting-ip`（Better Auth 的 `advanced.ipAddress.ipAddressHeaders` 和 `src/server/http/client.ts`），不读 `X-Forwarded-For`。可信的前提见第 2 节。
 - 自定义的 `src/start.ts` 会替换 Start 默认的 CSRF 中间件，所以手动加回 `createCsrfMiddleware()`，范围是服务端函数；服务端路由不在其内，`POST /api/batch/sign` 自己检查来源。Better Auth 的 `trustedOrigins` 只有 `SITE_URL`。
 - 每个响应都带安全头：`Content-Security-Policy`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy`（关闭摄像头、麦克风、定位），生产环境另加 `Strict-Transport-Security: max-age=31536000`。
-- CSP 要点：`default-src 'self'`；`script-src` 含 `'unsafe-inline'`（Start 输出内联的水合脚本，nonce 尚未接入）和 `'wasm-unsafe-eval'`（Cap 编译 WASM）；`worker-src`、`child-src` 含 `blob:`（Cap 的求解线程）；`img-src` 与 `connect-src` 含存储源（查看原图是 302 到预签名链接），`connect-src` 另含 Cap 源；`frame-ancestors 'none'`、`object-src 'none'`。
+- CSP 要点：`default-src 'self'`；`script-src` 含 `'unsafe-inline'`（Start 输出内联的水合脚本和主题启动脚本，nonce 尚未接入）、`'unsafe-eval'` 和 `'wasm-unsafe-eval'`（Cap 编译 WASM）；`worker-src`、`child-src` 含 `blob:`（Cap 的求解线程）；`img-src` 与 `connect-src` 含存储源（查看原图是 302 到预签名链接），`connect-src` 另含 Cap 源；`frame-ancestors 'none'`、`object-src 'none'`。
+- `'unsafe-eval'` 的原因：Cap 的检测脚本运行在一个沙箱化的 `srcdoc` iframe 里，要用 eval 执行代码。srcdoc 框架继承页面的 CSP，没有 `'unsafe-eval'` 时浏览器拦下 eval，组件一直等到「Instrumentation timeout」，停在「验证中」，生产上注册因此无法完成。这个指令无法只对该框架生效，所以加在整页的 `script-src` 上（`src/server/http/security.ts`）。
 
 数据与密钥：
 
@@ -528,14 +599,14 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 | UI | `react` / `react-dom` | 19.3.1 | |
 | 无样式组件 | `@base-ui/react` | 1.9.0 | 外观按设计令牌自建 |
 | 数据获取 | `@tanstack/react-query` | 5.104.5 | 首屏由路由 loader 直出 |
-| 虚拟列表 | `@tanstack/react-virtual` | 3.14.21 | `lanes` 实现瀑布流 |
+| 虚拟列表 | `@tanstack/react-virtual` | 3.14.21 | 仍在依赖里，当前代码不再使用：瀑布流改为服务端算好的布局（第 8.1 节） |
 | 认证 | `better-auth` | 1.7.11 | 内置 Drizzle 适配器与 admin 插件 |
 | ORM | `drizzle-orm` / `drizzle-kit` / `pg` | 0.45.4 / 0.31.11 / 8.23.1 | |
 | 数据库 | PostgreSQL | 18（`postgres:18-bookworm`） | `pg_trgm`；镜像内带 `postgresql-client-18` 供备份 |
 | 任务队列 | `pg-boss` | 12.38.0 | 定时任务按 Asia/Shanghai；独占与单例队列 |
 | 图片 | `sharp` | 0.35.5 | 只在 worker 与命令行中运行 |
 | 对象存储 | `@aws-sdk/client-s3`、`lib-storage`、`s3-request-presigner` | 3.1153.0 | R2 S3 端点，region `auto` |
-| 打包 | `archiver` | 8.0.0 | 服务端整包 ZIP，存储模式 |
+| 打包 | `archiver` / `client-zip` | 8.0.0 / 2.5.1 | 服务端整包 ZIP（存储模式）/ 浏览器端打包清单 ZIP |
 | 人机验证 | `@cap.js/widget` / `@cap.js/wasm` | 0.1.58 / 0.0.8 | 服务端只调用 Cap Standalone 的 HTTP 接口 |
 | 邮件 | `nodemailer` | 10.1.7 | SMTP |
 | 入口 | Caddy | 2.11.7（`caddy:2.11.7-alpine`） | TLS 终止与两副本负载均衡 |
@@ -568,7 +639,7 @@ deploy/         Caddy、防火墙、发布与环境脚本
 
 一个镜像、四个入口，都直接用 Bun 运行：web 为 `bun .output/server/index.mjs`（Nitro 构建产物），worker、migrate、命令行分别是 `bun src/worker.ts`、`bun src/migrate.ts`、`bun src/cli.ts`，从 TypeScript 源码运行，不另外打包。
 
-命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
+命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`、`import-portraits <manifest.json | -> [--dry-run] [--no-colors]`、`derive-colors [--dry-run]`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
 
 镜像 `ghcr.io/yuri-nagasaki/wuwa-emotes` 由 CI 构建（第 12.3 节），`Dockerfile` 多阶段构建：安装全部依赖并 `bun run build`；另装只含生产依赖的 `node_modules` 并删掉 musl 版本的原生包（基础镜像是 glibc，这些包永远加载不了）；运行层从 PGDG 安装 `postgresql-client-18`（`pg_dump`）和 `tini`，复制 `.output/`、`src/`、`drizzle/`，以 `bun` 用户运行，`tini` 作为 PID 1 转发信号。
 
@@ -694,7 +765,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 
 ## 13. 测试与检查
 
-`bun run test` 依次运行十组测试：unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 CI 的 `check` 作业运行 822 个测试，全部通过。除 unit、ui、pages 外，各组都连本地（CI 中为服务容器）的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
+`bun run test` 依次运行十组测试：unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 CI 的 `check` 作业在 cd1a907 上运行 822 个测试，全部通过。除 unit、ui、pages 外，各组都连本地（CI 中为服务容器）的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
 
 其他检查：
 
@@ -721,7 +792,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | D2 | 单桶 `wuwa`；网页图片经 `/img` 由 CDN 缓存；原图与 ZIP 用预签名链接 | 用户要求只用一个桶；对象小、键不可变，CDN 能承担 |
 | D3 | Base UI + 自建组件；animal-island-ui 只用令牌 | 它的样式和组件有体积与兼容问题 |
 | D4 | Drizzle 0.45.4 | 与 Better Auth 的 Drizzle 适配器兼容 |
-| D5 | 打包在浏览器端完成，不需要登录，分批签名，每批最多 20 张 | 不占服务器带宽；分批签名让 2 分钟有效期不会中途过期 |
+| D5 | 打包在浏览器端完成（client-zip），不需要登录；清单只存在浏览器里；每批签名 20 张，每 200 张一个 ZIP | 不占服务器带宽；分批签名让 2 分钟有效期不会中途过期 |
 | D6 | 搜索用 pg_trgm | 中文子串检索可用，不需要额外服务 |
 | D7 | 一个镜像、四个入口（web、worker、migrate、cli） | 部署简单，版本一致 |
 | D8 | 不引入 Redis | 队列、计数、会话和人机验证通过状态都放在 PostgreSQL，两个副本共享 |
@@ -740,6 +811,11 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | D21 | 用户投稿只能经「投稿审核」上线 | 只有审核会应用授权声明与「允许下载」 |
 | D22 | 仓库公开，地址与密钥不进仓库 | 由 `.gitignore`、`.dockerignore`、不进仓库的部署主机文件、CI 的 gitleaks 扫描和 GitHub push protection 共同保证 |
 | D23 | 发布用的镜像由 CI 构建并推送到公开的 GHCR 包；服务器拉取镜像、检出公开仓库，只在应急时本地构建 | 上线的镜像都通过了同一套检查；服务器不需要构建工具和 GitHub 凭据 |
+| D24 | 表情公开 = 已发布且衍生图就绪；包公开 = 至少有一张公开表情 | 页面上渲染的每个图片地址都存在 |
+| D25 | 瀑布流布局在服务端算好，由 CSS 按列宽定位 | 匿名 HTML 经 CDN 共享，服务端不知道视口；水合和图片加载都不移动布局 |
+| D26 | 贴纸的角色归属只由 `attribution.ts` 决定，整包复制的角色标签不算 | v1 在多角色包里给每张贴纸贴同一份角色列表，按它计数会让每个角色都「拥有」整包 |
+| D27 | 人机验证在后台无感求解，不显示组件 | 访客不用点击；令牌通常在提交前已经就绪 |
+| D28 | 白昼与夜潮两套配色，贴纸底板始终是浅色纸面 | 很多贴纸有深色描边或不透明的白底 |
 
 ---
 
@@ -763,7 +839,7 @@ v2 → v3（按实现，2026-10-20）：
 
 - 运行时从 Node.js 24 改为 Bun 1.4.3，Nitro 预设从 `node_server` 改为 `bun`；worker 与迁移不再用 esbuild 打包，直接运行源码。v2 为 Nitro beta 准备的回退方案（用 `srvx` 包装 fetch handler）没有用到。
 - 入口从 Cloudflare Tunnel（cloudflared 容器）改为 Cloudflare 代理 DNS + Origin CA + 源站 Caddy + nftables，web 从一个副本改为两个，新增零中断发布脚本（D19、D20）。
-- 人机验证从内嵌 `@cap.js/server`（挑战存 PostgreSQL）改为自托管的 Cap Standalone 服务器，应用只调用它的校验接口；保护范围增加发送验证邮件。
+- 人机验证从内嵌 `@cap.js/server`（挑战存 PostgreSQL）改为自托管的 Cap Standalone 服务器，应用只调用它的校验接口；保护范围与 v2 相同：注册、登录、申请重置密码、游客评论和被挑战的下载。
 - Better Auth 只启用邮箱密码；v2 计划的通行密钥与 GitHub OAuth 未实现。邮箱验证改为只在配置了 SMTP 时要求。
 - 衍生图并发从「每进程 1 个任务」改为「6 个任务、sharp 串行」；每帧都相同的动图按静态图保存；静态图的 `full` 为 WebP q80。
 - 预签名 PUT 签入 `Content-Length` 与 `Content-Type`，在 R2 上用 `presign-selftest` 验证。
@@ -772,8 +848,12 @@ v2 → v3（按实现，2026-10-20）：
 - ZIP 内容哈希升级为 v2，覆盖条目名、顺序与 `CREDITS.txt` 正文。
 - 后台「发布」不再能直接发布属于用户投稿的表情（D21）；上传保持选择顺序。
 - 评论落地了具体参数：包的评论区 ID 用 `String(pack.id)`；最热 = 回应数 + 2 × 回复数；首评审核对所有作者生效；回应与举报需要登录。
-- 原计划的里程碑 M0–M5 改为按模块分道开发；公开浏览页与打包清单界面仍在进行（第 8.3 节）。
+- 原计划的里程碑 M0–M5 改为按模块分道开发。
 - 仓库公开前移除了文档与脚本中的服务器地址和账号标识（D22）。
+- 打包清单只存在浏览器里，不再像 v2 计划的那样登录后同步到账号（`batch_lists` 未使用）；页面切换没有使用 View Transitions。
+- 公开页加入「衍生图就绪才公开」的规则（D24）、服务端算好的瀑布流（D25）、按贴纸的角色归属与合集包（D26）、官方立绘与主题色、夜潮配色（D28）；v1 标签页也写入重定向。
+- 人机验证改为后台无感求解（D27）；重发验证邮件不再需要人机验证，改为按 IP 限流；CSP 加入 `'unsafe-eval'`。
+- v1 来源地址不再出现在公开页面和 `CREDITS.txt` 里。
 - 发布流程从「`deploy/push-src.sh` 用 rsync 上传源码、服务器上 `rollout.sh --build`」改为「CI 推送 GHCR 镜像、`deploy/release.sh` 让服务器检出提交并拉取镜像」，`push-src.sh` 已删除，镜像名从 `chaochi/app` 改为 `ghcr.io/yuri-nagasaki/wuwa-emotes`（D23）。
 
 ## 附录 C：v2 文档中的测量与评估（本版未重新测量）
