@@ -42,10 +42,13 @@ export function storageOrigins(e: Pick<Env, 'S3_ENDPOINT' | 'S3_PUBLIC_ENDPOINT'
  * - frame-src 'self': Cap's instrumentation runs in <iframe sandbox="allow-scripts" srcdoc=…>. A srcdoc
  *   frame is not fetched, so frame-src does not apply to it; it inherits this policy, and its inline
  *   script is allowed by script-src 'unsafe-inline'.
+ * - 'unsafe-eval': that instrumentation script evaluates code inside the frame. Without it the browser
+ *   blocks the eval, the widget waits for "Instrumentation timeout" and stays at 验证中 (seen on
+ *   production). It cannot be scoped to the frame, which inherits this policy.
  * - img-src includes the storage origins: 查看原图 is a 302 to a presigned URL, which an <img> must load.
- * Checked in headless Chromium with this exact policy: inline script, blob: worker compiling WASM,
- * sandboxed srcdoc iframe posting to its parent and fetch to the Cap origin work; eval and fetch to
- * other origins are blocked.
+ * Checked in headless Chromium against the production Cap instance: inline script, blob: worker
+ * compiling WASM, the instrumentation frame and fetch to the Cap origin work; fetch to other origins is
+ * blocked.
  */
 export function buildCsp(cfg: SecurityConfig): string {
   const storage = cfg.storageOrigins.join(' ')
@@ -54,7 +57,7 @@ export function buildCsp(cfg: SecurityConfig): string {
   if (!cfg.production) connect.push('ws:', 'wss:')
   const directives: [string, string][] = [
     ['default-src', "'self'"],
-    ['script-src', "'self' 'unsafe-inline' 'wasm-unsafe-eval'"],
+    ['script-src', "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"],
     ['style-src', "'self' 'unsafe-inline'"],
     ['img-src', `'self' data: blob: ${storage}`],
     ['font-src', "'self'"],

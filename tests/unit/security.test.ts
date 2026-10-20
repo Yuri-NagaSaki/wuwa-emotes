@@ -45,7 +45,7 @@ describe('CSP', () => {
   test('required directives', () => {
     const d = directives(buildCsp(prodCfg))
     expect(d.get('default-src')).toEqual(["'self'"])
-    expect(d.get('script-src')).toEqual(["'self'", "'unsafe-inline'", "'wasm-unsafe-eval'"])
+    expect(d.get('script-src')).toEqual(["'self'", "'unsafe-inline'", "'unsafe-eval'", "'wasm-unsafe-eval'"])
     expect(d.get('style-src')).toEqual(["'self'", "'unsafe-inline'"])
     expect(d.get('img-src')).toEqual(expect.arrayContaining(["'self'", 'data:', 'blob:']))
     expect(d.get('font-src')).toEqual(["'self'"])
@@ -59,10 +59,10 @@ describe('CSP', () => {
     expect(d.get('form-action')).toEqual(["'self'"])
   })
 
-  test("no nonce or hash next to 'unsafe-inline' (browsers would ignore it), no 'unsafe-eval'", () => {
+  test("no nonce or hash next to 'unsafe-inline' (browsers would ignore it)", () => {
     for (const cfg of [devCfg, prodCfg]) {
       const csp = buildCsp(cfg)
-      expect(csp).not.toMatch(/'nonce-|'sha(256|384|512)-|'unsafe-eval'|'strict-dynamic'/)
+      expect(csp).not.toMatch(/'nonce-|'sha(256|384|512)-|'strict-dynamic'/)
     }
   })
 
