@@ -78,16 +78,10 @@ export const CONFLICT_MESSAGE = '这个包在你提交后被修改过，请重�
 export const RETURN_TEMPLATES: readonly string[] = ['缺少画师授权说明', '与已有包重复', '与鸣潮无关', '标题或角色不规范', CONFLICT_MESSAGE]
 
 /**
- * What a submission proposes. SubmissionPayload plus two keys this lane needs (jsonb, no migration):
- * - artistNames: artists typed by the submitter that are not in the catalog yet; matched by name or
- *   alias, or created, when the submission is approved
- * - official: new_pack only, 官方表情（官转）; such packs are never downloadable
+ * What a submission proposes (SubmissionPayload, jsonb). artistNames and official are described there.
  * addEmojiIds is server-managed: the submission's own pending emojis in display order.
  */
-export interface ProposedPayload extends SubmissionPayload {
-  artistNames?: string[]
-  official?: boolean
-}
+export type ProposedPayload = SubmissionPayload
 
 export const TEXT_LIMITS = { title: 60, excerpt: 140, description: 4000, artist: 40, commissioner: 40, note: 1000, proofUrl: 500, reason: 500 }
 
