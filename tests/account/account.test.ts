@@ -193,6 +193,14 @@ describe('注销账号', () => {
     expect(rows.map((r) => r.action)).toContain('account.delete')
   })
 
+  test('favorite counters of the packs follow the deleted favorites', async () => {
+    const u = await person('fav-leaver')
+    await toggleFavorite(u.id, { type: 'pack', id: String(packId) })
+    const before = (await packRow()).favoriteCount
+    await deleteAccount(u.actor, u.password)
+    expect((await packRow()).favoriteCount).toBe(before - 1)
+  })
+
   test('the last 站长 cannot leave', async () => {
     // nobody else in this database is 站长
     const boss = await person('boss', 'admin')

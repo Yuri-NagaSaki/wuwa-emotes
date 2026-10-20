@@ -1,4 +1,4 @@
-import { and, count, eq, ne } from 'drizzle-orm'
+import { and, count, eq, ne, sql } from 'drizzle-orm'
 import type { Role } from '#/shared/roles'
 import { audit } from '../audit'
 import { auth } from '../auth/auth'
@@ -85,7 +85,13 @@ export async function deleteAccount(viewer: Pick<Viewer, 'id' | 'role' | 'impers
     .where(and(eq(submissions.submitterId, viewer.id), ne(submissions.status, 'approved')))
   for (const sub of open) await purgeSubmission(sub)
   try {
-    await d.delete(users).where(eq(users.id, viewer.id))
+    await d.transaction(async (tx) => {
+      // favorites cascade with the user; the pack counters must follow (plain SQL: updated_at untouched)
+      await tx.execute(sql`
+        UPDATE packs SET favorite_count = GREATEST(favorite_count - 1, 0)
+        WHERE id IN (SELECT DISTINCT target_id::int FROM favorites WHERE user_id = ${viewer.id} AND target_type = 'pack')`)
+      await tx.delete(users).where(eq(users.id, viewer.id))
+    })
   } catch (err) {
     // the keep_last_admin trigger (a concurrent demotion) or another constraint; drizzle keeps the
     // PostgreSQL error as the cause

@@ -622,8 +622,13 @@ export async function submitSubmission(actor: Actor, id: string, deps: Submissio
     return sub.declaration
   })
   if (mode === 'trusted') {
-    const r = await approveSubmission(actor, id, { downloadable: Boolean(declared?.downloadable) }, deps, { auto: true })
-    return { status: 'approved', packId: r.packId, slug: r.slug }
+    try {
+      const r = await approveSubmission(actor, id, { downloadable: Boolean(declared?.downloadable) }, deps, { auto: true })
+      return { status: 'approved', packId: r.packId, slug: r.slug }
+    } catch (err) {
+      // e.g. the pack moved since the base version: it stays pending for a reviewer
+      log().warn({ err: (err as Error).message, submissionId: id }, 'submit: trusted auto-approval failed; left pending')
+    }
   }
   return { status: 'pending' }
 }

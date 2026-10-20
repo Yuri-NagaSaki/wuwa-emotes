@@ -362,6 +362,15 @@ describe('submit modes', () => {
     expect(rows.map((a) => a.action)).toEqual(expect.arrayContaining(['submission.submit', 'submission.approve']))
     expect(rows.find((a) => a.action === 'submission.approve')).toMatchObject({ actorId: u.id, actorRole: 'user' })
     expect(rows.find((a) => a.action === 'submission.approve')!.diff).toMatchObject({ auto: true, official: true, downloadable: false })
+
+    // when the automatic approval cannot apply (the pack moved), the submission waits for a reviewer
+    const slug = pack!.slug
+    const add = (await createSubmission(u.actor, { kind: 'add_emojis', packSlug: slug, declaration })).id
+    await upload(u.actor, add, [{ name: 't2.png', body: await makePng(50, 50, 10), type: 'image/png' }])
+    await db().update(schema.packs).set({ excerpt: '改过' }).where(eq(schema.packs.id, pack!.id))
+    expect(await submitSubmission(u.actor, add, deps)).toEqual({ status: 'pending' })
+    const [left] = await db().select().from(schema.submissions).where(eq(schema.submissions.id, add))
+    expect(left!.status).toBe('pending')
   })
 })
 
