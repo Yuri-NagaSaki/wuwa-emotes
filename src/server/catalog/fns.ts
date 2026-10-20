@@ -3,7 +3,7 @@ import { HttpError, publicFn } from '../perm/fn'
 import { getArtistDetail, listArtists } from './artists'
 import { getCharacterDetail, listCharacters } from './characters'
 import { CatalogInputError } from './cursor'
-import { getExplore } from './explore'
+import { getExplore, getPackFacets } from './explore'
 import { getHome } from './home'
 import {
   artistDetailInput,
@@ -20,6 +20,7 @@ import { getEmojiPermalink, getPackDetail } from './pack'
 import { listPacks } from './packs'
 import { searchCatalog, suggestCatalog } from './search'
 import { getGallery } from './stream'
+import type { EmojiPageData, PacksPageData } from './types'
 
 // Public catalog server functions (GET, publicFn). Thin wrappers: the queries live next to this file
 // and are what tests call. Results are viewer independent (see types.ts); a malformed cursor is a 400.
@@ -43,6 +44,17 @@ export const packsFn = createServerFn({ method: 'GET' })
   .validator(listPacksInput)
   .handler(({ data }) => guard(() => listPacks(data)))
 
+/** /packs first render: one page of cards plus the filter facets. */
+export const packsPageFn = createServerFn({ method: 'GET' })
+  .middleware([publicFn])
+  .validator(listPacksInput)
+  .handler(({ data }) =>
+    guard(async (): Promise<PacksPageData> => {
+      const [page, facets] = await Promise.all([listPacks(data), getPackFacets()])
+      return { page, facets }
+    }),
+  )
+
 export const packDetailFn = createServerFn({ method: 'GET' })
   .middleware([publicFn])
   .validator(packSlugInput)
@@ -52,6 +64,17 @@ export const emojiPermalinkFn = createServerFn({ method: 'GET' })
   .middleware([publicFn])
   .validator(emojiIdInput)
   .handler(({ data }) => getEmojiPermalink(data.emojiId))
+
+/** /e/:emojiId: the permalink and the pack page it opens on; null when the emoji is not public. */
+export const emojiPageFn = createServerFn({ method: 'GET' })
+  .middleware([publicFn])
+  .validator(emojiIdInput)
+  .handler(async ({ data }): Promise<EmojiPageData | null> => {
+    const link = await getEmojiPermalink(data.emojiId)
+    if (!link) return null
+    const r = await getPackDetail(link.packSlug)
+    return r.kind === 'pack' ? { link, pack: r.pack } : null
+  })
 
 export const charactersFn = createServerFn({ method: 'GET' })
   .middleware([publicFn])

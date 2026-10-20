@@ -2,10 +2,10 @@ import { type SQL, sql } from 'drizzle-orm'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { listPacksInput, type ListPacksInput, TAG_FILTER_RE } from './inputs'
-import { type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, PUB_AT, rows, seededHash } from './sql'
+import { type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, packVisible, PUB_AT, rows, seededHash } from './sql'
 import type { PackCard, PackKind, PackSort, Page, SourceKind, TagDimension } from './types'
 
-// /packs 目录: keyset pagination over published packs. Every order ends in the pack id, so it is
+// /packs 目录: keyset pagination over public packs (sql.ts). Every order ends in the pack id, so it is
 // total and stable; random orders by a seeded hash of the id, and the seed travels in the cursor so
 // pages never repeat.
 
@@ -68,7 +68,7 @@ export interface PackPageOptions {
   limit: number
 }
 
-/** One page of published pack cards: a single statement (keyset page + card aggregation). */
+/** One page of public pack cards: a single statement (keyset page + card aggregation). */
 export async function packPage(filters: PackFilters, opts: PackPageOptions): Promise<Page<PackCard>> {
   const scope = `packs:${opts.sort}`
   // the key column layout does not depend on the seed value, so decode first, then build with the seed
@@ -77,7 +77,7 @@ export async function packPage(filters: PackFilters, opts: PackPageOptions): Pro
   const seed = opts.sort === 'random' ? (cur?.seed ?? opts.seed ?? newSeed()) : ''
   const cols = packKeyCols(opts.sort, seed)
 
-  const where = [sql`p.status = 'published'`, ...filterSql(filters)]
+  const where = [packVisible('p'), ...filterSql(filters)]
   if (cur) where.push(keysetAfter(cols, cur.keys))
   const order = orderBySql(cols)
   const source = sql`

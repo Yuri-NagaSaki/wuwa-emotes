@@ -2,7 +2,7 @@ import { type SQL, sql } from 'drizzle-orm'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { type RawImage, toEmojiImage } from './images'
 import { galleryInput, type GalleryInput } from './inputs'
-import { type KeyCol, keysetAfter, keyTextSql, keyValues, num, orderBySql, PUB_AT, rows, seededHash } from './sql'
+import { emojiVisible, type KeyCol, keysetAfter, keyTextSql, keyValues, num, orderBySql, packPublished, PUB_AT, rows, seededHash } from './sql'
 import type { EmojiTile, EmojiType, Page, StreamSort } from './types'
 
 // Cross-pack emoji streams: 潮汐画廊 and the 「全部表情」 tab of a character page.
@@ -80,7 +80,7 @@ export async function emojiPage(filters: StreamFilters, opts: StreamOptions): Pr
   const seed = opts.sort === 'random' ? (cur?.seed ?? opts.seed ?? newSeed()) : ''
   const cols = streamKeyCols(opts.sort, seed)
 
-  const where = [sql`e.status = 'published'`, sql`p.status = 'published'`, ...filterSql(filters)]
+  const where = [emojiVisible('e'), packPublished('p'), ...filterSql(filters)]
   if (cur) where.push(keysetAfter(cols, cur.keys))
   const list = await rows<TileRow>(sql`
     select ${TILE_COLUMNS}, ${keyTextSql(cols)}
@@ -99,7 +99,7 @@ export async function emojiPage(filters: StreamFilters, opts: StreamOptions): Pr
   }
 }
 
-/** 潮汐画廊: every published emoji, newest packs first or in a seeded random order. */
+/** 潮汐画廊: every public emoji, newest packs first or in a seeded random order. */
 export async function getGallery(input: GalleryInput = {}): Promise<Page<EmojiTile>> {
   const i = galleryInput.parse(input)
   return emojiPage({ character: i.character, type: i.type }, { sort: i.sort, seed: i.seed, cursor: i.cursor, limit: i.limit })

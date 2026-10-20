@@ -3,7 +3,7 @@ import { packArtistsJson, packCharactersJson, type RawCharacter, splitArtists, t
 import { type RawImage, toEmojiImage, toEmojiImageOrNull } from './images'
 import { emojiIdInput, packSlugInput } from './inputs'
 import { resolveLegacyPath } from './legacy'
-import { coverJson, emojiOrder, iso, num, PUB_AT, rows } from './sql'
+import { coverJson, emojiOrder, emojiVisible, iso, num, packPublished, packVisible, PUB_AT, rows } from './sql'
 import type {
   ArtistRole,
   EmojiPermalink,
@@ -83,13 +83,13 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
                                   order by t.dimension, t.name, t.id), '[]'::json)
            from pack_tags pt join tags t on t.id = pt.tag_id where pt.pack_id = p.id) as tags,
         (select json_build_object('slug', q.slug, 'title', q.title, 'cover', ${coverJson('q')})
-           from packs q where q.status = 'published' and ${NEIGHBOR_KEY} < (${PUB_AT}, p.id)
+           from packs q where ${packVisible('q')} and ${NEIGHBOR_KEY} < (${PUB_AT}, p.id)
            order by coalesce(q.published_at, q.created_at) desc, q.id desc limit 1) as prev,
         (select json_build_object('slug', q.slug, 'title', q.title, 'cover', ${coverJson('q')})
-           from packs q where q.status = 'published' and ${NEIGHBOR_KEY} > (${PUB_AT}, p.id)
+           from packs q where ${packVisible('q')} and ${NEIGHBOR_KEY} > (${PUB_AT}, p.id)
            order by coalesce(q.published_at, q.created_at) asc, q.id asc limit 1) as next
       from packs p
-      where p.slug = ${slug} and p.status = 'published'`),
+      where p.slug = ${slug} and ${packVisible('p')}`),
     rows<EmojiRow>(sql`
       select e.id, e.storage_pack_key as k, e.variant_rev as r, e.width as w, e.height as h, e.frames as f,
         e.format, e.bytes, e.duration_ms, e.dominant_color,
@@ -97,13 +97,14 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
                                   order by c.sort, c.id), '[]'::json)
            from emoji_characters ec join characters c on c.id = ec.character_id where ec.emoji_id = e.id) as chars
       from emojis e join packs p on p.id = e.pack_id
-      where p.slug = ${slug} and p.status = 'published' and e.status = 'published'
+      where p.slug = ${slug} and ${packPublished('p')} and ${emojiVisible('e')}
       order by ${emojiOrder('e')}`),
   ])
 
   const p = main[0]
   if (!p) {
-    // renamed slug (redirects row or pack_key fallback); a draft/hidden pack is simply missing
+    // renamed slug (redirects row or pack_key fallback); a draft/hidden pack, or one without ready
+    // emojis, is simply missing
     const hop = await resolveLegacyPath(`/packs/${slug}`)
     return hop ? { kind: 'redirect', redirectTo: hop.location } : { kind: 'missing' }
   }
@@ -156,7 +157,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
   return { kind: 'pack', pack }
 }
 
-/** /e/:emojiId → pack slug + 0-based index in the pack's published emoji order; null if not public. */
+/** /e/:emojiId → pack slug + 0-based index in the pack's public emoji order; null if not public. */
 export async function getEmojiPermalink(emojiIdValue: string): Promise<EmojiPermalink | null> {
   const parsed = emojiIdInput.safeParse({ emojiId: emojiIdValue })
   if (!parsed.success) return null
@@ -166,9 +167,9 @@ export async function getEmojiPermalink(emojiIdValue: string): Promise<EmojiPerm
     from (
       select e.id, e.pack_id, (row_number() over (order by ${emojiOrder('e')}) - 1)::int as idx
       from emojis e
-      where e.status = 'published' and e.pack_id = (select pack_id from emojis where id = ${emojiId})
+      where ${emojiVisible('e')} and e.pack_id = (select pack_id from emojis where id = ${emojiId})
     ) x
-    join packs p on p.id = x.pack_id and p.status = 'published'
+    join packs p on p.id = x.pack_id and ${packPublished('p')}
     where x.id = ${emojiId}`)
   const r = list[0]
   return r ? { emojiId, packSlug: r.slug, index: num(r.idx) } : null

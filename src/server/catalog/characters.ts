@@ -5,14 +5,15 @@ import { characterDetailInput, type CharacterDetailInput, charactersInput, type 
 import { resolveLegacyPath } from './legacy'
 import { packPage } from './packs'
 import { emojiPage } from './stream'
-import { emojiJson, emojiOrder, isoOrNull, num, rows } from './sql'
+import { emojiJson, emojiOrder, emojiVisible, isoOrNull, num, packPublished, packVisible, rows } from './sql'
 import type { CharacterArtist, CharacterCard, CharacterLookup } from './types'
 
 // 角色图鉴 and 角色详情. Counts are computed live over published rows (the denormalized
 // characters.pack_count / emoji_count columns are not trusted), and the whole list is cached 30 s.
-//   packCount  = published packs linked through pack_characters
-//   emojiCount = published emojis (in published packs) linked through emoji_characters
-// Only characters with published content are listed.
+//   packCount  = public packs linked through pack_characters
+//   emojiCount = public emojis linked through emoji_characters
+// Only characters with public content are listed ("public" is defined in sql.ts: published, with web
+// derivatives ready).
 
 interface CharacterRow {
   id: number
@@ -33,7 +34,7 @@ export interface CharacterEntry {
 }
 
 /**
- * Avatar: characters.avatar_emoji_id when it is published (in a published pack); otherwise an emoji
+ * Avatar: characters.avatar_emoji_id when it is a public emoji; otherwise an emoji
  * tagged with the character, else any emoji of its packs — from the most downloaded pack, in pack order.
  */
 async function loadCharacters(): Promise<CharacterEntry[]> {
@@ -43,13 +44,13 @@ async function loadCharacters(): Promise<CharacterEntry[]> {
     with pc as (
       select x.character_id as cid, count(*)::int as n, max(coalesce(p.published_at, p.created_at)) as latest
       from pack_characters x join packs p on p.id = x.pack_id
-      where p.status = 'published'
+      where ${packVisible('p')}
       group by x.character_id
     ),
     tagged as (
       select x.character_id as cid, e.id, p.download_count, p.id as pack_id, e.sort_order, e.created_at
       from emoji_characters x join emojis e on e.id = x.emoji_id join packs p on p.id = e.pack_id
-      where e.status = 'published' and p.status = 'published'
+      where ${emojiVisible('e')} and ${packPublished('p')}
     ),
     ec as (select cid, count(*)::int as n from tagged group by cid),
     best as (
@@ -65,12 +66,12 @@ async function loadCharacters(): Promise<CharacterEntry[]> {
     left join best on best.cid = c.id
     left join lateral (
       select e.id from emojis e join packs p on p.id = e.pack_id
-      where e.id = c.avatar_emoji_id and e.status = 'published' and p.status = 'published'
+      where e.id = c.avatar_emoji_id and ${emojiVisible('e')} and ${packPublished('p')}
     ) own on true
     left join lateral (
       select e.id from pack_characters x join packs p on p.id = x.pack_id join emojis e on e.pack_id = p.id
       where best.id is null and own.id is null
-        and x.character_id = c.id and p.status = 'published' and e.status = 'published'
+        and x.character_id = c.id and ${packPublished('p')} and ${emojiVisible('e')}
       order by p.download_count desc, p.id, ${emojiOrder('e')}
       limit 1
     ) fallback on true
@@ -121,7 +122,7 @@ export async function getCharacterDetail(input: CharacterDetailInput): Promise<C
          from (
            select a.slug, a.name, count(distinct p.id)::int as n
            from pack_characters pc
-           join packs p on p.id = pc.pack_id and p.status = 'published'
+           join packs p on p.id = pc.pack_id and ${packVisible('p')}
            join pack_artists pa on pa.pack_id = p.id and pa.role = 'artist'
            join artists a on a.id = pa.artist_id
            where pc.character_id = ${entry.id}

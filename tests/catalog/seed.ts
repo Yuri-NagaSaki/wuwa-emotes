@@ -5,9 +5,11 @@ import { clearCatalogCache } from '#/server/catalog/cache'
 // process by setup.ts). Import this module after ../integration/setup and call seedCatalog() in
 // each file's beforeAll: it empties the catalog tables and inserts the fixture again.
 //
-// Published: 10 packs. Never visible: a draft pack (with published + pending emojis), a hidden pack
-// (with published emojis), pending/hidden emojis inside published packs, a character / artist / tag
-// used only by the draft, an unpublished collection, a published collection holding only the draft.
+// Public: 10 packs. Never visible: a draft pack (with published + pending emojis), a hidden pack
+// (with published emojis), a published pack whose emojis have no derivatives yet (derived_ready =
+// false), pending/hidden/not-ready emojis inside public packs, a character / artist / tag used only by
+// the draft or the not-ready pack, an unpublished collection, a published collection holding only the
+// draft.
 // Ties on purpose: download_count (P2 = P3, P7 = P8), favorite_count (P1 = P2 = P6), published_at
 // (P3 = P9); timestamps carry microseconds; P8 has no published_at.
 
@@ -16,6 +18,8 @@ export type Status = 'published' | 'pending' | 'hidden'
 export interface FxEmoji {
   id: string
   status: Status
+  /** emojis.derived_ready (web derivatives exist) */
+  ready: boolean
   frames: number
   w: number | null
   h: number | null
@@ -85,6 +89,7 @@ function emojiId(pack: number, n: number): string {
 
 interface EmojiSpec {
   status?: Status
+  ready?: boolean
   frames?: number
   w?: number | null
   h?: number | null
@@ -102,6 +107,7 @@ function pack(p: Omit<FxPack, 'emojis' | 'cover'> & { cover?: number | null }, s
     return {
       id: emojiId(no, i + 1),
       status: s.status ?? 'published',
+      ready: s.ready ?? true,
       frames,
       w: s.w === undefined ? 300 : s.w,
       h: s.h === undefined ? 300 : s.h,
@@ -187,7 +193,8 @@ export const PACKS: FxPack[] = [
       publishedAt: '2026-09-10 12:00:00.654321+00',
       chars: ['xin'],
     },
-    [{ w: null, h: null }, ...n(5)],
+    // emoji 1 is published but has no derivatives yet: excluded everywhere, indexes skip it
+    [{ w: null, h: null }, { ready: false }, ...n(5)],
   ),
   // P4
   pack(
@@ -203,8 +210,10 @@ export const PACKS: FxPack[] = [
       memorial: true,
       publishedAt: '2026-09-12 00:00:00.5+00',
       chars: ['xinyuehu'],
+      // the cover is an animated emoji whose derivatives are not ready: falls back to the first public one
+      cover: 0,
     },
-    [...n(3, { frames: 12 }), ...n(3, { frames: 1 })],
+    [{ frames: 12, ready: false }, ...n(3, { frames: 12 }), ...n(3, { frames: 1 })],
   ),
   // P5: credits split (artist + commissioner entity + free-text commissioner); equal sort_order, so
   // created_at decides the order (ids run the other way)
@@ -357,15 +366,45 @@ export const PACKS: FxPack[] = [
   ),
 ]
 
+// P13: published, but no emoji has derivatives yet (an import still being processed); pinned, popular
+// and published today, so it would top every list if it leaked. Its character, artist and tag are used
+// nowhere else.
+PACKS.push(
+  pack(
+    {
+      ...base,
+      key: 'notready-01',
+      slug: 'notready-01',
+      title: '白芷 表情（处理中）',
+      status: 'published',
+      kind: 'animated',
+      downloads: 77777,
+      favorites: 7777,
+      pin: 4,
+      publishedAt: 'now',
+      downloadable: true,
+      license: 'CC BY-NC-SA 4.0',
+      chars: ['baizhi'],
+      artists: [['pending-artist', 'artist']],
+      tags: [['custom', 'notready-only']],
+    },
+    n(4, { ready: false, createdAt: 'now' }),
+  ),
+)
+
 export const PACK_BY_SLUG = Object.fromEntries(PACKS.map((p) => [p.slug, p]))
-export const PUBLIC_PACKS = PACKS.filter((p) => p.status === 'published')
-export const HIDDEN_PACKS = PACKS.filter((p) => p.status !== 'published')
-export const PUBLIC_EMOJI_IDS = new Set(PUBLIC_PACKS.flatMap((p) => p.emojis.filter((e) => e.status === 'published').map((e) => e.id)))
+/** A public emoji: published with derivatives ready (src/server/catalog/sql.ts). */
+export const isPublicEmoji = (e: FxEmoji) => e.status === 'published' && e.ready
+/** A public pack: published with at least one public emoji. */
+export const PUBLIC_PACKS = PACKS.filter((p) => p.status === 'published' && p.emojis.some(isPublicEmoji))
+export const HIDDEN_PACKS = PACKS.filter((p) => !PUBLIC_PACKS.includes(p))
+export const PUBLIC_EMOJI_IDS = new Set(PUBLIC_PACKS.flatMap((p) => p.emojis.filter(isPublicEmoji).map((e) => e.id)))
 export const FORBIDDEN_EMOJI_IDS = new Set(PACKS.flatMap((p) => p.emojis.map((e) => e.id)).filter((id) => !PUBLIC_EMOJI_IDS.has(id)))
 
 export const CHARACTERS: FxCharacter[] = [
   { slug: 'aimisi', name: '爱弥斯', color: 'pink', sort: 1, aliases: ['Aimisi'], legacySlug: 'character-1e2ca573335a00cc88b0a81f', avatar: null },
-  { slug: 'xin', name: '心', color: 'red', sort: 2, aliases: [], legacySlug: 'abc123hash', avatar: null },
+  // avatar points at the not-ready emoji of xin-01: falls back to a tagged public emoji
+  { slug: 'xin', name: '心', color: 'red', sort: 2, aliases: [], legacySlug: 'abc123hash', avatar: [3, 1] },
   { slug: 'feibi', name: '菲比', color: 'blue', sort: 3, aliases: ['Phoebe'], legacySlug: null, avatar: null },
   { slug: 'jinxi', name: '今汐', color: 'yellow', sort: 4, aliases: [], legacySlug: null, avatar: null },
   { slug: 'xinyuehu', name: '心月狐', color: 'purple', sort: 5, aliases: ['狐狐'], legacySlug: null, avatar: null },
@@ -373,6 +412,8 @@ export const CHARACTERS: FxCharacter[] = [
   { slug: 'changli', name: '长离', color: 'orange', sort: 7, aliases: ['离'], legacySlug: null, avatar: [9, 2] },
   { slug: 'yangyang', name: '秧秧', color: 'green', sort: 8, aliases: ['秧'], legacySlug: 'yangyang-legacy', avatar: [11, 0] },
   { slug: 'shouanren', name: '守岸人', color: 'teal', sort: 9, aliases: ['守岸'], legacySlug: 'shouanren-old', avatar: [10, 0] },
+  // only in the not-ready pack; its avatar points at a not-ready emoji
+  { slug: 'baizhi', name: '白芷', color: 'mint', sort: 10, aliases: ['白芷医生'], legacySlug: 'baizhi-old', avatar: [13, 0] },
 ]
 
 export const ARTISTS: FxArtist[] = [
@@ -389,6 +430,7 @@ export const ARTISTS: FxArtist[] = [
   { slug: '爱秧斯坦', name: '爱秧斯坦', aliases: ['AiEinstein'], legacySlug: null, links: [] },
   { slug: 'kuroba', name: '黑羽', aliases: [], legacySlug: null, links: [] },
   { slug: 'ghost', name: '幽灵画师', aliases: ['GhostArtist'], legacySlug: 'ghost-old', links: [] },
+  { slug: 'pending-artist', name: '待处理画师', aliases: ['PendingArtist'], legacySlug: null, links: [] },
 ]
 
 export const TAGS: [string, string, string][] = [
@@ -396,6 +438,7 @@ export const TAGS: [string, string, string][] = [
   ['tool', 'ps', 'Photoshop'],
   ['project', 'solar5', '企划/Solar5'],
   ['custom', 'draft-only', '草稿专用'],
+  ['custom', 'notready-only', '未就绪专用'],
 ]
 
 export const COLLECTIONS: { slug: string; title: string; published: boolean; sort: number; packs: string[] }[] = [
@@ -417,6 +460,7 @@ export const REDIRECTS: [string, string, number][] = [
   ['/characters/old-chun-2', '/characters/chun', 301],
   ['/characters/to-hidden', '/characters/shouanren', 301],
   ['/tags/中文标签', '/packs/xin-01', 308],
+  ['/packs/to-notready', '/packs/notready-01', 301],
 ]
 
 /** Strings that must never appear in any public result. */
@@ -433,6 +477,15 @@ export const FORBIDDEN_STRINGS = [
   'draft-only',
   '未发布合集',
   '只有草稿的合集',
+  'notready-01',
+  '白芷 表情（处理中）',
+  '白芷',
+  'baizhi',
+  'pending-artist',
+  '待处理画师',
+  'PendingArtist',
+  'notready-only',
+  '未就绪专用',
 ]
 
 const ts = (v: string) => (v === 'now' ? 'now()' : `'${v}'::timestamptz`)
@@ -525,7 +578,7 @@ async function doSeed(): Promise<void> {
         await c.query(
           `insert into emojis (id, pack_id, storage_pack_key, status, sort_order, original_key, format, mime, bytes, width, height, frames,
                                variant_rev, derived_ready, created_at)
-           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, true, ${ts(e.createdAt)})`,
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, ${ts(e.createdAt)})`,
           [
             e.id,
             id,
@@ -540,6 +593,7 @@ async function doSeed(): Promise<void> {
             e.h,
             e.frames,
             e.rev,
+            e.ready,
           ],
         )
         for (const ch of e.chars) await c.query(`insert into emoji_characters (emoji_id, character_id) values ($1, $2)`, [e.id, charId.get(ch)])

@@ -16,7 +16,7 @@ const PERKS: [IconName, string][] = [
 
 export function AuthLayout({ title, lead, perks, tone, children }: { title: ReactNode; lead: ReactNode; perks?: boolean; tone?: 'purple'; children: ReactNode }) {
   return (
-    <div className="wrap">
+    <div className="wrap narrow">
       <div className="auth">
         <div className={cx('auth-art', tone)}>
           <div>

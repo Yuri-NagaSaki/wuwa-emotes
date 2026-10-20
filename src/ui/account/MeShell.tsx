@@ -11,7 +11,7 @@ import { fullDate } from './text'
 export function MeShell({ summary, children }: { summary: MeSummary; children: ReactNode }) {
   const s = summary.submissions
   return (
-    <div className="wrap">
+    <div className="wrap narrow">
       <div className="me-h">
         <span className="avatar" aria-hidden="true">
           {[...summary.name][0] ?? '?'}

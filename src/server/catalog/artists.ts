@@ -3,11 +3,11 @@ import { cached, LIST_TTL_MS } from './cache'
 import { artistDetailInput, type ArtistDetailInput } from './inputs'
 import { resolveLegacyPath } from './legacy'
 import { packPage } from './packs'
-import { isoOrNull, num, rows } from './sql'
+import { emojiVisible, isoOrNull, num, packVisible, rows } from './sql'
 import type { ArtistCard, ArtistLink, ArtistLookup } from './types'
 
 // 画师名录 and 画师主页. An artist is listed when it is linked (as artist or commissioner) to at least
-// one published pack; counts are live over published rows, list cached 30 s.
+// one public pack (sql.ts); counts are live over public rows, list cached 30 s.
 
 interface ArtistRow {
   id: number
@@ -52,12 +52,12 @@ async function loadArtists(): Promise<ArtistEntry[]> {
         bool_or(pa.role = 'artist') as drew, bool_or(pa.role = 'commissioner') as commissioned,
         max(coalesce(p.published_at, p.created_at)) as pub
       from pack_artists pa join packs p on p.id = pa.pack_id
-      where p.status = 'published'
+      where ${packVisible('p')}
       group by pa.artist_id, pa.pack_id
     ),
     pe as (
       select e.pack_id, count(*)::int as n from emojis e
-      where e.status = 'published' and e.pack_id in (select pack_id from ap)
+      where ${emojiVisible('e')} and e.pack_id in (select pack_id from ap)
       group by e.pack_id
     )
     select a.id, a.slug, a.name, a.links,
@@ -95,7 +95,7 @@ export async function listArtists(): Promise<ArtistCard[]> {
   return (await artistEntries()).map((e) => e.card)
 }
 
-/** 画师主页: profile + its published packs (any role), paginated like /packs. */
+/** 画师主页: profile + its public packs (any role), paginated like /packs. */
 export async function getArtistDetail(input: ArtistDetailInput): Promise<ArtistLookup> {
   const i = artistDetailInput.parse(input)
   const entry = (await artistEntries()).find((e) => e.card.slug === i.slug)
@@ -111,7 +111,7 @@ export async function getArtistDetail(input: ArtistDetailInput): Promise<ArtistL
            from (
              select c.slug, c.name, c.theme_color as color, c.sort, count(distinct p.id)::int as n
              from pack_artists pa
-             join packs p on p.id = pa.pack_id and p.status = 'published'
+             join packs p on p.id = pa.pack_id and ${packVisible('p')}
              join pack_characters pc on pc.pack_id = p.id
              join characters c on c.id = pc.character_id
              where pa.artist_id = ${entry.id}

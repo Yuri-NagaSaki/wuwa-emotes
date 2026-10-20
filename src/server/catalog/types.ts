@@ -4,8 +4,11 @@
 // - Plain JSON: no Date objects (timestamps are ISO-8601 strings), no undefined (absent = null).
 // - Viewer independent: the same object is rendered into shared-cached anonymous HTML, so nothing here
 //   depends on who is asking (no "isFavorited"); per-viewer state is fetched separately.
-// - Only published packs and published emojis inside published packs ever appear. Characters,
-//   artists, tags and collections appear only when they have published content.
+// - Only public content ever appears (sql.ts): an emoji is public when it is published AND its web
+//   derivatives are ready (emojis.derived_ready), a pack when it is published AND holds at least one
+//   public emoji. Counts, covers and minis use public emojis only; a pack whose derivatives are still
+//   being generated is hidden everywhere (its detail page is missing). Characters, artists, tags and
+//   collections appear only when they have public content.
 // - Image fields are ready-to-use /img URLs (docs/ARCHITECTURE.md §2.2, §4).
 //
 // This file must stay type-only: client code imports it.
@@ -82,14 +85,14 @@ export interface PackCard {
   memorial: boolean
   /** 「允许下载」; false = preview only (official packs are always false). */
   downloadable: boolean
-  /** Published emojis in the pack. */
+  /** Public emojis in the pack. */
   count: number
   downloads: number
   favorites: number
   publishedAt: IsoDate
   /** Theme color of the first character (by characters.sort, id); null when none. */
   accent: string | null
-  /** packs.cover_emoji_id when it is a published emoji of this pack, else the first emoji. */
+  /** packs.cover_emoji_id when it is a public emoji of this pack, else the first public emoji. */
   cover: EmojiImage | null
   /** Up to 3 further emojis in pack order (cover excluded). */
   minis: EmojiImage[]
@@ -136,7 +139,7 @@ export interface PackDetail {
   updatedAt: IsoDate
   accent: string | null
   cover: EmojiImage | null
-  /** Every published emoji, in pack order (sort_order, created_at, id). */
+  /** Every public emoji, in pack order (sort_order, created_at, id). */
   emojis: PackEmoji[]
   characters: CharacterRef[]
   /** pack_artists role = artist */
@@ -284,6 +287,29 @@ export interface Facets {
   tags: Record<TagDimension, CountedRef[]>
   kinds: { kind: PackKind; packCount: number }[]
   sources: { sourceKind: SourceKind; packCount: number }[]
+}
+
+/** Filter-bar facets of /packs: counts over public packs, characters with avatar and color. */
+export interface PackFacets {
+  /** Public packs in total (the "全部 N 个" line). */
+  total: number
+  characters: (CountedRef & { color: string | null; avatar: string | null })[]
+  artists: CountedRef[]
+  tags: Record<TagDimension, CountedRef[]>
+  kinds: { kind: PackKind; packCount: number }[]
+  sources: { sourceKind: SourceKind; packCount: number }[]
+}
+
+/** /packs loader: the first page and the facets in one round trip. */
+export interface PacksPageData {
+  page: Page<PackCard>
+  facets: PackFacets
+}
+
+/** /e/:emojiId loader: the permalink and its pack in one round trip. */
+export interface EmojiPageData {
+  link: EmojiPermalink
+  pack: PackDetail
 }
 
 export interface ExploreData {

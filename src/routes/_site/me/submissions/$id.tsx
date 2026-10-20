@@ -20,7 +20,7 @@ export const Route = createFileRoute('/_site/me/submissions/$id')({
   },
   head: ({ matches }) => privateHead(matches, '投稿详情', [submitCss]),
   errorComponent: ({ error }) => (
-    <div className="wrap">
+    <div className="wrap narrow">
       <EmptyState icon="info" title="打不开这条投稿">
         {errorText(error, '投稿不存在，或者你没有权限查看。')}
       </EmptyState>

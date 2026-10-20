@@ -4,11 +4,14 @@
    container queries are media queries at the same widths (1100px, 760px). */
 
 /* Nunito (OFL, public/fonts/nunito/OFL.txt): latin + latin-ext, variable weight axis. The latin face
-   leaves out U+2010-2027 (dashes, quotes, ellipsis) so Chinese text keeps full-width CJK punctuation. */
+   leaves out U+2010-2027 (dashes, quotes, ellipsis) so Chinese text keeps full-width CJK punctuation.
+   font-display: optional — Nunito sets digits and Latin inside body text, so a late swap re-wraps chip
+   rows and meta lines (measured CLS 0.03 on /e/:id under Slow 4G). It is preloaded by the root route:
+   used when it arrives in time, otherwise from the next page on (cached), never swapped in mid-view. */
 @font-face {
   font-family: "Nunito";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 200 1000;
   src: url("/fonts/nunito/nunito-latin-ext-wght-normal.woff2") format("woff2");
   unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
@@ -16,7 +19,7 @@
 @font-face {
   font-family: "Nunito";
   font-style: normal;
-  font-display: swap;
+  font-display: optional;
   font-weight: 200 1000;
   src: url("/fonts/nunito/nunito-latin-wght-normal.woff2") format("woff2");
   unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-200F, U+2028-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
@@ -74,15 +77,22 @@ svg.i { width: 18px; height: 18px; flex: none; stroke: currentColor; fill: none;
 svg.i.sm { width: 15px; height: 15px; }
 svg.i.lg { width: 22px; height: 22px; }
 
-.wrap { width: 100%; max-width: var(--maxw); margin: 0 auto; padding-left: var(--gutter); padding-right: var(--gutter); }
-.page { padding-bottom: 32px; animation: tp-page-in var(--t-slow) var(--ease) both; }
+/* the page container: header, footer and every page use it, so their edges line up */
+.wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: var(--gutter); }
+/* reading pages (about, legal, links, account): narrower measure */
+.wrap.narrow { max-width: var(--maxw-narrow); }
+/* backwards, not both: a filling transform animation would keep .page the containing block of every
+   position: fixed descendant (dialogs, the selection bar) after it ends */
+.page { --page-pt: 20px; padding-top: var(--page-pt); padding-bottom: 32px; animation: tp-page-in var(--t-slow) var(--ease) backwards; }
+@media (min-width: 1024px) {
+  .page { --page-pt: 24px; }
+}
+/* pages that open with an overlay in the server HTML (/e/:id) skip the entrance entirely */
+.page.no-enter { animation: none; }
 @keyframes tp-page-in { from { transform: translateY(8px); } to { transform: none; } }
 
-@media (max-width: 1100px) {
-  :root { --gutter: 24px; }
-}
 @media (max-width: 760px) {
-  :root { --gutter: 16px; --head-h: 54px; }
+  :root { --head-h: 54px; }
   body { font-size: 14.5px; }
   .page { padding-bottom: calc(96px + var(--safe-bottom)); }
 }

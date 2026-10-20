@@ -58,7 +58,8 @@
   /* frame safe areas (set by the board for phone frames) */
   --safe-top: 0px; --safe-bottom: 0px;
   /* layout */
-  --gutter: 32px; --maxw: 1240px; --head-h: 64px;
+  /* page container (same as AniBT): fluid gutter, 1440 px content, 1200 px for reading pages */
+  --gutter: clamp(16px, 3vw, 32px); --maxw: 1440px; --maxw-narrow: 1200px; --head-h: 64px;
 }
 
 [data-theme="night"] {
