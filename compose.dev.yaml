@@ -1,0 +1,64 @@
+# Local development services: PostgreSQL 18 and RustFS (S3-compatible), with the credentials that
+# src/server/env.ts uses as development defaults, so `bun run dev` needs no env file.
+#
+#   docker compose -f compose.dev.yaml up -d      (or: bun run dev:services)
+#   docker compose -f compose.dev.yaml down       (add -v to delete the data)
+#
+#   PostgreSQL  127.0.0.1:5432  user/password chaochi/chaochi, database chaochi
+#   RustFS      127.0.0.1:9000  access key devaccess, secret devsecret123, bucket chaochi-dev
+#
+# The ports are host-wide: if another PostgreSQL or S3 container already uses 5432 / 9000 (on the
+# shared dev host: chaochi-dev-pg and chaochi-dev-s3), stop it or move these with
+# CHAOCHI_DEV_PG_PORT / CHAOCHI_DEV_S3_PORT and point DATABASE_URL / S3_ENDPOINT at the new ports.
+# s3-init runs deploy/local/s3-init.ts from this checkout, so run `bun install` first.
+
+name: chaochi-dev
+
+services:
+  pg:
+    image: postgres:18-bookworm
+    environment:
+      POSTGRES_USER: chaochi
+      POSTGRES_PASSWORD: chaochi
+      POSTGRES_DB: chaochi
+    ports:
+      - "127.0.0.1:${CHAOCHI_DEV_PG_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chaochi -d chaochi"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  s3:
+    image: rustfs/rustfs:latest
+    environment:
+      RUSTFS_ACCESS_KEY: devaccess
+      RUSTFS_SECRET_KEY: devsecret123
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+    ports:
+      - "127.0.0.1:${CHAOCHI_DEV_S3_PORT:-9000}:9000"
+    volumes:
+      - s3data:/data
+
+  s3-init:
+    image: oven/bun:1.4.3-slim
+    working_dir: /app
+    command: ["bun", "deploy/local/s3-init.ts"]
+    environment:
+      S3_ENDPOINT: http://s3:9000
+      S3_BUCKET: chaochi-dev
+      S3_ACCESS_KEY_ID: devaccess
+      S3_SECRET_ACCESS_KEY: devsecret123
+    volumes:
+      - .:/app:ro
+    depends_on:
+      s3:
+        condition: service_started
+    restart: "no"
+
+volumes:
+  pgdata:
+  s3data:
