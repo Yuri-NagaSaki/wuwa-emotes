@@ -1,19 +1,20 @@
 import { useNavigate } from '@tanstack/react-router'
 import { type CSSProperties, Fragment, useMemo, useState } from 'react'
 import type { CharacterCard } from '#/server/catalog/types'
+import { characterCountText } from '#/shared/characters'
 import { cx } from '../cx'
 import { Input } from '../Field'
-import { fmtN } from '../format'
 import { AppLink } from '../link'
 import { Seg } from '../Seg'
 import { CharacterCss, PortraitImg, RingAvatar } from './character-art'
 import { characterHref, themeColor } from './model'
 
-// 角色图鉴 /characters: every character with stickers of its own (catalog/attribution.ts). Cards are
-// tall for the official portrait (立绘); the character's own sticker rides in the corner, or stands
-// in the middle when there is no portrait (its initial when there is no sticker either). Sort by
-// sticker count, latest pack, or pinyin (slugs are pinyin); find by name, alias-free pinyin prefix,
-// or the letter index.
+// 角色图鉴 /characters: every character with a public pack or an official portrait, like the official
+// atlas. Cards are tall for the portrait (立绘); the character's own sticker rides in the corner, or
+// stands in the middle when there is no portrait (its initial when there is no sticker either). The
+// count line reads 「N 张 · M 包」 for stickers of its own and 「出现在 M 个合集包」 for a character only
+// seen in group packs (catalog/attribution.ts, src/shared/characters.ts). Sort by sticker count, latest
+// pack, or pinyin (slugs are pinyin); find by name, alias-free pinyin prefix, or the letter index.
 
 export type CharacterSort = 'count' | 'recent' | 'pinyin'
 const SORTS = [
@@ -48,9 +49,7 @@ export function AtlasCard({ c, eager }: { c: CharacterCard; eager?: boolean }) {
       </span>
       <span className="acard-meta">
         <b>{c.name}</b>
-        <span>
-          {fmtN(c.emojiCount)} 张 · {fmtN(c.packCount)} 包
-        </span>
+        <span className={cx(!c.emojiCount && 'group-only')}>{characterCountText(c)}</span>
       </span>
     </AppLink>
   )

@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react'
 import type { ArtistCard, CharacterCard } from '#/server/catalog/types'
+import { characterCountText } from '#/shared/characters'
 import { fmtN } from '../format'
 import { AppLink } from '../link'
 import { artistHref, characterHref, themeColor } from './model'
@@ -15,9 +16,7 @@ export function CharacterTile({ c, eager }: { c: CharacterCard; eager?: boolean 
         {c.avatar ? <img src={c.avatar.poster} width={160} height={160} loading={eager ? 'eager' : 'lazy'} decoding="async" alt="" /> : null}
       </span>
       <b>{c.name}</b>
-      <span>
-        {fmtN(c.emojiCount)} 张 · {c.packCount} 包
-      </span>
+      <span>{characterCountText(c)}</span>
     </AppLink>
   )
 }

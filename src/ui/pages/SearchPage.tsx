@@ -8,6 +8,7 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { SectionHead } from '../Section'
 import { Tabs } from '../Tabs'
+import { characterCountText } from '#/shared/characters'
 import { artistHref, characterHref, tagHref, themeColor } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile, CharacterTile } from './people'
@@ -135,9 +136,7 @@ function BestHit({ best }: { best: NonNullable<SearchResult['best']> }) {
         <div>
           <div className="eyebrow">最佳匹配 · 角色</div>
           <h3>{ch.name}</h3>
-          <span className="muted">
-            {fmtN(ch.emojiCount)} 张表情 · {ch.packCount} 个包
-          </span>
+          <span className="muted">{characterCountText(ch)}</span>
         </div>
         <AppLink to={characterHref(ch.slug)} className={buttonClass({ variant: 'primary' })}>
           进入角色页
