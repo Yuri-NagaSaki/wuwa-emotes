@@ -112,9 +112,13 @@ async function writeZip(key: string, entries: { key: string; name: string }[], c
     archive.append(Buffer.from(credits, 'utf8'), { name: 'CREDITS.txt', date })
     await Promise.race([Promise.all([archive.finalize(), uploading]), archiveFailed])
   } catch (err) {
-    archive.abort()
     await upload.abort().catch(() => {})
-    await uploading.catch(() => {})
+    // ends the stream, so the upload's read loop sees the abort instead of waiting for data
+    archive.abort()
+    await Promise.race([uploading.catch(() => {}), new Promise((resolve) => setTimeout(resolve, 30_000).unref())])
+    // a single-part upload may have completed with a truncated archive; nothing references this key yet
+    // (an unchanged hash with its object present never gets here)
+    await deleteObjects([key]).catch(() => {})
     throw err
   }
   return archive.pointer()

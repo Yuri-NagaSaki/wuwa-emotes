@@ -179,6 +179,38 @@ describe('zip.build', () => {
   })
 })
 
+describe('zip.build failures', () => {
+  const withTimeout = <T>(p: Promise<T>, ms: number) =>
+    Promise.race([p, new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`no result after ${ms} ms (hung?)`)), ms))])
+
+  test('a missing original fails the build without leaving an object or touching the artifact', async () => {
+    const p = await insertPack({ packKey: 'zip-broken', status: 'published', downloadable: true })
+    for (let i = 0; i < 4; i++) await addEmoji(p.id, 'zip-broken', await makePng(10 + i, 10, 200 + i), 'png', i)
+    const ok = await buildPackZip(p.id, { now: NOW })
+    expect(ok.status).toBe('built')
+    const [before] = await db().select().from(schema.zipArtifacts).where(eq(schema.zipArtifacts.packId, p.id))
+
+    // a fifth emoji whose original is gone: the stream fails on that entry
+    const lost = await addEmoji(p.id, 'zip-broken', await makePng(9, 9, 250), 'png', 2)
+    await deleteObjects([originalKey('zip-broken', lost.id, 'png')])
+    await expect(withTimeout(buildPackZip(p.id, { now: NOW }), 20_000)).rejects.toThrow()
+
+    const [after] = await db().select().from(schema.zipArtifacts).where(eq(schema.zipArtifacts.packId, p.id))
+    expect(after).toEqual(before!)
+    expect(await listKeys('zips/v1/packs/zip-broken/')).toEqual([before!.objectKey])
+  })
+
+  test('a failure after the first uploaded part aborts the multipart upload', async () => {
+    const p = await insertPack({ packKey: 'zip-broken-big', status: 'published', downloadable: true })
+    for (let i = 0; i < 2; i++) await addEmoji(p.id, 'zip-broken-big', randomBytes(6 * 1024 * 1024), 'gif', i)
+    const lost = await addEmoji(p.id, 'zip-broken-big', randomBytes(1024), 'gif', 2)
+    await deleteObjects([originalKey('zip-broken-big', lost.id, 'gif')])
+    await expect(withTimeout(buildPackZip(p.id, { now: NOW }), 30_000)).rejects.toThrow()
+    expect(await db().$count(schema.zipArtifacts, eq(schema.zipArtifacts.packId, p.id))).toBe(0)
+    expect(await listKeys('zips/v1/packs/zip-broken-big/')).toEqual([])
+  })
+})
+
 describe('zip helpers', () => {
   test('entry names: pack order, at least two digits, more for big packs', () => {
     const many = Array.from({ length: 120 }, (_, i) => ({ originalKey: `assets/v1/packs/p/emojis/r-x.${i % 2 ? 'gif' : 'png'}`, format: 'gif' }))

@@ -130,14 +130,15 @@ export async function ingestUpload(uploadItemId: string, deps: IngestDeps = defa
     await runner.update(uploadItems).set({ status: 'duplicate', emojiId: dupId, error: DUPLICATE_MESSAGE }).where(eq(uploadItems.id, u.id))
   }
 
+  const key = originalKey(row.packKey, emojiId, ext)
   const early = await samePackDuplicate(d, u.packId, sha256, emojiId)
   if (early) {
     await markDuplicate(d, early)
-    await deleteObjects([u.tmpKey])
+    // `key` exists only if an earlier attempt copied before dying; it belongs to this upload alone
+    await deleteObjects([u.tmpKey, key])
     return { status: 'duplicate', emojiId: early }
   }
 
-  const key = originalKey(row.packKey, emojiId, ext)
   await copyObjectIfMatch(u.tmpKey, key, head.ETag!, mime)
 
   const dup = await d.transaction(async (tx) => {

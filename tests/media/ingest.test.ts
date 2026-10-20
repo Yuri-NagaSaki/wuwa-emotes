@@ -175,6 +175,17 @@ describe('media.ingest', () => {
     expect(enqueued).toEqual([reserved])
   })
 
+  test('a retry that turns out to be a duplicate removes the copy its first attempt made', async () => {
+    const u = await stageUpload(packA.id, gif, 'late-dup.gif', 'image/gif')
+    const reserved = newEmojiId()
+    await db().update(schema.uploadItems).set({ status: 'processing', emojiId: reserved }).where(eq(schema.uploadItems.id, u.id))
+    await copyObject(u.tmpKey, originalKey('ingest-a', reserved, 'gif'), 'image/gif')
+    expect(await ingestUpload(u.id, deps)).toEqual({ status: 'duplicate', emojiId: gifEmoji })
+    expect(await headObject(originalKey('ingest-a', reserved, 'gif'))).toBeNull()
+    expect(await headObject(u.tmpKey)).toBeNull()
+    expect(await emojiRow(reserved)).toBeUndefined()
+  })
+
   test('unknown upload ids are skipped', async () => {
     expect((await ingestUpload(crypto.randomUUID(), deps)).status).toBe('skipped')
   })
