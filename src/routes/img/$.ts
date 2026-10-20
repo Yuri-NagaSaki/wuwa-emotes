@@ -2,7 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { imgDeps } from '#/server/http/img-deps'
 import { handleImg, type ImgDeps } from '#/server/media/img'
 
-// /img/v1/<variant>/<packKey>/<emojiId>.r<rev>.webp — the only public path to web images.
+// /img/v1/<variant>/<packKey>/<emojiId>.r<rev>.webp and /img/v1/portrait/<name>.<hash8>-<w>.webp —
+// the only public paths to web images (src/server/media/img.ts).
 // Deliberately session-free: no getViewer/auth call, no Set-Cookie, so Cloudflare can cache it.
 
 /** HEAD never sends the object, so release the S3 stream right away instead of leaving it open. */

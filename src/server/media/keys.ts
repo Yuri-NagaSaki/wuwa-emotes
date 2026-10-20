@@ -15,6 +15,58 @@ export function derivedKey(variant: Variant, packKey: string, emojiId: string, r
   return `derived/v1/${variant}/${packKey}/${emojiId}.r${rev}.webp`
 }
 
+// ---- character portraits (立绘, import-portraits) ----
+//
+// characters/v1/portraits/<name>.<hash8>-<w>.webp: 3:4 WebP, w ∈ PORTRAIT_WIDTHS. <name> is the
+// character's slug at import time, <hash8> covers the source image and the processing, so a new
+// portrait is a new key (immutable caching). characters.portrait_key holds the largest width; every
+// smaller width in PORTRAIT_WIDTHS exists too.
+
+export const PORTRAIT_WIDTHS = [240, 480] as const
+export type PortraitWidth = (typeof PORTRAIT_WIDTHS)[number]
+export const PORTRAIT_PREFIX = 'characters/v1/portraits/'
+const PORTRAIT_NAME_RE = /^[a-z0-9](?:[a-z0-9-]{0,58}[a-z0-9])?$/
+
+export interface PortraitRef {
+  name: string
+  hash8: string
+  width: PortraitWidth
+}
+
+export function isPortraitName(name: string): boolean {
+  return PORTRAIT_NAME_RE.test(name) && !name.includes('--')
+}
+
+export function portraitKey(ref: PortraitRef): string {
+  return `${PORTRAIT_PREFIX}${ref.name}.${ref.hash8}-${ref.width}.webp`
+}
+
+export function portraitUrl(ref: PortraitRef): string {
+  return `/img/v1/portrait/${ref.name}.${ref.hash8}-${ref.width}.webp`
+}
+
+function portraitRef(name: string, hash8: string, width: string): PortraitRef | null {
+  const w = Number(width)
+  if (!isPortraitName(name) || !(PORTRAIT_WIDTHS as readonly number[]).includes(w)) return null
+  return { name, hash8, width: w as PortraitWidth }
+}
+
+const PORTRAIT_FILE = '([^/]+)\\.([0-9a-f]{8})-([0-9]{3})\\.webp'
+const PORTRAIT_KEY_RE = new RegExp(`^characters/v1/portraits/${PORTRAIT_FILE}$`)
+const PORTRAIT_PATH_RE = new RegExp(`^/img/v1/portrait/${PORTRAIT_FILE}$`)
+
+/** A stored portrait_key, or null when it is not a canonical portrait key. */
+export function parsePortraitKey(key: string): PortraitRef | null {
+  const m = PORTRAIT_KEY_RE.exec(key)
+  return m ? portraitRef(m[1]!, m[2]!, m[3]!) : null
+}
+
+/** Strictly parse /img/v1/portrait/<name>.<hash8>-<w>.webp. Anything else returns null. */
+export function parsePortraitPath(pathname: string): PortraitRef | null {
+  const m = PORTRAIT_PATH_RE.exec(pathname)
+  return m ? portraitRef(m[1]!, m[2]!, m[3]!) : null
+}
+
 export function reviewKey(variant: ReviewVariant, packKey: string, emojiId: string): string {
   return `review/v1/${variant}/${packKey}/${emojiId}.webp`
 }

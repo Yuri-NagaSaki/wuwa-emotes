@@ -94,6 +94,8 @@ export const characters = pgTable(
     name: text('name').notNull(),
     themeColor: text('theme_color'),
     avatarEmojiId: text('avatar_emoji_id'),
+    // official portrait (立绘): key of its largest WebP under characters/v1/portraits/ (import-portraits)
+    portraitKey: text('portrait_key'),
     sort: integer('sort').notNull().default(0),
     packCount: integer('pack_count').notNull().default(0),
     emojiCount: integer('emoji_count').notNull().default(0),
