@@ -21,7 +21,13 @@
 #
 # Settings (environment): CHAOCHI_SSH_PORT (22), CHAOCHI_FW_PORTS (443), CHAOCHI_FW_STATE
 # (/var/lib/chaochi-firewall), CHAOCHI_FW_FALLBACK (cloudflare-ips.txt next to this script).
+# `install` saves the effective SSH port, HTTPS ports and state directory to /etc/default/chaochi-firewall;
+# every later run (boot, weekly refresh, manual) reads that file, and explicit environment still wins.
 set -euo pipefail
+
+DEFAULTS=${CHAOCHI_FW_DEFAULTS:-/etc/default/chaochi-firewall}
+# shellcheck disable=SC1090
+[[ -r $DEFAULTS ]] && . "$DEFAULTS"
 
 TABLE=chaochi_fw
 SSH_PORT=${CHAOCHI_SSH_PORT:-22}
@@ -181,6 +187,19 @@ disable_llmnr() {
   fi
 }
 
+# persist the effective settings; explicit environment keeps priority when the file is read back
+write_defaults() {
+  local file=$1
+  mkdir -p "$(dirname "$file")"
+  cat >"$file" <<EOF
+# Written by chaochi-firewall install. Edit, then run: chaochi-firewall apply
+CHAOCHI_SSH_PORT=\${CHAOCHI_SSH_PORT:-$SSH_PORT}
+CHAOCHI_FW_PORTS=\${CHAOCHI_FW_PORTS:-$PORTS}
+CHAOCHI_FW_STATE=\${CHAOCHI_FW_STATE:-$STATE}
+EOF
+  chmod 644 "$file"
+}
+
 # write the systemd units into a directory (install uses /etc/systemd/system)
 write_units() {
   local dir=$1
@@ -239,8 +258,11 @@ install_all() {
   for svc in ufw firewalld; do
     systemctl is-active --quiet "$svc" 2>/dev/null && log "warning: $svc is active; it may conflict with this firewall"
   done
+  check_ssh
   install -D -m 0755 "${BASH_SOURCE[0]}" "$SBIN"
   [[ -n $FALLBACK ]] && install -D -m 0644 "$FALLBACK" "$SHARE/cloudflare-ips.txt"
+  write_defaults "$DEFAULTS"
+  log "settings saved to $DEFAULTS (ssh $SSH_PORT, https $PORTS)"
   write_units "$UNITS"
   systemctl daemon-reload
   systemctl enable chaochi-firewall.service
@@ -270,6 +292,7 @@ case $cmd in
     nft delete table inet "$TABLE" 2>/dev/null || true
     log "table inet $TABLE removed: inbound traffic is no longer filtered"
     ;;
-  units) write_units "${2:?units <dir>}" ;; # for review and tests
+  units) write_units "${2:?units <dir>}" ;;                  # for review and tests
+  write-defaults) write_defaults "${2:?write-defaults <file>}" ;; # for review and tests
   *) sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 64 ;;
 esac

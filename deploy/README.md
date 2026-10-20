@@ -69,7 +69,7 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 前置条件：已完成「服务器准备」，`app-env` 已填写。证书文件可以稍后再放。
 
 1. 检出代码：`git clone <仓库地址> /opt/chaochi/src`，然后 `cd /opt/chaochi/src`。
-2. 安装防火墙，必须在首次启动容器之前执行：`deploy/firewall.sh install`。脚本安装开机加载的服务和每周刷新 Cloudflare 网段的定时器，并关闭 systemd-resolved 的 LLMNR（5355 端口）。如果 SSH 不在 22 端口，先设置 `CHAOCHI_SSH_PORT=<端口>`；否则脚本会拒绝执行，避免锁死 SSH。
+2. 安装防火墙，必须在首次启动容器之前执行：`deploy/firewall.sh install`。脚本安装开机加载的服务和每周刷新 Cloudflare 网段的定时器，并关闭 systemd-resolved 的 LLMNR（5355 端口）。如果 SSH 不在 22 端口，执行 `CHAOCHI_SSH_PORT=<端口> deploy/firewall.sh install`；否则脚本会拒绝执行，避免锁死 SSH。安装时的 SSH 端口和 HTTPS 端口保存在 `/etc/default/chaochi-firewall`，开机加载和每周刷新都读取这个文件。
 3. 检查防火墙：`deploy/firewall.sh status`。从另一台机器用 `curl -k --resolve sparxie.moe:443:<服务器IP> https://sparxie.moe/` 访问应当超时。
 4. 构建并启动：`deploy/rollout.sh --build <标签>`，标签建议用 `git rev-parse --short HEAD`。首次执行会依次启动 db、执行迁移、启动 web-a 和 web-b、启动 proxy 和 worker。
 5. 打开 `https://sparxie.moe/` 注册账号并完成邮箱验证。
@@ -235,7 +235,7 @@ docker run --rm --init --network host --add-host sparxie.moe:127.0.0.1 \
 
 - 以下操作会短暂中断访问（秒级），安排在低峰期：重建 proxy（升级 Caddy 镜像、修改 compose 中 proxy 的定义）、重启 db、重启主机。只改 `deploy/caddy/Caddyfile` 时用平滑重载，不需要重建。
 - 平滑重载 Caddy 时，Cloudflare 到源站的空闲长连接会被关闭。正在复用这些连接的请求有极小概率失败。
-- 用 `docker compose restart` 或 `docker stop` 直接停止副本时没有排空步骤：GET 请求由 Caddy 重试，非 GET 请求有极小概率失败。需要零中断时用 `rollout.sh --force`。
+- 用 `docker compose restart` 或 `docker stop` 直接停止副本时没有排空步骤：GET 请求由 Caddy 重试，非 GET 请求有极小概率失败。本地测试中不排空地重启 4 次副本，约 29,000 个 POST 中失败 1 个（502）。需要零中断时用 `rollout.sh --force`。
 - 直接向 443 发送明文 HTTP 会收到 Go 内置的 400 响应（不含 IP）。防火墙生效后只有 Cloudflare 能连到 443。
 - 防火墙允许所有 Cloudflare 网段。其他 Cloudflare 账号理论上也能把流量导向这台服务器；如需排除，可另行启用 Cloudflare 的 Authenticated Origin Pulls（当前未配置）。
 - IPv6 规则只经过 `nft` 语法检查，测试环境没有 IPv6，未做连通性验证。
