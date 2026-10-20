@@ -1,0 +1,185 @@
+# 潮池 production stack: one host, two rolling web replicas, no published app ports.
+#
+#   Cloudflare (proxied DNS) ──:443──▶ proxy  Caddy, host network; nftables lets only Cloudflare in
+#                                        ├──▶ web-a  172.30.47.11:3000 ┐ bridge network "app",
+#                                        └──▶ web-b  172.30.47.12:3000 ┘ never published
+#   web-a, web-b, worker, migrate ──▶ db (PostgreSQL 18)          web, worker ──▶ R2 (S3 API)
+#
+# Releases go through deploy/rollout.sh (see deploy/README.md). Do not run a bare `docker compose up -d`
+# after the image changed: it recreates web-a and web-b at the same time, which is an outage.
+#
+# Compose-level settings (all have production defaults; override in /opt/chaochi/deploy.conf):
+#   CHAOCHI_IMAGE      image every app service runs; rollout.sh moves this tag (default chaochi/app:latest)
+#   CHAOCHI_ENV_FILE   app settings and secrets, root-only (default /opt/chaochi/app-env)
+#   CHAOCHI_CERT_DIR   Cloudflare Origin CA pair origin.pem + origin-key.pem (default /opt/chaochi/certs)
+#   CHAOCHI_TLS_MODE   auto | origin | internal (default auto, see deploy/caddy/caddy.sh)
+#   CHAOCHI_DOMAIN     site host (default sparxie.moe; www.<domain> redirects to it)
+#   CHAOCHI_BIND, CHAOCHI_HTTPS_PORT   proxy listen address (default all interfaces) and port (443)
+#   CHAOCHI_SUBNET, CHAOCHI_WEB_A_IP, CHAOCHI_WEB_B_IP   app network, if 172.30.47.0/24 is taken
+
+name: chaochi
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+x-env-file: &env-file
+  - path: ${CHAOCHI_ENV_FILE:-/opt/chaochi/app-env}
+    required: true
+
+x-app: &app
+  image: ${CHAOCHI_IMAGE:-chaochi/app:latest}
+  env_file: *env-file
+  restart: unless-stopped
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  logging: *logging
+  networks: [app]
+
+x-web: &web
+  <<: *app
+  command: ["bun", ".output/server/index.mjs"]
+  environment:
+    PORT: "3000"
+    # Nitro's Bun server (srvx) drains on SIGTERM: it closes the listener, finishes in-flight requests,
+    # and force-closes whatever is left after this many seconds. Keep it below stop_grace_period.
+    SERVER_SHUTDOWN_TIMEOUT: "25"
+  stop_grace_period: 40s
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+  healthcheck:
+    test: ["CMD", "bun", "/app/deploy/healthcheck.ts"]
+    interval: 10s
+    timeout: 4s
+    retries: 3
+    start_period: 60s
+    start_interval: 1s
+
+services:
+  db:
+    image: postgres:18-bookworm
+    # reads POSTGRES_PASSWORD from the env file (used only when the data directory is first created)
+    env_file: *env-file
+    environment:
+      POSTGRES_USER: chaochi
+      POSTGRES_DB: chaochi
+    volumes:
+      # PostgreSQL 18 keeps PGDATA in /var/lib/postgresql/18/docker; mount the parent
+      - pgdata:/var/lib/postgresql
+    shm_size: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chaochi -d chaochi"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+    stop_grace_period: 60s
+    restart: unless-stopped
+    logging: *logging
+    networks: [app]
+
+  # One-shot: SQL migrations + pg-boss schema. rollout.sh runs it before any replica gets the new image,
+  # so migrations must stay compatible with the release that is still serving (expand, then contract).
+  migrate:
+    <<: *app
+    command: ["bun", "src/migrate.ts"]
+    environment:
+      CHAOCHI_SERVICE: migrate
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      disable: true
+
+  web-a:
+    <<: *web
+    networks:
+      app:
+        ipv4_address: ${CHAOCHI_WEB_A_IP:-172.30.47.11}
+
+  web-b:
+    <<: *web
+    networks:
+      app:
+        ipv4_address: ${CHAOCHI_WEB_B_IP:-172.30.47.12}
+
+  # Image derivatives, ZIP builds, backups (pg_dump), rollups. Capped so image work cannot starve the site.
+  worker:
+    <<: *app
+    command: ["bun", "src/worker.ts"]
+    mem_limit: 2g
+    memswap_limit: 2g
+    cpus: 1
+    # SIGTERM -> pg-boss finishes active jobs for up to 60 s
+    stop_grace_period: 70s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      disable: true
+
+  proxy:
+    image: caddy:2.11.7-alpine
+    network_mode: host
+    command: ["/bin/sh", "/etc/chaochi/caddy/caddy.sh", "run"]
+    environment:
+      CHAOCHI_DOMAIN: ${CHAOCHI_DOMAIN:-sparxie.moe}
+      CHAOCHI_UPSTREAMS: "${CHAOCHI_WEB_A_IP:-172.30.47.11}:3000 ${CHAOCHI_WEB_B_IP:-172.30.47.12}:3000"
+      CHAOCHI_TLS_MODE: ${CHAOCHI_TLS_MODE:-auto}
+      CHAOCHI_BIND: ${CHAOCHI_BIND:-}
+      CHAOCHI_HTTPS_PORT: ${CHAOCHI_HTTPS_PORT:-443}
+    volumes:
+      - ./deploy:/etc/chaochi:ro
+      - ${CHAOCHI_CERT_DIR:-/opt/chaochi/certs}:/certs:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    stop_grace_period: 35s
+    restart: unless-stopped
+    logging: *logging
+
+  # ---- profile `local`: S3-compatible storage for a test stack on a workstation (never production) ----
+  s3:
+    profiles: [local]
+    image: rustfs/rustfs:latest
+    # RUSTFS_ACCESS_KEY / RUSTFS_SECRET_KEY come from the (test) env file, matching S3_ACCESS_KEY_ID / S3_SECRET_ACCESS_KEY
+    env_file: *env-file
+    environment:
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: ":9000"
+    volumes:
+      - s3data:/data
+    restart: unless-stopped
+    logging: *logging
+    networks: [app]
+
+  s3-init:
+    <<: *app
+    profiles: [local]
+    command: ["bun", "/app/deploy-local/s3-init.ts"]
+    volumes:
+      - ./deploy/local/s3-init.ts:/app/deploy-local/s3-init.ts:ro
+    restart: "no"
+    depends_on:
+      s3:
+        condition: service_started
+    healthcheck:
+      disable: true
+
+networks:
+  app:
+    ipam:
+      config:
+        - subnet: ${CHAOCHI_SUBNET:-172.30.47.0/24}
+
+volumes:
+  pgdata:
+  caddy-data:
+  caddy-config:
+  s3data:

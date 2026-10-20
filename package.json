@@ -22,7 +22,11 @@
     "test:integration": "bun test ./tests/integration",
     "db:generate": "drizzle-kit generate",
     "test:media": "DATABASE_URL=postgres://chaochi:chaochi@127.0.0.1:5432/chaochi_lane_d_test S3_BUCKET=chaochi-lane-d LOG_LEVEL=error bun test ./tests/media ./tests/import",
-    "test:catalog": "CHAOCHI_TEST_DB=chaochi_test_catalog CHAOCHI_TEST_BUCKET=chaochi-test-catalog bun test ./tests/catalog"
+    "test:catalog": "CHAOCHI_TEST_DB=chaochi_test_catalog CHAOCHI_TEST_BUCKET=chaochi-test-catalog bun test ./tests/catalog",
+    "dev:services": "docker compose -f compose.dev.yaml up -d && docker compose -f compose.dev.yaml run --rm s3-init",
+    "dev:services:down": "docker compose -f compose.dev.yaml down",
+    "docker:build": "docker build -t chaochi/app:dev --build-arg CHAOCHI_REVISION=dev .",
+    "deploy:loadcheck": "bun deploy/loadcheck.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1153.0",
