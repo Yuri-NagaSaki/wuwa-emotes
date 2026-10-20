@@ -93,14 +93,19 @@ function initialForm(d: SubmissionDetail | null): FormState {
   }
 }
 
-function initialDecl(d: SubmissionDetail | null): DeclState {
+/**
+ * New packs default to 允许下载 on; changes to an existing pack start from its current setting (most
+ * imported packs are preview-only, §6.4), and 补充表情 cannot change it at all.
+ */
+function initialDecl(d: SubmissionDetail | null, kind: SubmissionKind, ctx: SubmitContext): DeclState {
   const x = d?.declaration
+  const current = d && d.kind !== 'new_pack' ? d.pack.downloadable : kind !== 'new_pack' ? (ctx.pack?.downloadable ?? false) : true
   return {
     identity: x?.identity ?? 'artist',
     license: x?.license ?? d?.pack.license ?? 'cc-by-nc-sa-4.0',
     proofUrl: x?.proofUrl ?? '',
     note: x?.note ?? '',
-    downloadable: x?.downloadable ?? true,
+    downloadable: kind === 'add_emojis' ? current : (x?.downloadable ?? current),
   }
 }
 
@@ -112,7 +117,7 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
   const kind = detail?.kind ?? kindProp
   const [id, setId] = useState<string | null>(detail?.id ?? null)
   const [form, setForm] = useState<FormState>(() => initialForm(detail))
-  const [decl, setDecl] = useState<DeclState>(() => initialDecl(detail))
+  const [decl, setDecl] = useState<DeclState>(() => initialDecl(detail, kind, ctx))
   const [uploads, setUploads] = useState<UploadView[]>(detail?.uploads ?? [])
   const [local, setLocal] = useState<Record<string, LocalState>>({})
   const [rejected, setRejected] = useState<{ key: string; name: string; reason: string }[]>([])
@@ -542,9 +547,15 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
               <div className="full set-row" style={{ padding: '12px 14px' }}>
                 <div>
                   <b>允许下载</b>
-                  <small>{official ? '官方表情只提供预览，不能开启下载。' : '关闭后只提供预览。最终由审核人确认。'}</small>
+                  <small>
+                    {official
+                      ? '官方表情只提供预览，不能开启下载。'
+                      : kind === 'add_emojis'
+                        ? '补充表情沿用这个包现在的下载设置。'
+                        : '关闭后只提供预览。最终由审核人确认。'}
+                  </small>
                 </div>
-                <Switch checked={official ? false : decl.downloadable} disabled={!editable || official} onCheckedChange={(v) => setD('downloadable', v)}>
+                <Switch checked={official ? false : decl.downloadable} disabled={!editable || official || kind === 'add_emojis'} onCheckedChange={(v) => setD('downloadable', v)}>
                   <span className="sr">允许下载</span>
                 </Switch>
               </div>

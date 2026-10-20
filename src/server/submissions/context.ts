@@ -15,6 +15,8 @@ export interface SubmitContext {
     title: string
     sourceKind: string
     emojiCount: number
+    /** the pack's current 允许下载 (补充表情 keeps it; the reviewer decides) */
+    downloadable: boolean
     cover: string | null
     /** may open an edit_pack submission */
     canEdit: boolean
@@ -44,6 +46,7 @@ export async function submitContext(viewer: Pick<Viewer, 'id' | 'role'>, packSlu
         title: p.title,
         sourceKind: p.sourceKind,
         emojiCount: p.emojiCount,
+        downloadable: p.downloadable,
         cover: cover?.ready ? imgUrl({ variant: 'p240', packKey: cover.packKey, emojiId: cover.id, rev: cover.rev }) : null,
         canEdit: p.ownerId === viewer.id || can(viewer.role, 'packs'),
       }

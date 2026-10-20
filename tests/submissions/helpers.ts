@@ -20,7 +20,8 @@ import type { Role, SubmitMode } from '#/shared/roles'
 export { makeGif, makePng } from '../media/helpers'
 export { BUCKET, DATABASE_URL }
 
-if (!/^chaochi-lane-g/.test(BUCKET)) throw new Error(`lane G tests use buckets named chaochi-lane-g*; got ${BUCKET}`)
+// setup.ts already refuses bucket "wuwa"; this suite also empties the bucket, so only scratch buckets
+if (!/^chaochi-/.test(BUCKET)) throw new Error(`tests empty their bucket; use a scratch bucket named chaochi-*, got ${BUCKET}`)
 
 let ready: Promise<void> | undefined
 

@@ -176,7 +176,15 @@ function ReviewCard({ item, tab, done, onApprove, onReturn, onPreview }: { item:
             )}
           </dd>
           <dt>下载</dt>
-          <dd>{item.official ? '只提供预览（官方）' : d?.downloadable ? '投稿者希望允许' : '只提供预览'}</dd>
+          <dd>
+            {item.official
+              ? '只提供预览（官方）'
+              : item.kind === 'new_pack'
+                ? d?.downloadable
+                  ? '投稿者希望允许'
+                  : '只提供预览'
+                : `现在${item.pack.downloadable ? '允许' : '只提供预览'}${item.kind === 'edit_pack' && d && d.downloadable !== item.pack.downloadable ? `，投稿者希望${d.downloadable ? '允许' : '只预览'}` : ''}`}
+          </dd>
         </dl>
         {d?.note ? <p className="rv-note dyn">「{d.note}」</p> : null}
         <div className="rv-checks">
@@ -257,7 +265,9 @@ function Thumb({ emoji, size = 240 }: { emoji: EmojiView; size?: number }) {
 }
 
 function ApproveDialog({ item, busy, onClose, onConfirm }: { item: ReviewItem; busy: boolean; onClose: () => void; onConfirm: (downloadable: boolean) => void }) {
-  const [downloadable, setDownloadable] = useState(!item.official && Boolean(item.declaration?.downloadable))
+  // new packs start from the submitter's wish; changes to an existing pack start from its current
+  // setting, so approving a 补充表情 never opens downloads by accident
+  const [downloadable, setDownloadable] = useState(!item.official && (item.kind === 'new_pack' ? Boolean(item.declaration?.downloadable) : item.pack.downloadable))
   return (
     <Modal
       open
