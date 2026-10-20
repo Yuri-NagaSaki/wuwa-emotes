@@ -16,6 +16,21 @@ export const MAIN_NAV: readonly NavItem[] = [
   { to: '/explore', label: '探索', icon: 'hash' },
 ]
 
+/**
+ * The main-nav entry a page belongs to (the prototype's `shell(ctx, active)`): 画师 and 搜索 sit under
+ * 探索, the reading pages under 首页. Null: no entry is highlighted (account, 打包, admin).
+ */
+export function navKeyFor(pathname: string): string | null {
+  const p = pathname.replace(/\/+$/, '') || '/'
+  if (p === '/') return '/'
+  const first = `/${p.split('/')[1]}`
+  if (first === '/packs' || first === '/e') return '/packs'
+  if (first === '/characters' || first === '/gallery') return first
+  if (first === '/explore' || first === '/artists' || first === '/search' || first === '/tags') return '/explore'
+  if (first === '/about' || first === '/links' || first === '/legal') return '/'
+  return null
+}
+
 export const TAB_NAV: readonly NavItem[] = [
   { to: '/', label: '首页', icon: 'home' },
   { to: '/packs', label: '表情包', icon: 'grid' },

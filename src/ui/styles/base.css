@@ -79,8 +79,8 @@ svg.i.lg { width: 22px; height: 22px; }
 
 /* the page container: header, footer and every page use it, so their edges line up */
 .wrap { width: 100%; max-width: var(--maxw); margin-inline: auto; padding-inline: var(--gutter); }
-/* reading pages (about, legal, links, account): narrower measure */
-.wrap.narrow { max-width: var(--maxw-narrow); }
+/* reading pages (about, legal, links, account): narrower measure, its left edge on the header's */
+.wrap.narrow { max-width: var(--maxw-narrow); margin-left: max(0px, calc((100% - var(--maxw)) / 2)); margin-right: auto; }
 /* backwards, not both: a filling transform animation would keep .page the containing block of every
    position: fixed descendant (dialogs, the selection bar) after it ends */
 .page { --page-pt: 20px; padding-top: var(--page-pt); padding-bottom: 32px; animation: tp-page-in var(--t-slow) var(--ease) backwards; }

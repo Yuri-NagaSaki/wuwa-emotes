@@ -17,6 +17,8 @@ export const HOME_LATEST = 12
 export const HOME_PINNED = 8
 export const HOME_FEATURED = 8
 export const HOME_CHARACTERS = 16
+/** 官方表情 row: official packs first (most downloaded), topped up with community packs. */
+export const HOME_OFFICIAL = 4
 
 const SHANGHAI_TODAY = sql.raw(`(date_trunc('day', now() at time zone 'Asia/Shanghai') at time zone 'Asia/Shanghai')`)
 
@@ -41,7 +43,11 @@ async function loadHome(): Promise<HomeData> {
     (select cp.pack_id, 'featured', row_number() over (order by cp.sort, cp.pack_id)
        from collection_packs cp join packs p on p.id = cp.pack_id and ${packVisible('p')}
        where cp.collection_id = (select fc.id from fc)
-       order by cp.sort, cp.pack_id limit ${HOME_FEATURED})`
+       order by cp.sort, cp.pack_id limit ${HOME_FEATURED})
+    union all
+    (select p.id, 'official', row_number() over (order by (p.source_kind = 'official') desc, p.download_count desc, p.id desc)
+       from packs p where ${packVisible('p')}
+       order by (p.source_kind = 'official') desc, p.download_count desc, p.id desc limit ${HOME_OFFICIAL})`
 
   const [cardRows, statRows, chars] = await Promise.all([
     rows<CardRow & { bucket: string; ord: number }>(sql`${cardSelect(source)} order by src.bucket, src.ord`),
@@ -59,7 +65,7 @@ async function loadHome(): Promise<HomeData> {
     characterEntries(),
   ])
 
-  const buckets: Record<string, PackCard[]> = { latest: [], pinned: [], featured: [] }
+  const buckets: Record<string, PackCard[]> = { latest: [], pinned: [], featured: [], official: [] }
   for (const r of cardRows) buckets[r.bucket]?.push(toPackCard(r))
   const s = statRows[0]
   const stats: CatalogStats = {
@@ -75,6 +81,7 @@ async function loadHome(): Promise<HomeData> {
     pinned: buckets.pinned!,
     featuredCollection: c ? { slug: c.slug, title: c.title, description: c.description ?? null } : null,
     featured: buckets.featured!,
+    official: buckets.official!,
     characters: chars
       .map((e) => e.card)
       .filter((card) => card.avatar)

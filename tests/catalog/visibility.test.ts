@@ -132,6 +132,10 @@ describe('visibility', () => {
     expect(home.latest.length).toBe(PUBLIC_PACKS.length)
     expect(home.characters[0]!.slug).toBe('aimisi')
     expect(home.characters.every((c) => c.avatar)).toBe(true)
+    // 官方表情: the official pack first, then the most downloaded community packs
+    expect(home.official[0]!.slug).toBe('official-01')
+    expect(home.official.length).toBe(Math.min(4, PUBLIC_PACKS.length))
+    expect(home.official.slice(1).every((p) => p.sourceKind === 'community')).toBe(true)
   })
 })
 

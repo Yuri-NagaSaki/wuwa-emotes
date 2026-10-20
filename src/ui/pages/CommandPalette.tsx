@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNod
 import { suggestFn } from '#/server/catalog/fns'
 import type { Suggestion, SuggestionType } from '#/server/catalog/types'
 import { cx } from '../cx'
+import { tray as trayState } from '../batch/tray'
 import { Icon, type IconName } from '../Icon'
-import { themeColor } from './model'
+import { characterColor } from './model'
 import { useBatchCount } from './useBatch'
 
 // Ctrl K command palette: instant suggestions from the in-process index (suggestFn), grouped by type,
@@ -17,6 +18,8 @@ const ORDER: SuggestionType[] = ['character', 'artist', 'pack', 'tag']
 interface Row {
   key: string
   href: string
+  /** an action instead of navigating to href */
+  run?: () => void
   label: ReactNode
   sub: string | null
   thumb: ReactNode
@@ -80,7 +83,7 @@ export default function CommandPalette({ initialQuery = '', onClose }: { initial
           href: s.href,
           label: highlight(s.label, q),
           sub: s.sub,
-          thumb: <span className="th" style={s.color ? { background: `color-mix(in srgb, ${themeColor(s.color)} 30%, var(--tp-input))` } : undefined}>{thumbOf(s)}</span>,
+          thumb: <span className="th" style={s.type === 'character' ? { background: `color-mix(in srgb, ${characterColor(s)} 30%, var(--tp-input))` } : undefined}>{thumbOf(s)}</span>,
           right: '↵ 打开',
         }))
       if (rows.length) out.push({ title: GROUP[type], rows })
@@ -90,7 +93,7 @@ export default function CommandPalette({ initialQuery = '', onClose }: { initial
       actions.push({ key: 'search', href: `/search?q=${encodeURIComponent(q.trim())}`, label: <>查看「{q.trim()}」的全部结果</>, sub: '角色、画师、表情包与标签', thumb: <span className="th"><Icon name="search" /></span> })
     }
     actions.push({ key: 'random', href: '/explore', label: '随机来一张', sub: '去探索页抽一个表情包和一张表情', thumb: <span className="th"><Icon name="sparkle" /></span> })
-    actions.push({ key: 'batch', href: '/batch', label: '打开打包清单', sub: `已选 ${tray} 张`, thumb: <span className="th"><Icon name="box" /></span> })
+    actions.push({ key: 'batch', href: '/batch', run: () => trayState.open(), label: '打开打包清单', sub: `已选 ${tray} 张`, thumb: <span className="th"><Icon name="box" /></span> })
     out.push({ title: '操作', rows: actions })
     return out
   }, [results, q, tray])
@@ -99,7 +102,8 @@ export default function CommandPalette({ initialQuery = '', onClose }: { initial
   const go = (row: Row | undefined) => {
     if (!row) return
     onClose()
-    void navigate({ to: row.href as '/' })
+    if (row.run) row.run()
+    else void navigate({ to: row.href as '/' })
   }
 
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {

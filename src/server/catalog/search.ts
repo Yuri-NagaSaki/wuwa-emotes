@@ -5,8 +5,9 @@ import { packCardsByIds, publishedEmojiCount } from './cards'
 import { characterEntries } from './characters'
 import { type RawImage, toEmojiImageOrNull } from './images'
 import { searchInput, type SearchInput, suggestInput, type SuggestInput } from './inputs'
-import { coverJson, likeEscape, num, packVisible, rows } from './sql'
-import type { ArtistCard, CharacterCard, SearchResult, Suggestion, SuggestionType, TagDimension, TagHit } from './types'
+import { coverJson, emojiVisible, likeEscape, num, packPublished, packVisible, rows } from './sql'
+import { emojiPage, TILE_COLUMNS, type TileRow, toEmojiTile } from './stream'
+import type { ArtistCard, CharacterCard, EmojiTile, SearchResult, Suggestion, SuggestionType, TagDimension, TagHit } from './types'
 
 // Search over pack titles, character names + aliases, artist names + aliases and tag names.
 //
@@ -22,6 +23,9 @@ import type { ArtistCard, CharacterCard, SearchResult, Suggestion, SuggestionTyp
 // Ranking: score, then popularity. One statement for all groups + one for the pack cards.
 
 const MAX_QUERY = 64
+/** 表情 group of the results page: the best-matched character's stickers, else the top packs' first ones. */
+export const SEARCH_EMOJIS = 16
+const EMOJI_PACKS = 4
 const MAX_TERMS = 5
 
 interface Needle {
@@ -193,6 +197,7 @@ export async function searchCatalog(input: SearchInput): Promise<SearchResult> {
     artists: [],
     packs: [],
     tags: [],
+    emojis: [],
     counts: { characters: 0, artists: 0, packs: 0, tags: 0 },
   }
   if (!pq) return empty
@@ -233,6 +238,7 @@ export async function searchCatalog(input: SearchInput): Promise<SearchResult> {
   let best: SearchResult['best'] = null
   if (topChar && topChar.score >= BEST_SCORE && (!topArtist || topChar.score >= topArtist.score)) best = { type: 'character', character: topChar.card }
   else if (topArtist && topArtist.score >= BEST_SCORE) best = { type: 'artist', artist: topArtist.card }
+  const emojis = await searchEmojis(best, packs.slice(0, EMOJI_PACKS).map((p) => p.id))
 
   return {
     q: pq.q,
@@ -241,8 +247,22 @@ export async function searchCatalog(input: SearchInput): Promise<SearchResult> {
     artists: artistHits.slice(0, limit).map((h) => h.card),
     packs,
     tags: tagHits.slice(0, limit).map((h) => h.tag),
+    emojis,
     counts: { characters: charHits.length, artists: artistHits.length, packs: packTotal, tags: tagHits.length },
   }
+}
+
+/** Stickers for the 表情 group: the best-matched character's newest, or the first ones of the top packs. */
+async function searchEmojis(best: SearchResult['best'], packIds: number[]): Promise<EmojiTile[]> {
+  if (best?.type === 'character') return (await emojiPage({ character: best.character.slug }, { sort: 'new', limit: SEARCH_EMOJIS })).items
+  if (!packIds.length) return []
+  const list = await rows<TileRow>(sql`
+    select ${TILE_COLUMNS}
+      from emojis e join packs p on p.id = e.pack_id
+      where ${emojiVisible('e')} and ${packPublished('p')} and p.id = any(${`{${packIds.join(',')}}`}::int[])
+      order by array_position(${`{${packIds.join(',')}}`}::int[], p.id), e.sort_order, e.id
+      limit ${SEARCH_EMOJIS}`)
+  return list.map(toEmojiTile)
 }
 
 // ---- command palette: in-process index, refreshed every 30 s ----

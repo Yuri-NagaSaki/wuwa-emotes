@@ -1,6 +1,9 @@
 // Manual dev-data script (not a test): adds ~40 synthetic packs (~700 stickers) on top of Lane D's v1
 // fixture so the public pages have realistic volume. Stickers are drawn from SVG (round faces in the
 // character's color with a caption), GIFs get a few bouncing frames. Nothing here is real artwork.
+// Like the real catalog, many stickers are opaque squares: every third pack paints a white card, every
+// third a tinted one (the rounded-frame checks need them). Every fourth character has no theme color,
+// as on the live site, so the palette fallback is exercised.
 //
 //   S3_BUCKET=chaochi-lane-i bun tests/import/fixture.ts && bun src/cli.ts import-v1   (Lane D fixture)
 //   DATABASE_URL=… S3_BUCKET=chaochi-lane-i bun tests/pages/volume-fixture.ts
@@ -108,7 +111,7 @@ const EXCERPTS = [
   null,
 ]
 
-function stickerSvg(w: number, h: number, color: string, caption: string, seed: number, frame = 0, frames = 1): string {
+function stickerSvg(w: number, h: number, color: string, caption: string, seed: number, frame = 0, frames = 1, bg: string | null = null): string {
   const t = frames > 1 ? frame / frames : 0
   const bounce = Math.sin(t * Math.PI * 2) * Math.min(w, h) * 0.04
   const r = Math.min(w, h) * 0.34
@@ -128,6 +131,7 @@ function stickerSvg(w: number, h: number, color: string, caption: string, seed: 
     : `<circle cx="${cx - r * 0.35}" cy="${cy - r * 0.1}" r="${eye}" fill="#5a3d22"/><circle cx="${cx + r * 0.35}" cy="${cy - r * 0.1}" r="${eye}" fill="#5a3d22"/>`
   const fontSize = Math.round(Math.min(w, h) * 0.16)
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  ${bg ? `<rect width="${w}" height="${h}" fill="${bg}"/>` : ''}
   <ellipse cx="${cx}" cy="${h * 0.86}" rx="${r * 0.8}" ry="${r * 0.12}" fill="rgba(90,61,34,0.15)"/>
   <circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" stroke="#794f27" stroke-width="${Math.max(3, r * 0.06)}"/>
   <circle cx="${cx - r * 0.55}" cy="${cy + r * 0.2}" r="${r * 0.12}" fill="rgba(255,120,120,0.45)"/>
@@ -138,13 +142,20 @@ function stickerSvg(w: number, h: number, color: string, caption: string, seed: 
 </svg>`
 }
 
+/** `hex` mixed into warm paper (#fff8ec) at `p` (librsvg has no color-mix). */
+function tint(hex: string, p: number): string {
+  const a = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const b = [0xff, 0xf8, 0xec]
+  return '#' + a.map((v, i) => Math.round(v * p + b[i]! * (1 - p)).toString(16).padStart(2, '0')).join('')
+}
+
 async function rgbaOf(svg: string): Promise<Buffer> {
   return sharp(Buffer.from(svg)).ensureAlpha().raw().toBuffer()
 }
 
-async function makeSticker(format: 'gif' | 'png', w: number, h: number, color: string, caption: string, seed: number, frames: number) {
-  if (format === 'png') return sharp(Buffer.from(stickerSvg(w, h, color, caption, seed))).png().toBuffer()
-  const strips = await Promise.all(Array.from({ length: frames }, (_, f) => rgbaOf(stickerSvg(w, h, color, caption, seed, f, frames))))
+async function makeSticker(format: 'gif' | 'png', w: number, h: number, color: string, caption: string, seed: number, frames: number, bg: string | null) {
+  if (format === 'png') return sharp(Buffer.from(stickerSvg(w, h, color, caption, seed, 0, 1, bg))).png().toBuffer()
+  const strips = await Promise.all(Array.from({ length: frames }, (_, f) => rgbaOf(stickerSvg(w, h, color, caption, seed, f, frames, bg))))
   return sharp(Buffer.concat(strips), { raw: { width: w, height: h * frames, channels: 4, pageHeight: h } })
     .gif({ delay: Array(frames).fill(120), loop: 0 })
     .toBuffer()
@@ -161,10 +172,11 @@ async function main() {
   // characters (upsert; theme colors for the fixture's characters too)
   const charId = new Map<string, number>()
   for (const [i, [slug, name, color, aliases]] of CHARACTERS.entries()) {
+    const themeColor = i % 4 === 3 ? null : color
     const [row] = await d
       .insert(characters)
-      .values({ slug, name, themeColor: color, sort: i })
-      .onConflictDoUpdate({ target: characters.slug, set: { themeColor: color, sort: i, name } })
+      .values({ slug, name, themeColor, sort: i })
+      .onConflictDoUpdate({ target: characters.slug, set: { themeColor, sort: i, name } })
       .returning({ id: characters.id })
     charId.set(slug, row!.id)
     for (const alias of aliases) await d.insert(characterAliases).values({ characterId: row!.id, alias }).onConflictDoNothing()
@@ -256,6 +268,8 @@ async function main() {
     if (p % 5 === 3) await d.insert(packTags).values({ packId, tagId: tagId.get('tool:emotelab')! })
 
     const color = PALETTE[main[2]] ?? '#82d5bb'
+    // opaque square stickers, like most of the real catalog: a white card or a tinted one
+    const bg = p % 3 === 1 ? '#ffffff' : p % 3 === 2 ? tint(color, 0.3) : null
     for (let i = 0; i < count; i++) {
       const animated = kind === 'animated' || (kind === 'mixed' && i % 2 === 0)
       const format = animated ? 'gif' : 'png'
@@ -264,7 +278,7 @@ async function main() {
       const frames = animated ? int(4, 8) : 1
       const id = `r-${hex(`volume:${key}:${i}`, 20)}`
       const caption = CAPTIONS[(p * 7 + i) % CAPTIONS.length]!
-      const body = await makeSticker(format, w, h, color, caption, p * 31 + i, frames)
+      const body = await makeSticker(format, w, h, color, caption, p * 31 + i, frames, bg)
       const originalKey = `assets/v1/packs/${key}/emojis/${id}.${format}`
       await putObject(originalKey, body, `image/${format}`)
       await d.insert(emojis).values({

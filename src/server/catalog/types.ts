@@ -285,6 +285,8 @@ export interface HomeData {
   featuredCollection: CollectionRef | null
   /** Its packs in collection order. */
   featured: PackCard[]
+  /** 官方表情: official packs, most downloaded first, topped up with community packs (HOME_OFFICIAL). */
+  official: PackCard[]
   /** Top characters by published emoji count, with avatars (角色潮汐). */
   characters: CharacterCard[]
   stats: CatalogStats
@@ -345,6 +347,8 @@ export interface SearchResult {
   artists: ArtistCard[]
   packs: PackCard[]
   tags: TagHit[]
+  /** 表情: the best-matched character's newest stickers, else the first stickers of the top packs. */
+  emojis: EmojiTile[]
   /** Total matches per group (lists above are capped at `limit`). */
   counts: { characters: number; artists: number; packs: number; tags: number }
 }

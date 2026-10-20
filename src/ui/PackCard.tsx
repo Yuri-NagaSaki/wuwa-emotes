@@ -5,6 +5,7 @@ import { fmtN, fmtW } from './format'
 import { Icon } from './Icon'
 import { AppLink } from './link'
 import type { Shape } from './masonry-layout'
+import { cardTiers, type CardTiers } from './pack-card-tiers'
 import { useAnimatedPreview } from './usePreview'
 
 export type CoverVariant = 'one' | 'four' | 'lead' | 'strip'
@@ -46,13 +47,45 @@ export function coverVariant(variant: CoverVariant, imageCount: number): CoverVa
   return imageCount < 4 ? 'one' : variant
 }
 
-// Fixed geometry of the card (components.css, "pack card"): every text row has a fixed height, so the
-// card height is an exact function of its width. Keep these numbers in sync with the CSS.
+// Geometry of the card (components.css, "pack card"): every text row has a fixed height per line and
+// each card picks its line counts from its content (pack-card-tiers.ts), so the card height is an exact
+// function of its width. Keep these numbers in sync with the CSS.
 const CARD = {
-  desktop: { pad: 12, top: 14, bottom: 16, gap: 9, title: 44, excerpt: 40, chars: 26, meta: 20, credit: 30 },
-  phone: { pad: 8, top: 10, bottom: 12, gap: 7, title: 40, excerpt: 36, chars: 26, meta: 20, credit: 0 },
+  desktop: { pad: 12, top: 14, bottom: 16, gap: 9, titleLine: 22, excerptLine: 20, credit: 30 },
+  phone: { pad: 8, top: 10, bottom: 12, gap: 7, titleLine: 20, excerptLine: 18, credit: 0 },
 } as const
+const TAG_ROW = 26
+const TAG_ROW_GAP = 5
+const META_ROW = 20
+const META_ROW_GAP = 4
 const BORDER = 2
+
+type TierProps = Pick<PackCardProps, 'title' | 'excerpt' | 'noExcerpt' | 'characters' | 'downloads' | 'favorites' | 'date'>
+
+/** Line and row counts of a card (same input on the server and in the browser). */
+export function packCardTiers(p: TierProps): CardTiers {
+  const stats = [p.downloads != null ? fmtW(p.downloads) : null, p.favorites != null ? fmtN(p.favorites) : null, p.date || null].filter((x): x is string => !!x)
+  return cardTiers({
+    title: p.title,
+    excerpt: !p.noExcerpt && p.excerpt ? p.excerpt : null,
+    characters: (p.characters ?? []).map((c) => c.name),
+    stats,
+  })
+}
+
+/** The tiers as the CSS variables the card's rows size themselves by. */
+function tierVars(t: CardTiers): Record<string, number> {
+  return {
+    '--ti': t.desktop.title,
+    '--ex': t.desktop.excerpt,
+    '--ch': t.desktop.chars,
+    '--me': t.desktop.meta,
+    '--ti-p': t.phone.title,
+    '--ex-p': t.phone.excerpt,
+    '--ch-p': t.phone.chars,
+    '--me-p': t.phone.meta,
+  }
+}
 
 /** Which optional rows a card shows (same rules as <PackCard>). */
 export function packCardRows(p: Pick<PackCardProps, 'excerpt' | 'noExcerpt' | 'characters' | 'artists' | 'official'>) {
@@ -65,34 +98,45 @@ export function packCardRows(p: Pick<PackCardProps, 'excerpt' | 'noExcerpt' | 'c
 
 /**
  * Card height as ratio × width + chrome, for <Masonry>. The cover is square-ish per variant (see
- * .cv.*), the body is the sum of its fixed rows. Phones hide the credit row and use tighter padding.
+ * .cv.*), the body is the sum of its rows at the card's own line counts (packCardTiers). Phones hide
+ * the credit row and use tighter padding.
  */
-export function packCardShape(p: Pick<PackCardProps, 'excerpt' | 'noExcerpt' | 'characters' | 'artists' | 'official' | 'variant' | 'images'>): Shape {
+export function packCardShape(p: TierProps & Pick<PackCardProps, 'artists' | 'official' | 'variant' | 'images'>): Shape {
   const v = coverVariant(p.variant ?? 'four', p.images.length)
   const rows = packCardRows(p)
+  const tiers = packCardTiers(p)
   const ratio = v === 'strip' ? 31 / 30 : 1
   const chrome = (mode: 'desktop' | 'phone') => {
     const c = CARD[mode]
+    const t = tiers[mode]
     // cover box (padding included) for an inner width cw = width − 2·border − 2·pad
     const inner = -(2 * BORDER + 2 * c.pad)
     const cover = v === 'strip' ? ratio * inner + 8 - 16 / 3 + 2 * c.pad : v === 'lead' ? inner + 8 + 2 * c.pad : inner + 2 * c.pad
-    const list = [c.title, rows.excerpt ? c.excerpt : 0, rows.chars ? c.chars : 0, c.meta, rows.credit ? c.credit : 0].filter((h) => h > 0)
+    const list = [
+      t.title * c.titleLine,
+      rows.excerpt ? t.excerpt * c.excerptLine : 0,
+      rows.chars ? t.chars * TAG_ROW + (t.chars - 1) * TAG_ROW_GAP : 0,
+      t.meta * META_ROW + (t.meta - 1) * META_ROW_GAP,
+      rows.credit ? c.credit : 0,
+    ].filter((h) => h > 0)
     const body = c.top + c.bottom + list.reduce((a, b) => a + b, 0) + c.gap * (list.length - 1)
     return 2 * BORDER + cover + body
   }
   return { ratio, chrome: { desktop: chrome('desktop'), phone: chrome('phone') } }
 }
 
-/** Pack card for masonry and rails. Text rows have fixed heights (packCardShape). */
+/** Pack card for masonry and rails. Text rows take the card's own line counts (packCardShape). */
 export function PackCard(p: PackCardProps) {
   const v = coverVariant(p.variant ?? 'four', p.images.length)
   const shown = v === 'one' ? p.images.slice(0, 1) : p.images.slice(0, 4)
   const cover = useAnimatedPreview<HTMLAnchorElement>(shown[0] ?? '', p.coverPreview)
   const chars = p.characters ?? []
+  const tiers = packCardTiers(p)
+  const nChars = tiers.shownChars
   return (
     <article
       className={cx('pcard', p.enterIndex != null && 'is-in', p.className)}
-      style={{ '--acc': p.accent, '--d': p.enterIndex != null ? p.enterIndex % 12 : undefined } as CSSProperties}
+      style={{ '--acc': p.accent, '--d': p.enterIndex != null ? p.enterIndex % 12 : undefined, ...tierVars(tiers) } as CSSProperties}
     >
       <AppLink to={p.href} className="pcard-cover" aria-label={p.title} ref={cover.ref} {...cover.handlers}>
         <div className={cx('cv', v)}>
@@ -125,12 +169,12 @@ export function PackCard(p: PackCardProps) {
         {!p.noExcerpt && p.excerpt ? <p className="pcard-ex">{p.excerpt}</p> : null}
         {chars.length ? (
           <div className="pcard-chars">
-            {chars.slice(0, 3).map((c) => (
+            {chars.slice(0, nChars).map((c) => (
               <Tag key={c.name} color={c.color}>
                 {c.name}
               </Tag>
             ))}
-            {chars.length > 3 ? <Tag color="var(--tp-line-2)">+{chars.length - 3}</Tag> : null}
+            {chars.length > nChars ? <Tag color="var(--tp-line-2)">+{chars.length - nChars}</Tag> : null}
           </div>
         ) : null}
         <div className="pcard-meta">

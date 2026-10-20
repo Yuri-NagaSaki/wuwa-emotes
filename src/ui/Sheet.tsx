@@ -1,5 +1,5 @@
 import { Dialog } from '@base-ui/react/dialog'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 import { IconButton } from './Button'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
@@ -21,13 +21,21 @@ export interface SheetProps {
 /**
  * Side drawer on desktop (right edge, 440px), bottom sheet on phones (≤760px, rounded top, grab
  * handle, at most 88% of the screen). Body scrolls inside without a visible scrollbar.
+ * Opened with the keyboard, focus goes to the first control (its focus ring shows); opened by pointer
+ * or by code, the panel itself takes focus, so no ring appears on the close button.
  */
 export function Sheet({ open, onOpenChange, title, subtitle, icon, children, footer, bare, className }: SheetProps) {
+  const popup = useRef<HTMLDivElement>(null)
   return (
     <Dialog.Root open={open} onOpenChange={(next) => onOpenChange(next)}>
       <Dialog.Portal>
         <Dialog.Backdrop className="scrim" />
-        <Dialog.Popup className={cx('drawer', className)} aria-label={bare && typeof title === 'string' ? title : undefined}>
+        <Dialog.Popup
+          ref={popup}
+          className={cx('drawer', className)}
+          aria-label={bare && typeof title === 'string' ? title : undefined}
+          initialFocus={(type) => (type === 'keyboard' ? true : popup.current)}
+        >
           {bare ? (
             children
           ) : (

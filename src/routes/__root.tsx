@@ -5,6 +5,7 @@ import { BlobDefs } from '#/ui/BlobDefs'
 import { setCapEndpoint } from '#/ui/cap/load'
 import { NotFoundPage } from '#/ui/NotFoundPage'
 import { ImpersonationBar } from '#/ui/shell/ImpersonationBar'
+import { THEME_BOOT, THEME_COLORS } from '#/ui/shell/theme'
 import { SiteConfigProvider } from '#/ui/site-config'
 import appCss from '#/ui/styles/app.css?url'
 import { Toaster } from '#/ui/Toast'
@@ -14,7 +15,6 @@ import { Toaster } from '#/ui/Toast'
 // so text paints with the fallback stack first; the shards themselves load per character.
 const DISPLAY_CSS = '/fonts/tp-rounded/tp-rounded.css'
 const NUNITO_LATIN = '/fonts/nunito/nunito-latin-wght-normal.woff2'
-const THEME_COLOR = '#f8f8f0'
 const FAVICON =
   'data:image/svg+xml,' +
   encodeURIComponent(
@@ -32,7 +32,8 @@ export const Route = createRootRoute({
       { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
       { title: loaderData?.site.name ?? '' },
       ...(loaderData?.site.subtitle ? [{ name: 'description', content: loaderData.site.subtitle }] : []),
-      { name: 'theme-color', content: THEME_COLOR },
+      // 白昼 color; THEME_BOOT switches it (and html[data-theme]) to 夜潮 before first paint
+      { name: 'theme-color', content: THEME_COLORS.light },
     ],
     links: [
       { rel: 'preload', href: DISPLAY_CSS, as: 'style' },
@@ -62,10 +63,11 @@ const loadDisplayCss = `(function(){var l=document.createElement("link");l.rel="
 
 function RootDocument({ children }: { children: ReactNode }) {
   return (
-    // suppressHydrationWarning: inline scripts add classes to <html> before hydration (ann-off)
+    // suppressHydrationWarning: inline scripts mark <html> before hydration (ann-off, data-theme)
     <html lang="zh-CN" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <ScriptOnce>{THEME_BOOT}</ScriptOnce>
         <ScriptOnce>{loadDisplayCss}</ScriptOnce>
         <noscript>
           <link rel="stylesheet" href={DISPLAY_CSS} />

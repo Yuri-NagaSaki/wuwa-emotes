@@ -29,12 +29,19 @@ describe('search', () => {
     // 0.75), so it wins over the more downloaded pack; multi-01 matches only through its characters
     expect(r.packs.map((p) => p.slug)).toEqual(['aimisi-02', 'aimisi-01', 'multi-01'])
     expect(r.counts.packs).toBe(3)
+    // 表情: the best-matched character's stickers
+    expect(r.emojis.length).toBeGreaterThan(0)
+    expect(r.emojis.length).toBeLessThanOrEqual(16)
+    expect(r.emojis.every((e) => ['aimisi-01', 'aimisi-02', 'multi-01'].includes(e.pack.slug))).toBe(true)
   })
 
   test('Chinese substring of 3+ characters hits titles through pg_trgm', async () => {
     const r = await search('动态表情')
     expect(r.packs.map((p) => p.slug)).toEqual(['aimisi-01'])
     expect(r.best).toBeNull()
+    // no best match: the stickers come from the top packs
+    expect(r.emojis.length).toBeGreaterThan(0)
+    expect(r.emojis.every((e) => e.pack.slug === 'aimisi-01')).toBe(true)
     const r2 = await search('琵琶曲')
     expect(r2.packs.map((p) => p.slug)).toEqual(['multi-01'])
   })

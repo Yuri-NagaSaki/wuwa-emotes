@@ -8,15 +8,20 @@ import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { SectionHead } from '../Section'
 import { Tabs } from '../Tabs'
-import { artistHref, characterHref, tagHref, themeColor } from './model'
+import { artistHref, characterHref, characterColor, tagHref } from './model'
 import { PackMasonry } from './PackMasonry'
 import { ArtistTile, CharacterTile } from './people'
+import { StreamTiles } from './StreamTiles'
 
-// 搜索结果 /search?q=: best match card, then results grouped by kind (tabs filter the groups).
+// 搜索结果 /search?q=: best match card, then results grouped by kind (tabs filter the groups). 全部
+// shows six packs (more on the 表情包 tab) and the 表情 group; a character that is already the best
+// match is not listed again under 角色.
 
 type Group = 'all' | 'characters' | 'packs' | 'artists' | 'tags'
+/** packs shown on the 全部 tab (the prototype's six) */
+const ALL_PACKS = 6
 
-export function SearchPage({ result, q }: { result: SearchResult | null; q: string }) {
+export function SearchPage({ result, q, current }: { result: SearchResult | null; q: string; current?: string }) {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Group>('all')
   const submit = (e: FormEvent<HTMLFormElement>) => {
@@ -28,6 +33,8 @@ export function SearchPage({ result, q }: { result: SearchResult | null; q: stri
   const c = r?.counts
   const total = c ? c.characters + c.packs + c.artists + c.tags : 0
   const show = (g: Group) => tab === 'all' || tab === g
+  const dupChar = tab === 'all' && r?.best?.type === 'character' && r.characters.length <= 1
+  const packs = r ? (tab === 'all' ? r.packs.slice(0, ALL_PACKS) : r.packs) : []
 
   return (
     <div className="wrap">
@@ -69,7 +76,7 @@ export function SearchPage({ result, q }: { result: SearchResult | null; q: stri
 
           {r.best && tab === 'all' ? <BestHit best={r.best} /> : null}
 
-          {show('characters') && r.characters.length ? (
+          {show('characters') && r.characters.length && !dupChar ? (
             <section className="sec">
               <SectionHead plain title="角色" sub={`${c!.characters} 位`} />
               <div className="cgrid">
@@ -79,10 +86,21 @@ export function SearchPage({ result, q }: { result: SearchResult | null; q: stri
               </div>
             </section>
           ) : null}
-          {show('packs') && r.packs.length ? (
+          {show('packs') && packs.length ? (
             <section className="sec">
-              <SectionHead plain title="表情包" sub={c!.packs > r.packs.length ? `前 ${r.packs.length} 个，共 ${fmtN(c!.packs)} 个` : `${c!.packs} 个`} />
-              <PackMasonry cards={r.packs} label="匹配的表情包" priority={4} />
+              <SectionHead plain title="表情包" sub={c!.packs > packs.length ? `前 ${packs.length} 个，共 ${fmtN(c!.packs)} 个` : `${c!.packs} 个`} />
+              <PackMasonry cards={packs} label="匹配的表情包" priority={4} />
+              {tab === 'all' && r.packs.length > packs.length ? (
+                <div className="stream-cta">
+                  <Button onClick={() => setTab('packs')}>查看全部 {fmtN(c!.packs)} 个表情包</Button>
+                </div>
+              ) : null}
+            </section>
+          ) : null}
+          {tab === 'all' && r.emojis.length ? (
+            <section className="sec">
+              <SectionHead plain title="表情" sub={r.best?.type === 'character' ? `${r.best.character.name}的新表情` : '来自最匹配的表情包'} />
+              <StreamTiles tiles={r.emojis} current={current} size={132} />
             </section>
           ) : null}
           {show('artists') && r.artists.length ? (
@@ -130,7 +148,7 @@ function BestHit({ best }: { best: NonNullable<SearchResult['best']> }) {
   if (best.type === 'character') {
     const ch = best.character
     return (
-      <div className="top-hit" style={{ '--cc': themeColor(ch.color) } as CSSProperties}>
+      <div className="top-hit" style={{ '--cc': characterColor(ch) } as CSSProperties}>
         <span className="pool">{ch.avatar ? <img src={ch.avatar.poster} width={96} height={96} alt="" decoding="async" /> : <span className="initial">{Array.from(ch.name)[0]}</span>}</span>
         <div>
           <div className="eyebrow">最佳匹配 · 角色</div>

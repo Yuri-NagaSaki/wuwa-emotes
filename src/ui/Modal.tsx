@@ -1,5 +1,5 @@
 import { Dialog } from '@base-ui/react/dialog'
-import type { ReactElement, ReactNode } from 'react'
+import { useRef, type ReactElement, type ReactNode } from 'react'
 import { Icon, type IconName } from './Icon'
 
 export interface ModalProps {
@@ -16,8 +16,12 @@ export interface ModalProps {
   dismissible?: boolean
 }
 
-/** Confirmation / notice dialog on the sand "blob" (clip-path #tp-blob, see BlobDefs). */
+/**
+ * Confirmation / notice dialog on the sand "blob" (clip-path #tp-blob, see BlobDefs). Opened with the
+ * keyboard, focus goes to the first action; opened by pointer or by code, to the dialog itself.
+ */
 export function Modal({ open, onOpenChange, title, icon, children, actions, dismissible = true }: ModalProps) {
+  const popup = useRef<HTMLDivElement>(null)
   return (
     <Dialog.Root
       open={open}
@@ -33,7 +37,7 @@ export function Modal({ open, onOpenChange, title, icon, children, actions, dism
       <Dialog.Portal>
         <Dialog.Backdrop className="scrim" />
         <Dialog.Viewport className="modal-wrap">
-          <Dialog.Popup className="modal">
+          <Dialog.Popup ref={popup} className="modal" initialFocus={(type) => (type === 'keyboard' ? true : popup.current)}>
             <div className="modal-body">
               {icon ? (
                 <span className="modal-ico">

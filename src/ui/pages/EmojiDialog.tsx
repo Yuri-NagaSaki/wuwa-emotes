@@ -6,7 +6,7 @@ import { fmtB } from '../format'
 import { Icon, type IconName } from '../Icon'
 import { AppLink } from '../link'
 import { copyImage, copyLink } from './clipboard'
-import { artistHref, characterHref, type DialogEmoji, emojiHref, licenseLabel, packHref, themeColor } from './model'
+import { artistHref, characterHref, type DialogEmoji, emojiHref, licenseLabel, packHref, characterColor } from './model'
 import { useAddToBatch, useInBatch } from './useBatch'
 import { useDownload } from './useDownload'
 import { useFavorite } from './useFavorite'
@@ -209,7 +209,7 @@ export function EmojiDialog({ items, index, onIndex, onClose, priority, linkPack
               <div className="chips">
                 {e.characters.slice(0, 3).map((c) => (
                   <AppLink key={c.slug} to={characterHref(c.slug)}>
-                    <Tag color={themeColor(c.color)}>角色 · {c.name}</Tag>
+                    <Tag color={characterColor(c)}>角色 · {c.name}</Tag>
                   </AppLink>
                 ))}
                 {e.pack.artists.slice(0, 2).map((a) => (

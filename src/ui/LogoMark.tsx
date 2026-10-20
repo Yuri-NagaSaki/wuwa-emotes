@@ -10,6 +10,7 @@ export function LogoMark({ className }: { className?: string }) {
         fill="none"
         stroke="#794f27"
         strokeWidth="2.6"
+        className="ln"
       />
       <path d="M10 28c3-2.6 6-2.6 9 0s6 2.6 9 0 6-2.6 9 0" fill="none" stroke="#e9fbf7" strokeWidth="2.6" strokeLinecap="round" />
       <path
@@ -18,6 +19,7 @@ export function LogoMark({ className }: { className?: string }) {
         stroke="#794f27"
         strokeWidth="2"
         strokeLinejoin="round"
+        className="ln"
       />
       <circle cx="15" cy="17" r="2.2" fill="#fffdf4" />
       <circle cx="34" cy="33" r="1.6" fill="#fffdf4" />

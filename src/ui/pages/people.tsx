@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react'
 import type { ArtistCard, CharacterCard } from '#/server/catalog/types'
 import { fmtN } from '../format'
 import { AppLink } from '../link'
-import { artistHref, characterHref, themeColor } from './model'
+import { artistHref, characterColor, characterHref } from './model'
 
 // Character and artist cards shared by 角色图鉴, 画师名录, search and the character page.
 
@@ -10,7 +10,7 @@ const ARTIST_COLORS = ['purple', 'pink', 'blue', 'mint', 'yellow', 'orange', 'gr
 
 export function CharacterTile({ c, eager }: { c: CharacterCard; eager?: boolean }) {
   return (
-    <AppLink to={characterHref(c.slug)} className="ccard" style={{ '--cc': themeColor(c.color) } as CSSProperties}>
+    <AppLink to={characterHref(c.slug)} className="ccard" style={{ '--cc': characterColor(c) } as CSSProperties}>
       <span className="pool">
         {c.avatar ? <img src={c.avatar.poster} width={160} height={160} loading={eager ? 'eager' : 'lazy'} decoding="async" alt="" /> : null}
       </span>

@@ -1,5 +1,6 @@
 import { createServerFn } from '@tanstack/react-start'
 import type { Role } from '#/shared/roles'
+import { getHome } from '../catalog/home'
 import { env } from '../env'
 import { log } from '../log'
 import { publicFn, requireUser } from '../perm/fn'
@@ -21,6 +22,8 @@ export interface PublicConfig {
   announcement: string | null
   cap: { endpoint: string }
   viewer: ViewerSummary | null
+  /** Catalog totals for the footer base line (表情 N 张 · 表情包 N 个); null when the catalog is unavailable. */
+  stats: { emojis: number; packs: number } | null
 }
 
 async function readSite(): Promise<{ site: PublicConfig['site']; announcement: string | null }> {
@@ -34,16 +37,28 @@ async function readSite(): Promise<{ site: PublicConfig['site']; announcement: s
   }
 }
 
+/** Totals from the cached home data (30 s), so the chrome adds no query of its own most of the time. */
+async function readStats(): Promise<PublicConfig['stats']> {
+  try {
+    const s = (await getHome()).stats
+    return { emojis: s.emojis, packs: s.packs }
+  } catch (err) {
+    log().warn({ err: (err as Error).message }, 'ui: catalog totals unavailable for the footer')
+    return null
+  }
+}
+
 export const getPublicConfig = createServerFn({ method: 'GET' })
   .middleware([publicFn])
   .handler(async ({ context }): Promise<PublicConfig> => {
-    const { site, announcement } = await readSite()
+    const [{ site, announcement }, stats] = await Promise.all([readSite(), readStats()])
     const v = context.viewer
     return {
       site,
       announcement,
       cap: { endpoint: env().CAP_API_ENDPOINT },
       viewer: v ? { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) } : null,
+      stats,
     }
   })
 
