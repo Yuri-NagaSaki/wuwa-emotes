@@ -8,7 +8,7 @@
 
 1. **应用**：一个 TanStack Start 应用（Bun 1.4.3，Nitro `bun` 预设）提供公开站、后台和 API。同一镜像以 `bun src/worker.ts` 运行图片衍生、ZIP 打包、备份和统计。PostgreSQL 18 是唯一的数据源。
 2. **入口**：Cloudflare 代理 DNS → 源站 443（Cloudflare Origin CA 证书，SSL「完全（严格）」）→ 主机网络上的 Caddy 2.11.7 → 两个 web 副本。nftables 只允许 Cloudflare 网段连接 443，所有容器都不映射端口。不使用 Cloudflare Tunnel。
-3. **发布**：`deploy/rollout.sh` 先执行迁移，再逐个排空、重建两个副本，最后重建 worker、平滑重载 Caddy。生产上 10 次发布每次 19–52 秒，经 Cloudflare 的健康探测失败 0 次。
+3. **构建与发布**：GitHub Actions 检查每次推送，通过后把镜像推送到公开的 GHCR 包；服务器不构建镜像。开发机执行 `deploy/release.sh`，服务器检出该提交，由 `deploy/rollout.sh` 先迁移、再逐个排空并替换两个副本。生产上经 Cloudflare 做健康探测的 11 次发布每次 19–52 秒，探测失败 0 次。
 4. **存储**：所有文件放在 R2 桶 `wuwa`。网页图片只走 `/img`（一年期 immutable，由 Cloudflare 缓存）；原图、ZIP 和上传用预签名链接直连 R2。下载链接 2 分钟有效；上传链接 15 分钟有效，并签入文件大小和类型。
 5. **图片**：网页只显示 WebP（海报 `p240`、动图预览 `a160`、弹窗大图 `full`）。原图只在查看、保存和打包时下载，GIF 原样给出。
 6. **角色**：站长、管理员、用户。每个服务端函数都必须声明权限中间件，单元测试检查遗漏；最后一位站长由数据库触发器保护；每次写操作都写审计日志。
@@ -19,7 +19,7 @@
 11. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
 12. **仓库公开**：仓库里没有服务器地址和密钥。密钥只在服务器的环境文件和开发机的 `.env.local` 里；GitHub secret scanning 与 push protection 已开启。
 
-公开浏览页与打包清单界面正在开发（第 8.3 节），构建与发布流水线正在调整（第 12.3 节）。
+公开浏览页与打包清单界面正在开发（第 8.3 节）。
 
 ---
 
@@ -511,7 +511,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 - IP 与 UA 只存 HMAC-SHA256 加盐哈希（`IP_HASH_SALT`，截取 32 位十六进制）；游客邮箱同样只存哈希；公开接口和根路由下发的配置不含邮箱。
 - 密钥放在服务器的 `/opt/chaochi/app-env`（root 所有，权限 600），由站长在开发机上用 `deploy/push-env.sh` 从本地 `.env.local` 生成：R2 与 Cap 的凭据取自 `.env.local`，数据库密码、`AUTH_SECRET`、`IP_HASH_SALT` 现场随机生成，全程不打印值。R2 令牌只授权桶 `wuwa`；缓存清除令牌只有该权限（`deploy/README.md`）。
-- 仓库公开：仓库里没有服务器地址和密钥。部署脚本从不进仓库的 `deploy/.deploy-host` 或环境变量 `CHAOCHI_DEPLOY_HOST` 读取服务器；`.gitignore` 排除 `.env*`、`.secrets/`、`*.pem`；`.dockerignore` 另排除 `secrets`、`*.key`，密钥不进构建上下文。GitHub secret scanning 与 push protection 已开启。安全问题通过 GitHub 私密安全通告报告。
+- 仓库公开：仓库和 Actions 里都没有服务器地址和密钥。部署脚本从不进仓库的 `deploy/.deploy-host` 或环境变量 `CHAOCHI_DEPLOY_HOST` 读取服务器；CI 只用 `GITHUB_TOKEN`，每次运行用 gitleaks 扫描全部历史，并有一条拒绝公网 IPv4 地址的自定义规则（`.gitleaks.toml`）；`.gitignore` 排除 `.env*`、`.secrets/`、`*.pem`；`.dockerignore` 另排除 `secrets`、`*.key`，密钥不进构建上下文。GitHub secret scanning 与 push protection 已开启。安全问题通过 GitHub 私密安全通告报告。
 
 ---
 
@@ -563,17 +563,18 @@ src/
   cli.ts        运维命令
 drizzle/        SQL 迁移
 deploy/         Caddy、防火墙、发布与环境脚本
+.github/workflows/ci.yml   CI：检查、密钥扫描、构建并推送镜像
 ```
 
 一个镜像、四个入口，都直接用 Bun 运行：web 为 `bun .output/server/index.mjs`（Nitro 构建产物），worker、migrate、命令行分别是 `bun src/worker.ts`、`bun src/migrate.ts`、`bun src/cli.ts`，从 TypeScript 源码运行，不另外打包。
 
 命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
 
-镜像（`Dockerfile`）多阶段构建：安装全部依赖并 `bun run build`；另装只含生产依赖的 `node_modules` 并删掉 musl 版本的原生包（基础镜像是 glibc，这些包永远加载不了）；运行层从 PGDG 安装 `postgresql-client-18`（`pg_dump`）和 `tini`，复制 `.output/`、`src/`、`drizzle/`，以 `bun` 用户运行，`tini` 作为 PID 1 转发信号。
+镜像 `ghcr.io/yuri-nagasaki/wuwa-emotes` 由 CI 构建（第 12.3 节），`Dockerfile` 多阶段构建：安装全部依赖并 `bun run build`；另装只含生产依赖的 `node_modules` 并删掉 musl 版本的原生包（基础镜像是 glibc，这些包永远加载不了）；运行层从 PGDG 安装 `postgresql-client-18`（`pg_dump`）和 `tini`，复制 `.output/`、`src/`、`drizzle/`，以 `bun` 用户运行，`tini` 作为 PID 1 转发信号。
 
 ### 12.2 Docker Compose
 
-`compose.yaml` 的默认值就是生产值（项目名 `chaochi`）：
+`compose.yaml` 的默认值就是生产值（项目名 `chaochi`）。应用服务（migrate、web-a、web-b、worker）都运行本机指针标签 `ghcr.io/yuri-nagasaki/wuwa-emotes:latest`，只有 `rollout.sh` 移动它（第 12.3 节）。
 
 | 服务 | 作用 | 要点 |
 |---|---|---|
@@ -595,21 +596,39 @@ deploy/         Caddy、防火墙、发布与环境脚本
 - **健康检查**：主动检查每 2 秒请求一次 `/api/health`，连续 2 次失败摘除；一次连接失败被动摘除 5 秒。只有回环地址的请求能看到响应头 `X-Chaochi-Upstream`，`rollout.sh` 用它确认请求落到了哪个副本。
 - **防火墙**（`deploy/firewall.sh`）：nftables 表 `inet chaochi_fw` 只挂 input 钩子，不碰 Docker 的表。入站只放行本机回环、已建立的连接、IPv6 邻居发现、DHCP 回复、SSH，以及来自 Cloudflare 网段的 443，其余丢弃（IPv4 与 IPv6）。systemd 定时器每周刷新 Cloudflare 网段，获取失败时保留上次的列表。
 
-### 12.3 发布与零中断
+### 12.3 构建、发布与零中断
 
-<!-- 待补：构建与发布流水线改为 GitHub Actions 构建镜像并推送到 GHCR、服务器用 git 检出公开仓库之后，按新流程改写本节 -->
+发布用的镜像由 CI 构建，服务器只拉取，只在 GHCR 或 CI 不可用时才本地构建；源码目录 `/opt/chaochi/src` 是公开仓库的 git 检出。发布在开发机上执行 `deploy/release.sh`，它等 CI 发布镜像，再让服务器检出该提交并执行 `deploy/rollout.sh`。仓库和 Actions 里都没有服务器的任何信息。
 
-当前流程：
+**CI**（`.github/workflows/ci.yml`）在推送到 `develop`、`main` 和每个 pull request 时运行：
 
-1. 开发机执行 `deploy/push-src.sh`：把一个提交的 `git archive` 经 SSH 传到服务器，用 `rsync --delete` 原地更新 `/opt/chaochi/src`，提交号写进 `REVISION`。服务器地址取自不进仓库的 `deploy/.deploy-host` 或 `CHAOCHI_DEPLOY_HOST`。
-2. 服务器在 `/opt/chaochi/src` 执行 `deploy/rollout.sh --build "$(cat REVISION)"`：在服务器上构建镜像并滚动发布。`rollout.sh` 也接受 `--load <镜像.tar>` 或已经拉取的镜像。
+| 作业 | 内容 | 耗时（2026-10-20） |
+|---|---|---|
+| `check` | PostgreSQL 18 与 RustFS 服务容器（凭据与端口同 `compose.dev.yaml`）、Bun 1.4.3、PGDG 的 `postgresql-client-18`（备份测试要用 `pg_dump`）；依次 `bun run typecheck`、`bun run test`（822 个测试）、`bun run build`（含客户端包检查） | 约 1.5 分钟 |
+| `secrets` | gitleaks 8.30.1 扫描全部历史，规则为默认规则加自定义的公网 IPv4 规则（`.gitleaks.toml`），有发现即失败 | 约 10 秒 |
+| `image` | 只在推送时运行，且 `check` 与 `secrets` 都通过：buildx 构建 `linux/amd64`，推送 `ghcr.io/yuri-nagasaki/wuwa-emotes:<提交前 7 位>` 和 `:<分支名>`，使用 GHA 缓存 | 约 2.5 分钟 |
 
-`/opt/chaochi/src` 只能原地更新：proxy 通过绑定挂载读取 `src/deploy`，目录被整体替换后它仍读已删除的旧目录，平滑重载会失败。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况就停止。
+- 第三方 Action 固定到提交 SHA，服务容器镜像固定到版本和 digest，下载的工具校验 SHA-256。
+- CI 只用 GitHub 自动提供的 `GITHUB_TOKEN`（`image` 作业另有 `packages: write`），仓库里不配置任何密钥。
+- 同一分支的推送依次运行，`:develop`、`:main` 标签只会前进；pull request 的新运行取消旧运行。一次推送多个提交时，只有最后一个提交有镜像。
+- GHCR 包已设为公开，并通过镜像标签 `org.opencontainers.image.source` 关联到仓库，服务器拉取不需要凭据。
+- CI 从不推送 `:latest`。服务器上的 `ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 是只存在于本机的指针，compose 的应用服务都用它，只有 `rollout.sh` 移动它，所以 `docker compose pull` 不会绕过发布脚本换掉线上镜像。
 
-`rollout.sh` 的步骤（任何一步失败都停止）：
+**发布**：`deploy/release.sh [<提交>] [--no-wait] [--probe]` 在开发机的仓库里执行：
+
+1. `git fetch origin`，把提交（默认 `origin/develop`）解析成完整提交号，确认它已在 `origin/develop` 或 `origin/main` 上。镜像标签是提交号的前 7 位。
+2. 等 CI 发布这个标签的镜像（`gh run list` 查 CI 状态，或 `docker manifest inspect` 直接确认），最多 1800 秒（`CHAOCHI_RELEASE_TIMEOUT`）。CI 失败或被取消时立即停止；120 秒内查不到这个提交的 CI 运行时也停止。
+3. 通过 SSH 在服务器上执行 `cd /opt/chaochi/src && git fetch --quiet origin && git checkout --quiet --detach <提交> && deploy/rollout.sh <提交前 7 位>`，实时输出 `rollout.sh` 的日志。服务器地址只来自命令行参数、`CHAOCHI_DEPLOY_HOST` 或不进仓库的 `deploy/.deploy-host`。
+4. `--probe` 时，发布期间每 0.5 秒请求一次站点的 `/api/health`，结束时打印成功与失败次数。
+
+退出码与 `rollout.sh` 相同，SSH 失败时为 255。SSH 连接中途断开时，服务器上的 `rollout.sh` 可能停在任意一步，需要在服务器上检查状态后重新执行（`deploy/README.md`「已知限制」）。开发机不可用时，在服务器上直接执行第 3 步的命令，效果相同。
+
+`/opt/chaochi/src` 只能原地更新，也就是上面的 `git checkout`：proxy 通过绑定挂载读取 `src/deploy`，目录被整体替换（`mv`、`rm -rf`、重新克隆）后它仍读已删除的旧目录，平滑重载会失败。`rollout.sh` 在改动任何服务之前先让 proxy 校验配置，发现这种情况就停止。
+
+**`rollout.sh`**（任何一步失败都停止）：
 
 1. 预检：工具与 root 权限、环境文件、发布锁（同一时间只有一次发布）、proxy 配置校验。
-2. 把指针标签 `chaochi/app:latest` 指向新镜像，启动 db（如未运行），执行一次性迁移。迁移期间旧版本继续服务；迁移失败时不重启任何副本。
+2. 本机没有 `<提交前 7 位>` 镜像时从 GHCR 拉取，再把本机指针 `ghcr.io/yuri-nagasaki/wuwa-emotes:latest` 指向它；启动 db（如未运行），执行一次性迁移。迁移期间旧版本继续服务；迁移失败时不重启任何副本。
 3. 对 web-a、再对 web-b：
    1. 另一个副本不健康、而这个副本仍健康时停止，避免两个副本同时不可用。
    2. 进入副本的网络命名空间，用 nft 规则以 TCP reset 拒绝新连接。Caddy 把新请求改发到另一个副本，进行中的请求继续完成；脚本等这些连接关闭，最长 30 秒。
@@ -618,17 +637,20 @@ deploy/         Caddy、防火墙、发布与环境脚本
 4. 重建 worker（先完成进行中的任务），写发布记录 `/opt/chaochi/state/releases.log`。
 5. 平滑重载 Caddy 配置（配置未变时不做任何事）。
 
-退出码：0 为已发布；1 为在发布生效前停止，此时指针标签退回原镜像，健康的副本继续服务，脚本打印各副本状态和回滚命令；2 为 web-a、web-b、worker 都已切换、只有最后的 Caddy 重载失败，发布已经生效，Caddy 继续使用原来的配置。
+退出码：0 为已发布；1 为在发布生效前停止，此时指针退回原镜像，健康的副本继续服务，脚本打印各副本状态和回滚命令；2 为 web-a、web-b、worker 都已切换、只有最后的 Caddy 重载失败，发布已经生效，Caddy 继续使用原来的配置。
 
 - 同一标签再执行一次不做任何事；`--force` 滚动重启全部副本。
-- 回滚是用上一个标签再发布一次，同样逐个替换。回滚不撤销迁移，所以迁移只做扩展（第 7.1 节）。
+- 回滚：`deploy/release.sh <上一个标签>`，源码和镜像一起回到上一个发布，同样逐个替换。上一个标签打印在每次发布的结尾，也记录在 `releases.log`。回滚不撤销迁移，所以迁移只做扩展（第 7.1 节）。
+- GHCR 或 CI 不可用时，在服务器上用当前检出构建：`deploy/rollout.sh --build <提交前 7 位>-local`。加 `-local` 是为了不与 CI 发布的同名标签混淆。
 - 镜像变化后不要直接执行 `docker compose up -d`：它会同时重建 web-a 和 web-b，网站会中断。
+- 从旧流程（rsync 上传源码、服务器上构建 `chaochi/app` 镜像）迁移的步骤见 `deploy/README.md`「从旧流程迁移」。
 
 实测：
 
 | 场景 | 结果 |
 |---|---|
-| 生产，10 次发布（2026-10-20） | 每次 19–52 秒；每次发布期间经 Cloudflare 做 27–81 次健康探测，失败 0 次 |
+| 生产，2026-10-20 的全部发布 | 共 12 次滚动发布，`releases.log` 记录 11 次。发布期间经 Cloudflare 做健康探测的 11 次：每次 19–52 秒，每次 27–81 次探测，失败 0 次。另 1 次在 web 与 worker 切换后、最后的 proxy 重载失败；这次事故促成了源码目录只能原地更新的规则和退出码 2 |
+| 生产，首次经 `release.sh` 发布（cd1a907，2026-10-20） | 21 秒；期间经 Cloudflare 探测 34 次，失败 0 次 |
 | 生产，备用 Caddy（`SO_REUSEPORT` 共用 443）接管期间重建 proxy（2026-10-20） | 探测失败 0 次。这是一次手工操作，`deploy/` 里没有对应脚本；按 `deploy/README.md`「已知限制」，常规重建 proxy 仍会中断数秒 |
 | 本地测试栈，两次连续发布（2026-10-20） | 每个副本约 6 秒，整次发布约 20 秒；期间以约 1,470 req/s 发送 90,377 个请求，失败 0 个 |
 
@@ -672,7 +694,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 
 ## 13. 测试与检查
 
-`bun run test` 依次运行九组测试：unit、ui、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 在 `develop` 上共 770 个测试全部通过。除 unit 和 ui 外，各组都连本地的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
+`bun run test` 依次运行十组测试：unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 CI 的 `check` 作业运行 822 个测试，全部通过。除 unit、ui、pages 外，各组都连本地（CI 中为服务容器）的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
 
 其他检查：
 
@@ -683,6 +705,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | `tests/integration/presign-put.test.ts` | 预签名 PUT 把大小和类型签进签名头，在 RustFS 上拒绝其他类型与无长度的流式请求体 |
 | `scripts/check-client-bundle.ts` | 构建的最后一步：浏览器包里没有服务端代码（第 8.4 节） |
 | `bun run typecheck` | 生成路由树后 `tsc --noEmit` |
+| CI（`.github/workflows/ci.yml`） | 每次推送和 pull request 运行类型检查、全部测试、构建与 gitleaks 全历史扫描（第 12.3 节） |
 | `bun src/cli.ts presign-selftest` | 在实际配置的存储上确认签名的 `Content-Length` 生效（第 3 节） |
 | `deploy/loadcheck.ts` | 发布期间持续发请求，统计失败数（第 12.3 节） |
 
@@ -715,7 +738,8 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | D19 | 入口为 Cloudflare 代理 + 源站 Caddy + nftables 只放行 Cloudflare，不用 Tunnel | 源站 Caddy 承担两个副本的负载均衡、重试与排空；只有 Cloudflare 能连到源站，`CF-Connecting-IP` 可信 |
 | D20 | 两个 web 副本，`rollout.sh` 逐个排空、替换 | 发布不中断访问；迁移只做扩展 |
 | D21 | 用户投稿只能经「投稿审核」上线 | 只有审核会应用授权声明与「允许下载」 |
-| D22 | 仓库公开，地址与密钥不进仓库 | 由 `.gitignore`、`.dockerignore`、不进仓库的部署主机文件和 GitHub push protection 共同保证 |
+| D22 | 仓库公开，地址与密钥不进仓库 | 由 `.gitignore`、`.dockerignore`、不进仓库的部署主机文件、CI 的 gitleaks 扫描和 GitHub push protection 共同保证 |
+| D23 | 发布用的镜像由 CI 构建并推送到公开的 GHCR 包；服务器拉取镜像、检出公开仓库，只在应急时本地构建 | 上线的镜像都通过了同一套检查；服务器不需要构建工具和 GitHub 凭据 |
 
 ---
 
@@ -750,6 +774,7 @@ v2 → v3（按实现，2026-10-20）：
 - 评论落地了具体参数：包的评论区 ID 用 `String(pack.id)`；最热 = 回应数 + 2 × 回复数；首评审核对所有作者生效；回应与举报需要登录。
 - 原计划的里程碑 M0–M5 改为按模块分道开发；公开浏览页与打包清单界面仍在进行（第 8.3 节）。
 - 仓库公开前移除了文档与脚本中的服务器地址和账号标识（D22）。
+- 发布流程从「`deploy/push-src.sh` 用 rsync 上传源码、服务器上 `rollout.sh --build`」改为「CI 推送 GHCR 镜像、`deploy/release.sh` 让服务器检出提交并拉取镜像」，`push-src.sh` 已删除，镜像名从 `chaochi/app` 改为 `ghcr.io/yuri-nagasaki/wuwa-emotes`（D23）。
 
 ## 附录 C：v2 文档中的测量与评估（本版未重新测量）
 

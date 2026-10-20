@@ -67,7 +67,7 @@
 bun run test
 ```
 
-`bun run test` 依次运行 unit、ui、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import 九组测试。除 unit 和 ui 外，各组都需要上一节的本地服务（127.0.0.1:5432 的 PostgreSQL，127.0.0.1:9000 的 S3）。不需要浏览器：`tests/` 下的 `*-shots.ts`、`e2e-flow.ts`、`ui-smoke.ts` 是手动执行的脚本，不在测试集中。
+`bun run test` 依次运行 unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import 十组测试。除 unit、ui、pages 外，各组都需要上一节的本地服务（127.0.0.1:5432 的 PostgreSQL，127.0.0.1:9000 的 S3）。不需要浏览器：`tests/` 下的 `*-shots.ts`、`e2e-flow.ts`、`ui-smoke.ts` 是手动执行的脚本，不在测试集中。
 
 - 用 `bun run test` 或 `bun run test:<组名>`，不要直接运行 `bun test`：各组的库名、桶名和环境变量由 `package.json` 的脚本设置，直接运行时所有组挤在一个进程里且缺少这些设置，测试会拒绝运行或报错。
 - 测试会删除并重建自己的数据库。库名必须匹配 `tests/integration/setup.ts` 中的规则 `^chaochi_(lane_[a-z0-9]+|test)(_[a-z0-9_]+)?$`，例如 `chaochi_test`、`chaochi_test_catalog`。media 与 import 组另有检查：库名必须含 `test`，S3 必须是本机地址。
@@ -77,7 +77,7 @@ bun run test
 
 ## 构建与部署
 
-`bun run build` 生成 `.output/`（最后由 `scripts/check-client-bundle.ts` 确认浏览器包里没有服务端代码），`bun run docker:build` 构建应用镜像；生产是单机 Docker Compose，Cloudflare 代理到源站的 Caddy，Caddy 把请求分给两个 web 副本，`deploy/rollout.sh` 逐个替换副本，发布不中断访问。构建与发布流水线正在调整，当前步骤以 [`deploy/README.md`](deploy/README.md) 为准。
+推送到 `develop` 或 `main` 后，GitHub Actions 运行类型检查、全部测试、构建（最后由 `scripts/check-client-bundle.ts` 确认浏览器包里没有服务端代码）和全历史密钥扫描，全部通过后把镜像推送到 `ghcr.io/yuri-nagasaki/wuwa-emotes:<提交前 7 位>`；本地用 `bun run build` 构建，`bun run docker:build` 构建镜像。发布在开发机上执行 `deploy/release.sh`：它等 CI 镜像就绪，再让服务器检出该提交，由 `deploy/rollout.sh` 逐个替换两个 web 副本，发布不中断访问，详见 [`deploy/README.md`](deploy/README.md)。
 
 ## 目录结构
 
@@ -88,11 +88,12 @@ bun run test
 | `tests/` | 测试，按 `package.json` 中的测试组分目录 |
 | `scripts/` | 构建脚本：客户端包检查、Cap 资源复制、字体子集化 |
 | `public/` | 静态文件：自托管字体（Nunito、TP Rounded） |
-| `deploy/` | 部署脚本与配置：Caddy、nftables 防火墙、零中断发布、环境变量模板 |
+| `deploy/` | 部署脚本与配置：Caddy、nftables 防火墙、发布与零中断滚动替换、环境变量模板 |
 | `design/` | 交互式 UI 设计稿源码与设计令牌 |
 | `docs/` | 架构文档 |
+| `.github/` | GitHub Actions 工作流：检查、密钥扫描、构建镜像 |
 
-根目录另有 `Dockerfile`、`compose.yaml`（生产）和 `compose.dev.yaml`（本地服务）。
+根目录另有 `Dockerfile`、`compose.yaml`（生产）、`compose.dev.yaml`（本地服务）和 `.gitleaks.toml`（密钥扫描规则）。
 
 ## 文档
 
@@ -104,7 +105,7 @@ bun run test
 
 - 密钥只放在服务器的环境文件（`/opt/chaochi/app-env`）和开发机本地的 `.env.local` 中，两者都不进仓库。`.gitignore` 与 `.dockerignore` 排除 `.env*`。
 - 仓库里没有服务器地址：部署脚本从不进仓库的 `deploy/.deploy-host` 或环境变量 `CHAOCHI_DEPLOY_HOST` 读取。
-- 仓库已开启 GitHub secret scanning 与 push protection。
+- 仓库已开启 GitHub secret scanning 与 push protection；CI 每次运行都用 gitleaks 扫描全部历史，另有一条拒绝公网 IPv4 地址的规则。
 - 发现安全问题时，请在 GitHub 仓库的 Security 页面提交私密安全通告（Report a vulnerability），不要公开提 issue。
 
 ## 许可证
