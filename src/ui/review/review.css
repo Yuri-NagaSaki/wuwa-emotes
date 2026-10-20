@@ -2,7 +2,7 @@
 
 .rv-h b, .rv-h b.dyn { font-family: var(--tp-font-body); font-weight: 800; letter-spacing: 0.01em; }
 .dyn { font-family: var(--tp-font-body); }
-.rv-media .rv-thumb, .rv-preview .rv-thumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px; background: var(--tp-input); padding: 4px; color: var(--tp-faint); overflow: hidden; }
+.rv-media .rv-thumb, .rv-preview .rv-thumb { display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px; background: var(--tp-well); padding: 4px; color: var(--tp-faint); overflow: hidden; }
 .rv-media .rv-thumb img, .rv-preview .rv-thumb img { width: 100%; height: 100%; object-fit: contain; padding: 0; background: none; border-radius: 8px; aspect-ratio: auto; }
 .rv-media .rv-thumb:only-child { grid-column: 1 / -1; }
 .rv-empty { grid-column: 1 / -1; display: grid; place-items: center; aspect-ratio: 1; border-radius: 12px; background: var(--tp-input); color: var(--tp-faint); }
