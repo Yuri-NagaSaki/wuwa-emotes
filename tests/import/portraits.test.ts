@@ -226,6 +226,22 @@ describe('import-portraits', () => {
     expect(tiny.variants.map((v) => v.width)).toEqual([240])
   })
 
+  test('--no-colors stores the portrait and leaves the colour to derive-colors', async () => {
+    await db().execute(sql`insert into characters (slug, name) values ('quiet', '安静')`)
+    files.set('/quiet.png', { body: await figure(240, 320, '#2fb64a'), type: 'image/png' })
+    const s = await importPortraits([{ name: '安静', url: `${base}/quiet.png` }], { delayMs: 0, colors: false })
+    expect(s.results[0]).toMatchObject({ outcome: 'new', color: 'green', colorSet: false })
+    expect(formatPortraitSummary(s)).toContain('--no-colors')
+    const row = await character('quiet')
+    expect(row.portrait_key).toMatch(/^characters\/v1\/portraits\/quiet\.[0-9a-f]{8}-240\.webp$/)
+    expect(row.theme_color).toBeNull()
+    clearCatalogCache()
+    const dry = (await deriveThemeColors({ dryRun: true })).find((r) => r.slug === 'quiet')!
+    expect(dry).toMatchObject({ source: 'portrait', written: false })
+    expect(dry.color?.name).toBe('green')
+    expect((await character('quiet')).theme_color).toBeNull()
+  })
+
   test('a non-image answer fails that entry only', async () => {
     const s = await importPortraits([{ name: '无图', url: `${base}/page.html` }], { delayMs: 0 })
     expect(s.results[0]).toMatchObject({ outcome: 'failed', note: 'not an image (text/html)' })

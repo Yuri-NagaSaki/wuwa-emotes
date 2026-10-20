@@ -9,10 +9,10 @@
 //                                            queue p240/a160 generation for published emojis without them
 //   bun src/cli.ts presign-selftest          check that storage refuses a PUT whose size differs from the
 //                                            signed Content-Length (writes and deletes uploads/tmp/selftest/ only)
-//   bun src/cli.ts import-portraits <manifest.json | -> [--dry-run] [--delay 800]
+//   bun src/cli.ts import-portraits <manifest.json | -> [--dry-run] [--no-colors] [--delay 800]
 //                                            official character portraits into characters/v1/portraits/ and
-//                                            characters.portrait_key, theme colours where empty (idempotent;
-//                                            `-` reads the manifest from stdin)
+//                                            characters.portrait_key, theme colours where empty unless
+//                                            --no-colors (idempotent; `-` reads the manifest from stdin)
 //   bun src/cli.ts derive-colors [--dry-run] theme colours from portraits or avatar stickers, where empty
 import { eq } from 'drizzle-orm'
 import { audit } from './server/audit'
@@ -93,8 +93,8 @@ async function backfillDerivedCmd(args: string[]) {
 
 async function importPortraitsCmd(args: string[]) {
   const [file, ...rest] = args
-  if (!file || file.startsWith('--')) throw new Error('usage: import-portraits <manifest.json | -> [--dry-run] [--delay 800]')
-  const flags = parseFlags(rest, { 'dry-run': 'boolean', delay: 'string' })
+  if (!file || file.startsWith('--')) throw new Error('usage: import-portraits <manifest.json | -> [--dry-run] [--no-colors] [--delay 800]')
+  const flags = parseFlags(rest, { 'dry-run': 'boolean', 'no-colors': 'boolean', delay: 'string' })
   const text = file === '-' ? await new Response(Bun.stdin.stream()).text() : await Bun.file(file).text()
   let manifest: unknown
   try {
@@ -105,7 +105,12 @@ async function importPortraitsCmd(args: string[]) {
   const { formatPortraitSummary, importPortraits } = await import('./server/import/portraits')
   const delay = flags.delay === undefined ? undefined : Number(flags.delay)
   if (delay !== undefined && (!Number.isInteger(delay) || delay < 0)) throw new Error('--delay must be a whole number of milliseconds')
-  const summary = await importPortraits(manifest, { dryRun: flags['dry-run'] === true, delayMs: delay, log: (l) => console.log(l) })
+  const summary = await importPortraits(manifest, {
+    dryRun: flags['dry-run'] === true,
+    colors: flags['no-colors'] !== true,
+    delayMs: delay,
+    log: (l) => console.log(l),
+  })
   console.log(formatPortraitSummary(summary))
   if (summary.results.some((r) => r.outcome === 'failed')) process.exitCode = 1
 }
@@ -134,7 +139,7 @@ const USAGE = [
   '  backfill-dims [--concurrency 16] [--limit N]',
   '  backfill-derived [--pack <packKey>] [--limit N]',
   '  presign-selftest',
-  '  import-portraits <manifest.json | -> [--dry-run] [--delay 800]',
+  '  import-portraits <manifest.json | -> [--dry-run] [--no-colors] [--delay 800]',
   '  derive-colors [--dry-run]',
 ].join('\n')
 

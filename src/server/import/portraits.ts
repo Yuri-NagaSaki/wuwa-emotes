@@ -24,6 +24,7 @@ import { setThemeColor } from './theme-colors'
 // new source gets new keys. Old objects are left in place. Two characters never get the same source.
 //
 // The theme colour (colors.ts) is only written where characters.theme_color is empty: admin choices win.
+// --no-colors skips that (review with `derive-colors --dry-run`, then write with `derive-colors`).
 // --dry-run matches and reports without any download or write.
 
 /** Bump when the processing changes, so every portrait gets new keys. */
@@ -172,6 +173,8 @@ export interface PortraitResult {
 
 export interface PortraitSummary {
   dryRun: boolean
+  /** theme colours were written (not --no-colors) */
+  colors: boolean
   results: PortraitResult[]
   /** manifest entries that matched no character */
   unmatchedEntries: string[]
@@ -182,6 +185,8 @@ export interface PortraitSummary {
 
 export interface ImportPortraitsOptions {
   dryRun?: boolean
+  /** write theme colours where empty (default true); false leaves them to derive-colors */
+  colors?: boolean
   fetcher?: Fetcher
   /** pause before each download (ms) */
   delayMs?: number
@@ -256,7 +261,7 @@ export async function importPortraits(raw: unknown, opts: ImportPortraitsOptions
       for (const [k, v] of r.variants.entries()) if (!present[k]) await putObject(keys[k]!, v.bytes, 'image/webp', IMMUTABLE)
       if (!same) await db().execute(sql`update characters set portrait_key = ${largest}, updated_at = now() where id = ${character.id}`)
       const color = r.color?.name ?? null
-      const colorSet = color ? await setThemeColor(character.id, color) : false
+      const colorSet = color && opts.colors !== false ? await setThemeColor(character.id, color) : false
       results.push({ ...base, outcome, key: largest, color, colorSet, note: `${r.sourceWidth}×${r.sourceHeight} → ${r.variants.map((v) => v.width).join('/')}` })
       log(`  ${outcome.padEnd(9)} ${character.slug} ${largest}${colorSet ? ` (theme ${color})` : ''}`)
     } catch (err) {
@@ -268,7 +273,7 @@ export async function importPortraits(raw: unknown, opts: ImportPortraitsOptions
   const after = opts.dryRun ? chars : await loadCharacters()
   const withPortrait = new Set(opts.dryRun ? plan.map((p) => p.character.id) : [])
   const withoutPortrait = after.filter((c) => !c.portraitKey && !withPortrait.has(c.id)).map((c) => ({ slug: c.slug, name: c.name }))
-  return { dryRun: !!opts.dryRun, results, unmatchedEntries, withoutPortrait, warnings }
+  return { dryRun: !!opts.dryRun, colors: opts.colors !== false, results, unmatchedEntries, withoutPortrait, warnings }
 }
 
 export function formatPortraitSummary(s: PortraitSummary): string {
@@ -279,7 +284,7 @@ export function formatPortraitSummary(s: PortraitSummary): string {
   ]
   if (!s.dryRun) {
     lines.push(`  new ${count('new')}, replaced ${count('replaced')}, unchanged ${count('unchanged')}, repaired ${count('repaired')}, failed ${count('failed')}, skipped ${count('skipped')}`)
-    lines.push(`  theme colours set ${s.results.filter((r) => r.colorSet).length} (only where empty)`)
+    lines.push(`  theme colours set ${s.results.filter((r) => r.colorSet).length} (only where empty${s.colors ? '' : '; --no-colors: none written'})`)
   }
   for (const r of s.results) {
     const tail = [r.key, r.color ? `colour ${r.color}${r.colorSet ? ' (set)' : ''}` : null, r.note].filter(Boolean).join('  ')
