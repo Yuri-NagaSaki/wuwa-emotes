@@ -1,12 +1,14 @@
 import { createFileRoute } from '@tanstack/react-router'
-import { z } from 'zod'
 import { adminUploadTargetsFn } from '#/server/admin/fns/content'
 import { guarded } from '#/ui/admin-pages/bits'
 import { pageCss } from '#/ui/admin-pages/css'
+import { int, searchParser } from '#/ui/admin/search'
 import { UploadPage } from '#/ui/admin-pages/UploadPage'
 
+const search = searchParser({ pack: int(1) })
+
 export const Route = createFileRoute('/admin/upload')({
-  validateSearch: z.object({ pack: z.coerce.number().int().positive().optional().catch(undefined) }),
+  validateSearch: search,
   loaderDeps: ({ search }) => ({ pack: search.pack }),
   head: pageCss,
   loader: ({ deps }) =>
