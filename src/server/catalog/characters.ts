@@ -94,7 +94,7 @@ async function loadCharacters(): Promise<CharacterEntry[]> {
     with att as (${attributionTable()}),
     pub as (
       select a.character_id as cid, e.id, p.id as pack_id, p.download_count, e.sort_order, e.created_at, ${PUB_AT} as pub_at,
-        count(*) over (partition by e.id) as shared, ${imageKey} as image_key
+        a.shared, ${imageKey} as image_key
       from att a join emojis e on e.id = a.emoji_id join packs p on p.id = e.pack_id
       where ${emojiVisible('e')} and ${packPublished('p')}
     ),
@@ -105,16 +105,20 @@ async function loadCharacters(): Promise<CharacterEntry[]> {
       select cid, id, image_key,
         row_number() over (partition by cid order by download_count desc, pack_id, sort_order, created_at, id) as rn
       from pub where shared = 1
+    ),
+    candj as (
+      select k.cid, json_agg(json_build_object('img', ${emojiJson('e')}, 'key', k.image_key) order by k.rn) as list
+      from cand k join emojis e on e.id = k.id
+      where k.rn <= ${AVATAR_CANDIDATES}
+      group by k.cid
     )
     select c.id, c.slug, c.name, c.theme_color as color, c.sort, c.portrait_key,
       n.packs as pack_count, n.n as emoji_count, n.latest,
       (select json_build_object('img', ${emojiJson('e')}, 'key', ${imageKey})
          from emojis e join packs p on p.id = e.pack_id
          where e.id = c.avatar_emoji_id and ${emojiVisible('e')} and ${packPublished('p')}) as own,
-      (select json_agg(json_build_object('img', ${emojiJson('e')}, 'key', k.image_key) order by k.rn)
-         from cand k join emojis e on e.id = k.id
-         where k.cid = c.id and k.rn <= ${AVATAR_CANDIDATES}) as candidates
-    from characters c join counts n on n.cid = c.id
+      cj.list as candidates
+    from characters c join counts n on n.cid = c.id left join candj cj on cj.cid = c.id
     order by n.n desc, n.packs desc, c.sort, c.id`)
   const avatars = assignAvatars(list.map((r) => ({ ...r, id: num(r.id) })))
   return list.map((r) => {
