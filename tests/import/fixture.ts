@@ -268,12 +268,19 @@ export async function buildV1Fixture(): Promise<{ objects: FixtureObject[]; emoj
       items: CHARACTERS.map((c) => ({ ...c, packCount: 1 })),
     }),
     json('meta/v1/artists.json', { source: 'derived', total: ARTISTS.length, items: ARTISTS.map((a) => ({ ...a, packCount: 1 })) }),
+    // Halo tags: facet tags, a 角色 and a 画师 tag, one without a facet, one whose value is not a facet
+    // value, and one with only a slug (no permalink)
     json('meta/v1/tags.json', {
       source: 'fixture',
-      total: 2,
+      total: 7,
       items: [
         { name: 'tag-0vsino9n', displayName: '企划/Solar5', slug: 'qi-hua-solar5', permalink: '/tags/qi-hua-solar5', postCount: 1 },
         { name: 'tag-1abcdefg', displayName: '分组/站长推荐', slug: 'fen-zu-zhan-zhang-tui-jian', permalink: '/tags/fen-zu-zhan-zhang-tui-jian', postCount: 2 },
+        { name: 'tag-2bcdefgh', displayName: '角色/今汐', slug: 'jue-se-jin-xi', permalink: '/tags/jue-se-jin-xi', postCount: 1 },
+        { name: 'tag-3cdefghi', displayName: '画师/雾雪', slug: 'hua-shi-wu-xue', permalink: `${ORIGIN}/tags/hua-shi-wu-xue`, postCount: 1 },
+        { name: 'tag-4defghij', displayName: '同人', slug: 'tong-ren', permalink: '/tags/tong-ren', postCount: 3 },
+        { name: 'tag-5efghijk', displayName: '原设/早就删了', slug: 'yuan-she-zao-jiu-shan-le', permalink: '/tags/yuan-she-zao-jiu-shan-le', postCount: 0 },
+        { name: 'tag-6fghijkl', displayName: '工具/EmoteLab', slug: 'gong-ju-emotelab' },
       ],
     }),
     json('meta/v1/facets.json', {

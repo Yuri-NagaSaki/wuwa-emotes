@@ -1,7 +1,8 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { asc, eq } from 'drizzle-orm'
 import { db, schema } from '../../src/server/db/client'
-import { importV1, isOfficialPack, loadV1Snapshot } from '../../src/server/import/v1'
+import { resolveLegacyPath } from '../../src/server/catalog/legacy'
+import { importV1, isOfficialPack, loadV1Snapshot, tagLegacyPath } from '../../src/server/import/v1'
 import { emptyBucket, resetDb, setupTestEnv } from '../media/helpers'
 import { buildV1Fixture, type FixtureEmoji, HASH, PACK, uploadV1Fixture } from './fixture'
 
@@ -48,7 +49,7 @@ describe('import-v1', () => {
     expect(s.characters).toEqual({ total: 8, new: 8, renamed: 4 })
     expect(s.artists).toEqual({ total: 5, new: 5 })
     expect(s.tags).toEqual({ total: 5, new: 5 })
-    expect(s.redirects).toBe(17)
+    expect(s.redirects).toBe(24)
     expect(s.warnings.some((w) => w.includes('unknown character slug "nobody"'))).toBe(true)
     expect(s.warnings.some((w) => w.includes('猫屋敷梨梨&春也Haruya') && w.includes('猫屋敷梨梨_春也Haruya'))).toBe(true)
 
@@ -62,7 +63,7 @@ describe('import-v1', () => {
       packArtists: 5,
       packTags: 6,
       emojiCharacters: 21,
-      redirects: 17,
+      redirects: 24,
     })
   })
 
@@ -164,6 +165,26 @@ describe('import-v1', () => {
     expect(rows.every((r) => r.code === 301)).toBe(true)
   })
 
+  test('redirects for v1 tag pages', async () => {
+    const rows = await db().select().from(schema.redirects)
+    const map = Object.fromEntries(rows.map((r) => [r.fromPath, r.toPath]))
+    // facet tags → the packs list filtered by the tag
+    expect(map['/tags/qi-hua-solar5']).toBe('/packs?tag=project%3Asolar5')
+    expect(map['/tags/fen-zu-zhan-zhang-tui-jian']).toBe('/packs?group=zhanzhangtuijian')
+    expect(map['/tags/gong-ju-emotelab']).toBe('/packs?tag=tool%3Aemotelab')
+    // 角色 / 画师 tags → their pages
+    expect(map['/tags/jue-se-jin-xi']).toBe('/characters/jinhsi')
+    expect(map['/tags/hua-shi-wu-xue']).toBe('/artists/wuxue')
+    // no facet, or a value nobody uses any more → search for the name
+    expect(map['/tags/tong-ren']).toBe(`/search?q=${encodeURIComponent('同人')}`)
+    expect(map['/tags/yuan-she-zao-jiu-shan-le']).toBe(`/search?q=${encodeURIComponent('早就删了')}`)
+
+    // what a visitor gets (list and search targets need no visibility check)
+    expect(await resolveLegacyPath('/tags/qi-hua-solar5')).toEqual({ location: '/packs?tag=project%3Asolar5', status: 301 })
+    expect(await resolveLegacyPath('/tags/fen-zu-zhan-zhang-tui-jian/')).toEqual({ location: '/packs?group=zhanzhangtuijian', status: 301 })
+    expect(await resolveLegacyPath('https://emoji.wuwa.games/tags/tong-ren')).toEqual({ location: '/search?q=%E5%90%8C%E4%BA%BA', status: 301 })
+  })
+
   test('second run is a no-op and keeps site-owned state', async () => {
     const before = await tableCounts()
     const e = fixture.emojis[0]!
@@ -210,6 +231,14 @@ describe('v1 snapshot details', () => {
     expect(snap.manifests.get(PACK.jinhsi)?.emojis.length).toBe(5)
     expect(snap.manifests.get(PACK.aimisi)?.source).toBe('pack.json')
     expect(snap.manifests.get(PACK.noAssets)).toBeNull()
+  })
+
+  test('v1 tag addresses come from the permalink, else the slug', () => {
+    expect(tagLegacyPath({ permalink: '/tags/qi-hua-solar5', slug: 'x' })).toBe('/tags/qi-hua-solar5')
+    expect(tagLegacyPath({ permalink: 'https://emoji.wuwa.games/tags/a-b/', slug: null })).toBe('/tags/a-b')
+    expect(tagLegacyPath({ permalink: null, slug: '同人' })).toBe('/tags/%E5%90%8C%E4%BA%BA')
+    expect(tagLegacyPath({ permalink: '/archives/x', slug: null })).toBeNull()
+    expect(tagLegacyPath({ permalink: null, slug: null })).toBeNull()
   })
 
   test('official packs are recognised by 【官转】 or the official- key', () => {
