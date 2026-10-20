@@ -1,8 +1,9 @@
 import { type SQL, sql } from 'drizzle-orm'
+import { attributedEmojiIds } from './attribution'
 import { type CardRow, cardSelect, toPackCard } from './cards'
 import { decodeCursor, encodeCursor, newSeed } from './cursor'
 import { listPacksInput, type ListPacksInput, TAG_FILTER_RE } from './inputs'
-import { type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, packVisible, PUB_AT, rows, seededHash } from './sql'
+import { emojiVisible, type KeyCol, keysetAfter, keyTextSql, keyValues, orderBySql, packVisible, PUB_AT, rows, seededHash } from './sql'
 import type { PackCard, PackKind, PackSort, Page, SourceKind, TagDimension } from './types'
 
 // /packs 目录: keyset pagination over public packs (sql.ts). Every order ends in the pack id, so it is
@@ -39,8 +40,8 @@ export function packKeyCols(sort: PackSort, seed: string): KeyCol[] {
 function filterSql(f: PackFilters): SQL[] {
   const out: SQL[] = []
   if (f.character) {
-    out.push(sql`exists (select 1 from pack_characters fc join characters c on c.id = fc.character_id
-                         where fc.pack_id = p.id and c.slug = ${f.character})`)
+    // 包 of the character: packs holding a public sticker attributed to it (attribution.ts)
+    out.push(sql`p.id in (select fe.pack_id from emojis fe where fe.id in (${attributedEmojiIds(f.character)}) and ${emojiVisible('fe')})`)
   }
   if (f.artist) {
     out.push(sql`exists (select 1 from pack_artists fa join artists a on a.id = fa.artist_id

@@ -20,7 +20,7 @@ export const streamSortSchema = z.enum(['new', 'random'])
 export const emojiTypeSchema = z.enum(['animated', 'static'])
 
 export const listPacksInput = z.object({
-  /** character slug (pack_characters) */
+  /** character slug: packs holding a sticker attributed to it (attribution.ts) */
   character: slug.optional(),
   /** artist slug, any role (artist or commissioner) */
   artist: slug.optional(),
@@ -77,7 +77,7 @@ export type ArtistDetailInput = z.input<typeof artistDetailInput>
 export const galleryInput = z
   .object({
     sort: streamSortSchema.default('new'),
-    /** character slug (emoji_characters) */
+    /** character slug: stickers attributed to it (attribution.ts) */
     character: slug.optional(),
     type: emojiTypeSchema.optional(),
     seed: seed.optional(),

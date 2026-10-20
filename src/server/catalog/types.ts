@@ -184,14 +184,36 @@ export interface BatchItem extends EmojiImage {
 
 // ---- characters / artists ----
 
+/** Official portrait (立绘), 3:4 WebP served from /img/v1/portrait/. */
+export interface CharacterPortrait {
+  /** 240 px wide variant */
+  src: string
+  /** every stored width, e.g. "…-240.webp 240w, …-480.webp 480w" */
+  srcSet: string
+  /** size of the largest stored variant (3:4) */
+  width: number
+  height: number
+}
+
+/**
+ * A listed character. 张 and 包 follow the attribution rule in catalog/attribution.ts: a sticker
+ * belongs to a character through its own tags, or through its pack when the pack has exactly one
+ * character. Characters without attributed public stickers are not listed anywhere.
+ */
 export interface CharacterCard extends CharacterRef {
-  /** characters.avatar_emoji_id when published, else an emoji of the character from its most downloaded pack. */
+  /**
+   * A public sticker of this character alone, never shared with another character (also not by image
+   * hash): characters.avatar_emoji_id when public and free, else one from its most downloaded pack.
+   * null when there is none; show a placeholder (initial on the character color), never other art.
+   */
   avatar: EmojiImage | null
-  /** Published packs tagged with the character (pack_characters). */
+  /** characters.portrait_key as a portrait; null when none was imported. */
+  portrait: CharacterPortrait | null
+  /** Public packs holding at least one sticker attributed to the character (包). */
   packCount: number
-  /** Published emojis tagged with the character (emoji_characters). */
+  /** Public stickers attributed to the character (张). */
   emojiCount: number
-  /** Newest publication among its packs; null if it only appears through emoji tags. */
+  /** Newest publication among those packs. */
   latestAt: IsoDate | null
 }
 
@@ -245,7 +267,11 @@ export type CharacterDetail =
   | (CharacterDetailBase & { tab: 'packs'; page: Page<PackCard> })
   | (CharacterDetailBase & { tab: 'emojis'; page: Page<EmojiTile> })
 
-export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }
+/**
+ * redirect: an old slug (permanent), or a character that appears in public packs without stickers of
+ * its own (temporary, to a search for its name: it is not listed, but links to it keep working).
+ */
+export type CharacterLookup = CharacterDetail | { kind: 'redirect'; redirectTo: string; temporary?: true } | { kind: 'missing' }
 
 export interface ArtistDetail {
   kind: 'artist'
@@ -262,7 +288,7 @@ export type ArtistLookup = ArtistDetail | { kind: 'redirect'; redirectTo: string
 export interface CatalogStats {
   packs: number
   emojis: number
-  /** Characters with published content. */
+  /** Listed characters (with attributed public stickers, see CharacterCard). */
   characters: number
   /** Published emojis that went public today (Asia/Shanghai day). See home.ts for the rule. */
   todayEmojis: number
@@ -285,7 +311,7 @@ export interface HomeData {
   featuredCollection: CollectionRef | null
   /** Its packs in collection order. */
   featured: PackCard[]
-  /** Top characters by published emoji count, with avatars (角色潮汐). */
+  /** Top characters by attributed sticker count that have an avatar (角色潮汐). */
   characters: CharacterCard[]
   stats: CatalogStats
 }

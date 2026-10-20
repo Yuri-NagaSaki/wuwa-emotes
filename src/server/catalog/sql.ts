@@ -69,7 +69,10 @@ export function coverJson(pa = 'p'): SQL {
   )
 }
 
-/** A character has public content: a public pack, or a public emoji (in a published pack). */
+/**
+ * A character's page resolves: it is on a public pack or tagged on a public emoji. Being listed (角色图鉴,
+ * counts) is stricter, see attribution.ts; a visible character that is not listed redirects to search.
+ */
 export function characterVisible(alias = 'c'): SQL {
   return sql.raw(
     `(exists (select 1 from pack_characters vx join packs vp on vp.id = vx.pack_id ` +

@@ -4,7 +4,9 @@ import { CharacterPage, type CharacterTab, type EmojiTypeFilter } from '#/ui/pag
 import { emojiParam } from '#/ui/pages/search-params'
 import { pageHead } from '#/ui/pages/seo'
 
-// 角色详情. Old slugs (legacy_slug, the redirects table) answer 301; unknown ones are 404.
+// 角色详情. Old slugs (legacy_slug, the redirects table) answer 301; a character that only appears in
+// group packs (no stickers of its own, so not listed) answers 302 to a search for its name; unknown
+// ones are 404.
 
 interface CharacterSearch {
   tab?: Exclude<CharacterTab, 'packs'>
@@ -22,7 +24,11 @@ export const Route = createFileRoute('/_site/characters/$slug')({
   loader: async ({ params, deps }) => {
     const emojis = deps.tab === 'emojis'
     const r = await characterDetailFn({ data: { slug: params.slug, tab: emojis ? 'emojis' : 'packs', type: deps.type, limit: emojis ? 60 : 24 } })
-    if (r.kind === 'redirect') throw redirect({ href: r.redirectTo, statusCode: 301, headers: { 'cache-control': 'public, max-age=86400' } })
+    if (r.kind === 'redirect') {
+      // old slugs move for good; a character without stickers of its own goes to a search for now
+      if (r.temporary) throw redirect({ href: r.redirectTo, statusCode: 302, headers: { 'cache-control': 'public, max-age=300' } })
+      throw redirect({ href: r.redirectTo, statusCode: 301, headers: { 'cache-control': 'public, max-age=86400' } })
+    }
     if (r.kind === 'missing') throw notFound()
     return r
   },
