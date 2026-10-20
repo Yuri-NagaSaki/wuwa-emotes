@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import type { CapResult } from '#/server/auth/cap'
 import { db, schema } from '#/server/db/client'
 import { handleBatchSign, handleEmojiDownload, handlePackZip, type BatchSignResponse } from '#/server/downloads/handlers'
+import { BURST_DISTINCT, BURST_WINDOW_S } from '#/server/downloads/policy'
 import { jobSender } from '#/server/jobs/boss'
 import { buildPackZip, zipEntryNames } from '#/server/media/zip'
 import { body, Client, counter, countersOf, deps, type Emoji, freshMinute, insertEmoji, insertPack, packRow, ready, RUN, useSettings } from './fixture'
@@ -246,6 +247,28 @@ describe('Cap challenge', () => {
     expect(row!.windowStart.getTime()).toBeGreaterThan(Date.now() + 9 * 60_000)
   })
 
+  test(`a burst of ${BURST_DISTINCT} distinct emoji ids from one IP → 428; repeats do not move the count`, async () => {
+    await useSettings()
+    // stay inside one fixed 5-minute burst window
+    const into = Date.now() % (BURST_WINDOW_S * 1000)
+    if (into > BURST_WINDOW_S * 1000 - 15_000) await Bun.sleep(BURST_WINDOW_S * 1000 - into + 500)
+    const burstPack = await insertPack({ packKey: `dl-burst-${RUN}`, status: 'published', downloadable: true })
+    const many: Emoji[] = []
+    for (let i = 0; i < BURST_DISTINCT; i++) many.push(await insertEmoji(burstPack, { sortOrder: i }))
+    const c = new Client()
+    for (let i = 0; i < BURST_DISTINCT - 1; i++) expect((await dl(c, many[i]!.id, 'view')).status).toBe(302)
+    const over = await dl(c, many[BURST_DISTINCT - 1]!.id, 'view')
+    expect(over.status).toBe(428)
+    expect((await body(over)).reason).toBe('captcha_required')
+    expect((await dl(c, many[0]!.id, 'view')).status).toBe(428)
+
+    const rows = await db().select().from(schema.rateWindows).where(eq(schema.rateWindows.subject, c.subject))
+    expect(rows.filter((r) => r.bucket === 'burst').map((r) => r.n)).toEqual([BURST_DISTINCT])
+    expect(rows.filter((r) => r.bucket.startsWith('seen:'))).toHaveLength(BURST_DISTINCT)
+    expect(rows.find((r) => r.bucket === 'flag:burst')?.n).toBeGreaterThanOrEqual(1)
+    expect(await counter(c.subject, 'orig')).toBe(BURST_DISTINCT - 1)
+  }, 60_000)
+
   test('with the real verifier against the fake Cap server: single-use tokens', async () => {
     const c = new Client()
     const id = pubEmojis[1]!.id
@@ -281,7 +304,7 @@ describe('minute rates', () => {
     } finally {
       await useSettings()
     }
-  })
+  }, 60_000)
 })
 
 function sign(client: Client, payload: unknown, opts: { origin?: string | null; referer?: string | null } = {}, d = deps()) {
@@ -368,6 +391,32 @@ describe('POST /api/batch/sign', () => {
     const sneaky = await body<BatchSignResponse>(await sign(c, { volume: crypto.randomUUID(), first: false, ids: [pubEmojis[2]!.id] }))
     expect(sneaky.newVolume).toBe(true)
     expect(await counter(c.subject, 'batch')).toBe(2)
+  })
+
+  test('maxBatchItems caps a volume across chunks (the stored volume count is updated in place)', async () => {
+    await useSettings({ maxBatchItems: 4 })
+    try {
+      const c = new Client()
+      const volume = crypto.randomUUID()
+      const ids = pubEmojis.map((e) => e.id)
+      const first = await body<BatchSignResponse>(await sign(c, { volume, first: true, ids }))
+      expect(first.items).toHaveLength(3)
+      const second = await body<BatchSignResponse>(await sign(c, { volume, first: false, ids }))
+      expect(second.items.map((i) => i.id)).toEqual([ids[0]])
+      expect(second.denied).toEqual([
+        { id: ids[1], reason: 'volume_full' },
+        { id: ids[2], reason: 'volume_full' },
+      ])
+      const rows = await db().select().from(schema.rateWindows).where(eq(schema.rateWindows.subject, c.subject))
+      const vol = rows.filter((r) => r.bucket === `vol:${volume}`)
+      expect(vol.map((r) => r.n)).toEqual([4])
+      const third = await body<BatchSignResponse>(await sign(c, { volume, first: false, ids }))
+      expect(third.items).toEqual([])
+      expect(await counter(c.subject, 'batch_item')).toBe(4)
+      expect(await counter(c.subject, 'batch')).toBe(1)
+    } finally {
+      await useSettings()
+    }
   })
 
   test('signed in: originals count per account, packs per IP', async () => {
