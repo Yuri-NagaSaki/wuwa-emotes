@@ -16,6 +16,7 @@
 .adm-nav a .badge-dot { margin-left: auto; border-color: var(--tp-sand); }
 .adm-nav a svg.i { width: 18px; height: 18px; }
 .adm-me { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-top: 2px solid var(--tp-line); font-size: 13px; padding-bottom: calc(12px + var(--safe-bottom)); }
+.adm-me .avatar { border-color: var(--c-teal); }
 .adm-me b { color: var(--tp-ink); display: block; }
 .adm-me small { color: var(--tp-muted); }
 .adm-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }

@@ -2,6 +2,7 @@ import { useLocation } from '@tanstack/react-router'
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { MeSummary } from '#/server/account/service'
 import { isStaff } from '../admin/nav'
+import { Avatar } from '../Avatar'
 import { buttonClass } from '../Button'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
@@ -25,9 +26,7 @@ export function MeShell({ summary, children }: { summary: MeSummary; children: R
   return (
     <div className="wrap">
       <div className="me-h">
-        <span className="avatar" aria-hidden="true">
-          {[...summary.name][0] ?? '?'}
-        </span>
+        <Avatar name={summary.name} src={summary.avatarUrl} loading="eager" />
         <div>
           <h1>{summary.name}</h1>
           <span className="meta">

@@ -1,5 +1,6 @@
 import { Fragment, useState, type ReactNode } from 'react'
 import { ROLES, type Role } from '#/shared/roles'
+import { Avatar } from '../Avatar'
 import { buttonClass, IconButton } from '../Button'
 import { EmptyState } from '../EmptyState'
 import { Input } from '../Field'
@@ -12,6 +13,8 @@ import { activeNavItem, canOpen, isStaff, navForRole, type AdminNavId } from './
 export interface AdminViewer {
   name: string
   role: Role
+  /** 头像 (src/server/media/keys.ts avatarUrl); null or absent shows the first letter */
+  avatarUrl?: string | null
 }
 
 export interface AdminShellProps {
@@ -65,9 +68,7 @@ function Brand({ siteName, onNavigate }: { siteName: string; onNavigate?: () => 
 function AdminMe({ viewer, onSignOut, onNavigate }: { viewer: AdminViewer; onSignOut?: () => void; onNavigate?: () => void }) {
   return (
     <div className="adm-me">
-      <span className="avatar sm" style={{ borderColor: 'var(--c-teal)' }} aria-hidden="true">
-        {[...viewer.name][0] ?? '?'}
-      </span>
+      <Avatar name={viewer.name} src={viewer.avatarUrl} size="sm" />
       <div>
         <b>{viewer.name}</b>
         <small>{ROLES[viewer.role].name}</small>
