@@ -4,6 +4,7 @@ import { packArtistsJson, packCharactersJson, type RawCharacter, splitArtists, t
 import { type RawImage, toEmojiImage } from './images'
 import { emojiIdInput, packSlugInput } from './inputs'
 import { resolveLegacyPath } from './legacy'
+import { relatedPacksBySlug } from './related'
 import { emojiOrder, emojiVisible, iso, num, packPublished, packVisible, PUB_AT, rows } from './sql'
 import type {
   ArtistRole,
@@ -18,8 +19,9 @@ import type {
   TagsByDimension,
 } from './types'
 
-// /packs/:slug and /e/:emojiId. Two statements run in parallel (pack + neighbours, emoji list); an
-// unknown slug then costs at most two more (redirects lookup, target check) in resolveLegacyPath.
+// /packs/:slug and /e/:emojiId. Three statements run in parallel (pack, emoji list, 相关推荐 from
+// related.ts); an unknown slug then costs at most two more (redirects lookup, target check) in
+// resolveLegacyPath.
 
 interface DetailRow {
   id: number
@@ -64,7 +66,7 @@ function byDimension(tags: TagRef[]): TagsByDimension {
 
 export async function getPackDetail(slugInput: string): Promise<PackLookup> {
   const { slug } = packSlugInput.parse({ slug: slugInput })
-  const [main, emojiRows] = await Promise.all([
+  const [main, emojiRows, related] = await Promise.all([
     rows<DetailRow>(sql`
       select p.id, p.slug, p.title, p.excerpt, p.description_md, p.kind, p.source_kind, p.license, p.downloadable,
         p.pin_level, p.memorial, p.commissioner, p.credits_text,
@@ -86,6 +88,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
       from emojis e join packs p on p.id = e.pack_id
       where p.slug = ${slug} and ${packPublished('p')} and ${emojiVisible('e')}
       order by ${emojiOrder('e')}`),
+    relatedPacksBySlug(slug),
   ])
 
   const p = main[0]
@@ -139,6 +142,7 @@ export async function getPackDetail(slugInput: string): Promise<PackLookup> {
     commissionerText: p.commissioner ?? null,
     creditsText: p.credits_text ?? null,
     tags: byDimension(p.tags ?? []),
+    related,
   }
   return { kind: 'pack', pack }
 }
