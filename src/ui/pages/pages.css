@@ -166,7 +166,7 @@
   .rel-list { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; margin: -8px calc(-1 * var(--gutter)); padding: 8px var(--gutter); scroll-padding-inline: var(--gutter); }
   .rel-list::-webkit-scrollbar { display: none; }
   .rel-list > li { flex: 0 0 148px; scroll-snap-align: start; }
-  .rel-item { gap: 8px; }
+  .rel-item { gap: 8px; border-radius: 16px; }
   .rel-t { font-size: 13.5px; line-height: 19px; height: 38px; }
   .rel-by { display: none; }
   .rel-by + .rel-n::before { content: none; }
