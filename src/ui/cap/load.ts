@@ -44,9 +44,10 @@ export function loadCap(): Promise<CapCtor> {
  * Solve a challenge without showing a widget: Cap's own invisible mode, a hidden <cap-widget> on the
  * document element, removed again afterwards. Used by background actions (a batch download) and by the
  * account forms (useInvisibleCap). Resolves with a single-use token for the x-cap-token header; rejects
- * when the proof of work fails, or with the signal's reason when it aborts.
+ * when the proof of work fails, or with the signal's reason when it aborts. `onProgress` receives the
+ * widget's own `progress` events (0–100: share of the challenges solved).
  */
-export async function solveInvisible(endpoint: string | null = configuredEndpoint, signal?: AbortSignal): Promise<string> {
+export async function solveInvisible(endpoint: string | null = configuredEndpoint, signal?: AbortSignal, onProgress?: (progress: number) => void): Promise<string> {
   if (!endpoint) throw new Error('Cap endpoint is not configured')
   signal?.throwIfAborted()
   const Cap = await loadCap()
@@ -55,6 +56,11 @@ export async function solveInvisible(endpoint: string | null = configuredEndpoin
   // removing the widget aborts its solve (disconnectedCallback), which then resolves with nothing
   const stop = () => cap.widget.remove()
   signal?.addEventListener('abort', stop, { once: true })
+  const progress = (e: Event) => {
+    const value = (e as CustomEvent<{ progress?: unknown }>).detail?.progress
+    if (typeof value === 'number') onProgress?.(value)
+  }
+  if (onProgress) cap.widget.addEventListener('progress', progress)
   try {
     // solve() resolves undefined instead of rejecting when it is aborted or the instrumentation check fails
     const res = (await cap.solve()) as { success?: boolean; token?: string } | undefined
@@ -63,6 +69,7 @@ export async function solveInvisible(endpoint: string | null = configuredEndpoin
     return res.token
   } finally {
     signal?.removeEventListener('abort', stop)
+    cap.widget.removeEventListener('progress', progress)
     cap.widget.remove()
   }
 }

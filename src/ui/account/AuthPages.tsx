@@ -2,6 +2,7 @@ import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { durationText, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from '#/server/auth/policy'
 import { Button, buttonClass } from '../Button'
+import { CapStatus } from '../cap/CapStatus'
 import { useInvisibleCap, type InvisibleCap } from '../cap/useInvisibleCap'
 import { Check, Field, Input } from '../Field'
 import { AppLink } from '../link'
@@ -10,9 +11,10 @@ import { AuthAlt, AuthLayout, AuthNotice, PasswordMeter, SentPanel } from './Aut
 import { authClient, authErrorText, EMAIL_RE, passwordStrength, safeNext, STRENGTH_TEXT, withCap, type AuthFailure } from './auth-client'
 
 // 登录 / 注册 / 忘记密码 / 重置密码 / 验证邮箱. Sign-in, sign-up and the reset mail need a Cap token;
-// it is solved invisibly in the background while the form is on screen (useInvisibleCap), so there
-// is no widget: the button says 验证中… only when the proof of work is not done yet, and one line with
-// 重试 appears only if it fails twice. Resending the verification mail needs no token.
+// it is solved in the background while the form is on screen (useInvisibleCap), and one quiet line
+// above the submit button (CapStatus) shows it running, done, or failed with 重试. Nobody clicks
+// anything: the button says 验证中… only when a submit has to wait for the proof of work. Resending the
+// verification mail needs no token, so the 「邮件已发出」 states show no line.
 
 const VERIFY_TTL = durationText(VERIFY_EMAIL_EXPIRES_IN)
 const RESET_TTL = durationText(RESET_PASSWORD_EXPIRES_IN)
@@ -42,21 +44,6 @@ function emailProblem(email: string): string | null {
 function submitLabel(cap: InvisibleCap, busy: boolean, idle: string, working: string): string {
   if (cap.waiting) return '验证中…'
   return busy ? working : idle
-}
-
-/** The line shown after the invisible check failed twice; 重试 submits the form again. */
-function CapFailed() {
-  return (
-    <AuthNotice
-      action={
-        <Button type="submit" size="xs">
-          重试
-        </Button>
-      }
-    >
-      人机验证没有完成，请检查网络后重试。
-    </AuthNotice>
-  )
 }
 
 /** Seconds left of a cooldown that starts now (`start()`) or on mount. */
@@ -133,7 +120,7 @@ export function LoginPage({ next }: { next?: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Failure | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const cap = useInvisibleCap(!sentTo)
+  const cap = useInvisibleCap(!sentTo, { refresh: true })
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -198,7 +185,6 @@ export function LoginPage({ next }: { next?: string }) {
             <Check checked={remember} onChange={setRemember}>
               30 天内保持登录
             </Check>
-            {cap.failed ? <CapFailed /> : null}
             {error ? (
               <AuthNotice
                 action={
@@ -212,6 +198,7 @@ export function LoginPage({ next }: { next?: string }) {
                 {error.text}
               </AuthNotice>
             ) : null}
+            <CapStatus cap={cap} />
             <Button type="submit" variant="primary" size="lg" block disabled={busy}>
               {submitLabel(cap, busy, '登录', '正在登录…')}
             </Button>
@@ -242,7 +229,7 @@ export function RegisterPage({ next }: { next?: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Failure | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const cap = useInvisibleCap(!sentTo)
+  const cap = useInvisibleCap(!sentTo, { refresh: true })
 
   const nameLen = [...name.trim()].length
   const nameErr = nameLen < 2 || nameLen > 16 ? '用户名需要 2–16 个字符' : null
@@ -317,8 +304,8 @@ export function RegisterPage({ next }: { next?: string }) {
                 </AppLink>
               </span>
             </Check>
-            {cap.failed ? <CapFailed /> : null}
             {error ? <AuthNotice>{error.text}</AuthNotice> : null}
+            <CapStatus cap={cap} />
             <Button type="submit" variant="primary" size="lg" block disabled={busy}>
               {submitLabel(cap, busy, '创建账号', '正在创建…')}
             </Button>
@@ -343,7 +330,7 @@ export function ForgotPasswordPage() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<Failure | null>(null)
   const [sentTo, setSentTo] = useState<string | null>(null)
-  const cap = useInvisibleCap(!sentTo)
+  const cap = useInvisibleCap(!sentTo, { refresh: true })
 
   async function submit(e: FormEvent) {
     e.preventDefault()
@@ -383,8 +370,8 @@ export function ForgotPasswordPage() {
             <Field label="邮箱" error={emailErr}>
               <Input icon="mail" type="email" autoComplete="email" placeholder="you@example.com" value={email} onChange={(e) => setEmail(e.currentTarget.value)} />
             </Field>
-            {cap.failed ? <CapFailed /> : null}
             {error ? <AuthNotice>{error.text}</AuthNotice> : null}
+            <CapStatus cap={cap} />
             <Button type="submit" variant="primary" size="lg" block disabled={busy}>
               {submitLabel(cap, busy, '发送重置邮件', '正在发送…')}
             </Button>

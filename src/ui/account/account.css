@@ -37,6 +37,28 @@
 .auth-note.ok { background: var(--tp-teal-bg); }
 .auth-note.ok svg.i { color: var(--tp-teal-ink); }
 .auth-note .btn { flex: none; align-self: center; }
+/* Cap status line (src/ui/cap/CapStatus.tsx): one quiet line above the submit button, no frame. The
+   height is fixed (text row, gap, 2px track) in every state; the track is always there and only shown
+   while solving, so nothing under the line moves when the state changes. */
+.cap-line { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-rows: 20px 2px; column-gap: 8px; row-gap: 4px; align-items: center; height: 26px; margin: -4px 0 -6px; color: var(--tp-muted); font-size: 13px; line-height: 20px; font-weight: 600; cursor: default; }
+.cap-line .cap-ico { grid-area: 1 / 1; display: grid; place-items: center; height: 20px; color: var(--tp-faint); transition: color var(--t) var(--ease); }
+.cap-line .cap-ico svg.i { width: 16px; height: 16px; }
+.cap-line .cap-txt { grid-area: 1 / 2; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cap-line .cap-retry { grid-area: 1 / 3; height: 20px; padding: 0 4px; margin-right: -4px; border: 0; border-radius: 6px; background: none; color: var(--tp-teal-ink); font: inherit; font-weight: 800; line-height: 20px; cursor: pointer; }
+.cap-line .cap-retry:hover { text-decoration: underline; text-underline-offset: 3px; }
+.cap-line .cap-bar { grid-area: 2 / 2 / 3 / 4; height: 2px; border-radius: 2px; background: var(--tp-line); overflow: hidden; opacity: 0; transition: opacity var(--t) var(--ease); }
+.cap-line .cap-bar i { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--tp-teal); transform-origin: left center; transform: scaleX(var(--cap-p, 0)); transition: transform var(--t) var(--ease); }
+.cap-line.is-solving .cap-bar { opacity: 1; }
+/* before the solver reports progress: a short sweep, not a made-up percentage */
+.cap-line.is-solving:not(.is-known) .cap-bar i { width: 32%; transform: translateX(-100%); animation: cap-sweep 1.3s var(--ease) infinite; }
+.cap-line.is-ready .cap-ico { color: var(--tp-teal-ink); }
+.cap-line.is-ready .cap-ico svg.i { stroke-width: 2.6; }
+.cap-line.is-failed .cap-ico { color: var(--tp-err); }
+@keyframes cap-sweep { to { transform: translateX(320%); } }
+@media (prefers-reduced-motion: reduce) {
+  .cap-line.is-solving:not(.is-known) .cap-bar i { width: 100%; transform: none; animation: none; opacity: 0.45; }
+}
+.is-still .cap-line.is-solving:not(.is-known) .cap-bar i { width: 100%; transform: none; animation: none; opacity: 0.45; }
 .pw-meter { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .pw-meter i { height: 6px; border-radius: 3px; background: var(--tp-line); transition: background var(--t) var(--ease); }
 .pw-meter i.on { background: var(--c-green); }
