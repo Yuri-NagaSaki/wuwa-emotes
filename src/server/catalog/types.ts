@@ -149,6 +149,11 @@ export interface PackDetail {
   commissionerText: string | null
   creditsText: string | null
   tags: TagsByDimension
+  /**
+   * 相关推荐: up to 10 other public packs, most shared artists, characters and group/project tags first,
+   * topped up with the most downloaded (catalog/related.ts). Cards without minis.
+   */
+  related: PackCard[]
 }
 
 export type PackLookup = { kind: 'pack'; pack: PackDetail } | { kind: 'redirect'; redirectTo: string } | { kind: 'missing' }
