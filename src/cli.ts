@@ -18,8 +18,10 @@
 //                                            one-year immutable Cache-Control and the image Content-Type on
 //                                            existing public web images (derived/, portraits, avatars only)
 //   bun src/cli.ts media check-public [--base https://i.sparxie.moe]
-//                                            what the bucket's public domain serves: web images 200 and
-//                                            cacheable, backups/uploads/originals 403 or 404 (PASS/FAIL)
+//                                            what the bucket's public domain serves (PASS/FAIL per prefix):
+//                                            posters, portraits, avatars 200 and cacheable for a year;
+//                                            backups/, assets/, meta/, review/v1/, zips/, uploads/tmp/, sync/
+//                                            403 or 404. Real keys from the bucket; prints prefixes and statuses only
 //   bun src/cli.ts backup decrypt <file | backups/…key> <out.dump>
 //                                            decrypt an encrypted backup with BACKUP_ENCRYPTION_KEY for pg_restore
 //   bun src/cli.ts backup encrypt-existing [--dry-run]
