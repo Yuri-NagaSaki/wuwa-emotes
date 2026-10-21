@@ -36,6 +36,9 @@ export const Route = createRootRoute({
       ...(loaderData?.site.subtitle ? [{ name: 'description', content: loaderData.site.subtitle }] : []),
     ],
     links: [
+      // posters, previews and portraits come from the bucket's public domain when PUBLIC_IMG_BASE is set;
+      // no crossorigin: <img> loads use the credentialed connection pool
+      ...(loaderData?.imgOrigin ? [{ rel: 'preconnect', href: loaderData.imgOrigin }] : []),
       { rel: 'preload', href: DISPLAY_CSS, as: 'style' },
       { rel: 'preload', href: NUNITO_LATIN, as: 'font', type: 'font/woff2', crossOrigin: 'anonymous' },
       { rel: 'stylesheet', href: appCss },

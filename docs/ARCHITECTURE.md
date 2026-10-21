@@ -9,7 +9,7 @@
 1. **应用**：一个 TanStack Start 应用（Bun 1.4.3，Nitro `bun` 预设）提供公开站、后台和 API。同一镜像以 `bun src/worker.ts` 运行图片衍生、ZIP 打包、备份和统计。PostgreSQL 18 是唯一的数据源。
 2. **入口**：Cloudflare 代理 DNS → 源站 443（Cloudflare Origin CA 证书，SSL「完全（严格）」）→ 主机网络上的 Caddy 2.11.7 → 两个 web 副本。nftables 只允许 Cloudflare 网段连接 443，所有容器都不映射端口。不使用 Cloudflare Tunnel。
 3. **构建与发布**：GitHub Actions 检查每次推送，通过后把镜像推送到公开的 GHCR 包；服务器不构建镜像。开发机执行 `deploy/release.sh`，服务器检出该提交，由 `deploy/rollout.sh` 先迁移、再逐个排空并替换两个副本。生产上经 Cloudflare 做健康探测的 11 次发布每次 19–52 秒，探测失败 0 次。
-4. **存储**：所有文件放在 R2 桶 `wuwa`。网页图片只走 `/img`（一年期 immutable，由 Cloudflare 缓存）；原图、ZIP 和上传用预签名链接直连 R2。下载链接 2 分钟有效；上传链接 15 分钟有效，并签入文件大小和类型。
+4. **存储**：所有文件放在 R2 桶 `wuwa`。海报、动图预览、立绘和头像在设置 `PUBLIC_IMG_BASE` 后由桶的自定义域（`i.sparxie.moe`）直接提供，未设置时走源站的 `/img`；弹窗大图 `full` 始终走 `/img`。这些图片都是一年期 immutable，由 Cloudflare 缓存。原图、ZIP 和上传用预签名链接直连 R2。下载链接 2 分钟有效；上传链接 15 分钟有效，并签入文件大小和类型。数据库备份用 AES-256-GCM 加密后才上传（第 12.5 节）。
 5. **图片**：网页只显示 WebP（海报 `p240`、动图预览 `a160`、弹窗大图 `full`）。原图只在查看、保存和打包时下载，GIF 原样给出。表情在衍生图就绪之后才公开，包至少有一张公开表情才公开。
 6. **公开页**：服务端渲染。瀑布流的位置是列宽的函数，由 CSS 定位，服务端 HTML、水合和图片加载都不移动布局。单张弹窗记在 `?e=`，地址栏显示为 `/e/<id>`。旧站地址 301 到新页面。白昼与夜潮两套配色。
 7. **打包清单**：清单只存在浏览器里。`/batch` 在浏览器里用 client-zip 打包：每次签名 20 张，每 200 张一个 ZIP，附 `CREDITS.txt`；只提供预览的包不能加入。
@@ -70,6 +70,7 @@ flowchart LR
   PX --> WB[web-b]
   WA & WB -->|读写| PG[(PostgreSQL 18)]
   WA & WB -->|"/img：只读 derived/v1/"| R2[(R2 桶 wuwa)]
+  CF -->|"i.sparxie.moe：只放行网页图片"| R2
   WA & WB -.->|siteverify| CAP[Cap Standalone<br/>自托管]
   U -.->|工作量证明| CAP
   U -->|预签名直连：原图 · ZIP · 上传| R2
@@ -78,6 +79,7 @@ flowchart LR
 ```
 
 - 页面、API 和未命中缓存的 `/img` 经 Cloudflare 到达 Caddy，Caddy 轮询分给 web-a 和 web-b。`/img` 命中 Cloudflare 缓存时不回源。
+- 设置 `PUBLIC_IMG_BASE` 后，海报、动图预览、立绘和头像从桶的自定义域加载：Cloudflare 未命中时直接读 R2，不经过源站（第 2.3 节）。
 - 原图、ZIP 和上传不经过应用：应用只签发链接，浏览器直连 R2 的 S3 端点。
 - 源站不监听 80 端口。`http://` 由 Cloudflare「始终使用 HTTPS」在边缘重定向。
 - Caddy 只服务 `CHAOCHI_DOMAIN`，`www.` 子域 301 到主域；其他 Host 直接断开连接，未知 SNI 和直接用 IP 访问因为没有匹配的证书而握手失败（`deploy/caddy/Caddyfile`）。
@@ -117,7 +119,7 @@ flowchart LR
 
 ### 2.2 `/img` 规则
 
-`/img` 是网页图片唯一的出口，只读 `derived/v1/` 下已发布表情的对象和 `characters/v1/portraits/` 下的角色立绘（`src/server/media/img.ts`、`src/routes/img/$.ts`）：
+`/img` 是源站上的网页图片出口，只读 `derived/v1/` 下已发布表情的对象、`characters/v1/portraits/` 下的角色立绘和 `avatars/v1/` 下的用户头像（`src/server/media/img.ts`、`src/routes/img/$.ts`）。设置 `PUBLIC_IMG_BASE` 后页面不再用它加载海报、预览、立绘和头像（第 2.3 节），但它仍然提供所有档位：旧链接、缓存里的旧 HTML、浏览器端读图片字节的脚本和开发环境都用它。
 
 | 项 | 规则 |
 |---|---|
@@ -127,12 +129,30 @@ flowchart LR
 | 命中 | 流式转发 R2 对象，`Cache-Control: public, max-age=31536000, immutable`，带 `ETag` 与 `X-Content-Type-Options: nosniff`；`If-None-Match` 命中时返回 304；支持 HEAD，其他方法返回 405 |
 | `full` 未生成 | 只有这一步查库：表情和包都已发布、URL 的 `packKey` 等于 `storage_pack_key`、`rev` 等于 `variant_rev`，否则 404。条件满足才入队 `media.full`（单例键为表情 ID，重复请求只排一次），并 302 到同一张图的 `a160`（动图）或 `p240`（静态图），`Cache-Control: no-store`。worker 只按库里的字段拼对象键，拒绝处理未发布的表情，所以待审核的图不会被人按 ID 请求进 `derived/` |
 | 角色立绘 | `/img/v1/portrait/<name>.<hash8>-<w>.webp`，`<name>` 是导入时的角色 slug，`<w>` 为 240 或 480。严格匹配后直接读 `characters/v1/portraits/` 下的同名对象，立绘本身公开，不查库；命中时同样是一年期 immutable |
+| 用户头像 | `/img/v1/avatar/<userId>/<hash>-<256\|64>.webp`，`<hash>` 为 16 位十六进制。严格匹配后直接读 `avatars/v1/` 下的同名对象，不查库；命中时一年期 immutable（第 7.3 节） |
 | 其他缺失 | 404，`Cache-Control: public, max-age=60`，避免长期缓存 404 |
 | Cookie | 注册为独立的服务端路由，不调用会话接口，响应不带 `Set-Cookie`。Cloudflare 不缓存带 `Set-Cookie` 的响应 |
 
 版本号必带，是因为「重新生成衍生图」会递增 `variant_rev`：页面总是输出新地址，旧地址留在缓存里也不会再被引用。
 
-Cloudflare 侧：Cache Rule 对 `/img/*` 设为「如果存在 Cache-Control 标头则使用，否则绕过缓存」，这样 302 不会被缓存、404 只缓存 60 秒；开启 Smart Tiered Cache，冷图回源集中到上层机房（第 12.4 节）。冷图仍经过源站，但对象很小，应用只做流式转发。如果源站带宽成为瓶颈，备选方案是给桶绑定自定义域、用 WAF 只放行 `/derived/v1/*`，对象键不用改。
+Cloudflare 侧：Cache Rule 对 `/img/*` 设为「如果存在 Cache-Control 标头则使用，否则绕过缓存」，这样 302 不会被缓存、404 只缓存 60 秒；开启 Smart Tiered Cache，冷图回源集中到上层机房（第 12.4 节）。
+
+### 2.3 桶的公开域名（`PUBLIC_IMG_BASE`）
+
+冷图经 `/img` 时一次约 840 ms（2026-10-21 实测：Cloudflare 到源站约 200 ms，源站读 R2 约 285 ms，源站没有缓存）。所以桶 `wuwa` 绑定了自定义域 `i.sparxie.moe`，网页图片由它直接提供，对象键不变：
+
+| 项 | 规则 |
+|---|---|
+| 地址 | `${PUBLIC_IMG_BASE}/<对象键>`，例如 `…/derived/v1/p240/<packKey>/<emojiId>.r<rev>.webp`、`…/characters/v1/portraits/<文件>`、`…/avatars/…`。只有 `src/server/media/keys.ts` 的 `webImageUrl` 决定用哪种地址，所有调用方都经过它 |
+| 档位 | `p240`、`a160`、立绘、头像走公开域名；`full` 仍走 `/img`（首次打开时才生成，之前 302 到海报或预览）；待审核预览图仍走 `/review-img` |
+| 未设置 | 所有地址与以前完全相同（`/img/…`） |
+| 读字节的脚本 | 复制图片要把图画到 canvas 上，跨域图片会污染 canvas。所以脚本总是按对象键换回同源的 `/img` 路径（`src/shared/web-image.ts`），`/img` 的 302 也留在源站，不依赖桶的 CORS |
+| 缓存头 | worker 写 `derived/`、`characters/v1/portraits/`、`avatars/` 时默认带 `Cache-Control: public, max-age=31536000, immutable` 和 `image/webp`，公开域名原样返回，不需要控制台规则。旧对象可用 `bun src/cli.ts media set-cache-control --prefix derived/v1/` 补齐（已正确的对象跳过） |
+| 只放行图片 | 桶里还有备份、原图、待审核预览图、ZIP、上传暂存和 v1 快照。公开域名必须只放行 `derived/v1/*`、`characters/v1/portraits/*`、`avatars/*`，其余一律拒绝（Cloudflare WAF 规则，第 12.4 节）。`bun src/cli.ts media check-public --base <域名>` 用桶里真实存在的键逐个前缀检查，只打印前缀和状态码 |
+| 安全头 | CSP 的 `img-src` 加入该域名的源（`connect-src` 不加，脚本不从它取字节）；页面 `<head>` 对它 `preconnect` |
+| 下架 | 仍然是删除 R2 对象；缓存清除同时清 `/img` 地址和公开域名地址（第 6.3 节） |
+
+公开域名的 GET 由 Cloudflare 缓存（2026-10-21 实测 `cf-cache-status: HIT`；HEAD 请求显示 `DYNAMIC`，不影响）。
 
 ---
 
@@ -150,8 +170,9 @@ wuwa/
 ├── review/v1/<p240|a160>/<packKey>/<emojiId>.webp     # 待审核表情的预览图，通过后复制到 derived/v1/
 ├── zips/v1/packs/<packKey>/<packKey>.<hash8>.zip      # 整包 ZIP，按内容哈希命名
 ├── uploads/tmp/<yyyy>/<mm>/<dd>/<uploadId>/<文件名>    # 直传暂存（UTC 日期）· 生命周期 7 天
-├── backups/postgres/<yyyy>/<mm>/<dd>/<时间戳>.dump     # 数据库备份（UTC 日期）· 生命周期 30 天
+├── backups/postgres/<yyyy>/<mm>/<dd>/<时间戳>.dump.enc # 加密的数据库备份（UTC 日期）· 生命周期 30 天
 ├── characters/v1/portraits/<slug>.<hash8>-<240|480>.webp  # 角色立绘（第 7.2 节），经 /img/v1/portrait/ 提供
+├── avatars/v1/<userId>/<hash>-<256|64>.webp          # 用户头像（第 7.3 节），按内容寻址
 └── design/v1/                                         # 设计稿归档（design/prototype/README.md）
 ```
 
@@ -164,7 +185,7 @@ wuwa/
 5. **待审核的图不进 `derived/`**。worker 把待审核表情的预览图写到 `review/v1/`（对象缓存头为 `private, no-store`），只经需要登录的 `/review-img` 提供。审核通过时复制到 `derived/v1/` 并删除预览图；预览图缺失时改为排队重新生成到 `derived/`。退回的图片从未进入 CDN，删除时也无需清除缓存。
 6. **规格升级**时生成 `derived/v2/…` 并回填，切换后整体删除 v1。
 7. **会过期的对象**放在独立前缀：`uploads/tmp/` 与 `backups/` 由 R2 生命周期规则清理（第 12.4 节）；被清理的投稿由每天的定时任务删除其原图、预览图和暂存文件（第 5.2 节）。
-8. **访问方式**：已发布的衍生图只经 `/img`。原图与 ZIP 用预签名 GET，有效 120 秒，「保存」带 `attachment` 和文件名，「查看」为 `inline`。上传用预签名 PUT，有效 900 秒，只能写 `uploads/tmp/`，`Content-Length` 与 `Content-Type` 都是签名头（`X-Amz-SignedHeaders=content-length;content-type;host`），存储拒绝大小或类型不同的请求体。2026-10-20 在 R2 上用 `bun src/cli.ts presign-selftest` 实测：大小相同的 PUT 返回 200，多 1 字节的 PUT 返回 403。
+8. **访问方式**：已发布的衍生图和立绘经 `/img`，或设置 `PUBLIC_IMG_BASE` 后经桶的自定义域（第 2.3 节）；其他前缀不能经公开域名访问。原图与 ZIP 用预签名 GET，有效 120 秒，「保存」带 `attachment` 和文件名，「查看」为 `inline`。上传用预签名 PUT，有效 900 秒，只能写 `uploads/tmp/`，`Content-Length` 与 `Content-Type` 都是签名头（`X-Amz-SignedHeaders=content-length;content-type;host`），存储拒绝大小或类型不同的请求体。2026-10-20 在 R2 上用 `bun src/cli.ts presign-selftest` 实测：大小相同的 PUT 返回 200，多 1 字节的 PUT 返回 403。
 
 ---
 
@@ -185,7 +206,7 @@ wuwa/
 - **抽帧实现**：先把动图解码为 RGBA 长条，抽出保留的帧并缩放，再用 sharp 的 `raw: { width, height, channels, pageHeight }` 重新包装后编码。`webp()` 没有 `pageHeight` 参数，传了会被忽略，输出变成一张竖长的静态图。
 - **每帧都相同的动图按静态图保存**：WebP 编码器会合并相邻的相同帧。`a160` 编码后不足 2 帧，说明原图每一帧都一样，这时不保存 `a160`，`frames` 记为 1，只有 `p240`。
 - **上传限制**：单个文件 ≤ 20 MB，边长 ≤ 2048，帧数 ≤ 400，帧数 × 宽 × 高 ≤ 1.2 亿像素。超出时 ingest 失败并在上传列表里显示原因。
-- **并发与内存**：sharp 只在 worker 进程和一次性的命令行容器里运行，`sharp.cache(false)`、`sharp.concurrency(1)`，`limitInputPixels` 为 1.2 亿。`media.derive` 队列每个 worker 同时跑 6 个任务，但 `oneImageAtATime` 让同一进程里的 sharp 工作一次只做一个，内存里最多有一张解码后的动图；任务之间重叠的是 R2 读写。等待中的工作 `media.derive`（审核预览与公开衍生图）先于 `media.full`（单张弹窗的原尺寸图），正在做的不打断，一批原尺寸图不会拖慢审核预览；`media.ingest` 只读元数据，不占这个名额。任务超时由 pg-boss 的 `expireInSeconds` 控制（第 12.5 节）。
+- **并发与内存**：表情图片的 sharp 工作只在 worker 进程和一次性的命令行容器里运行（web 进程只处理头像上传，第 7.3 节），`sharp.cache(false)`、`sharp.concurrency(1)`，`limitInputPixels` 为 1.2 亿。`media.derive` 队列每个 worker 同时跑 6 个任务，但 `oneImageAtATime` 让同一进程里的 sharp 工作一次只做一个，内存里最多有一张解码后的动图；任务之间重叠的是 R2 读写。等待中的工作 `media.derive`（审核预览与公开衍生图）先于 `media.full`（单张弹窗的原尺寸图），正在做的不打断，一批原尺寸图不会拖慢审核预览；`media.ingest` 只读元数据，不占这个名额。任务超时由 pg-boss 的 `expireInSeconds` 控制（第 12.5 节）。
 - **实测（生产，2026-10-20，v1 回填）**：并发 1 时每个任务 2.3 秒，worker 只用到单核的 8%；改为 6 个并发后每分钟 112 个任务，worker CPU 48%、内存 258 MB。
 
 ---
@@ -328,8 +349,8 @@ stateDiagram-v2
 - **隐藏**：表情或包设为 `hidden`，从站点上消失，但文件保留：`/img` 命中时不查库，旧地址仍可访问，CDN 里的副本也还在。隐藏可以恢复。
 - **删除表情**（版权申诉用这一项，`packs` 权限）：删除原图、所有版本（`.r1` 到当前 `.r<rev>`）的全部档位衍生图和预览图，删除数据库行，修正封面与计数；受影响包的 ZIP 立即删除，再按需排队重建；最后调用 Cloudflare API 按 URL 清除这些 `/img` 地址的缓存。
 - **彻底删除表情包**（只限站长）：逐张删除包内每个表情的文件和包的全部 ZIP，删除包记录（连带表情、关联与投稿），并清除缓存。文件按表情删除，不按前缀删除：移到别的包的表情仍在原包键下，`pack.json` 是只读的 v1 快照。管理员的「删除」是软删除（设为 `hidden`）。
-- 缓存清除在 web 进程里随后台操作执行，使用一枚只有「Zone · Cache Purge」权限的令牌（`CF_ZONE_ID`、`CF_PURGE_TOKEN`），按每批 30 个 URL 调用；未配置时只记日志。审计日志记录删除了什么、清除了多少地址、清除是否失败。
-- `/img` 响应是一年期的不可变缓存，只删 R2 对象不会让图片从 CDN 消失；已经下载到访客浏览器里的副本无法收回。
+- 缓存清除在 web 进程里随后台操作执行，使用一枚只有「Zone · Cache Purge」权限的令牌（`CF_ZONE_ID`、`CF_PURGE_TOKEN`），按每批 30 个 URL 调用；未配置时只记日志。每张被删的图清两个地址：`/img` 地址，以及设置了 `PUBLIC_IMG_BASE` 时公开域名上的地址（同一个区域，同一枚令牌）。审计日志记录删除了什么、清除了多少地址、清除是否失败。
+- 网页图片是一年期的不可变缓存，只删 R2 对象不会让图片从 CDN 消失；已经下载到访客浏览器里的副本无法收回。
 
 ### 6.4 授权
 
@@ -422,7 +443,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **上传**：设置页「头像」选图后，浏览器先裁成正方形并缩放到 512 px（WebP，浏览器不支持时用 PNG），再交给 `setAvatarFn`（`src/server/account/avatar.ts`）。服务端依次检查：大小不超过 2 MB；文件头是 PNG、JPEG、GIF 或 WebP（不信任声明的类型）；每人每小时最多更换 10 次。
 - **解码**：用 sharp 只取第一帧，按 EXIF 转正，`limitInputPixels` 为 2500 万，居中裁成正方形，输出 256 px 和 64 px 两张 WebP，不保留元数据。
 - **存储**：对象键按内容寻址，`avatars/v1/<userId>/<hash>-<256|64>.webp`，`<hash>` 是 256 px 输出的 SHA-256 前 16 位十六进制。`users.image` 只存这个哈希；把它变成地址的只有 `avatarUrl`（`src/server/media/keys.ts`），只接受 16 位十六进制。更换时先写两张新图，再在行锁下替换 `users.image`，最后删除旧图。移除头像、注销账号、站长在后台「清除头像」都会删除对象并写审计日志。
-- **提供**：经 `/img/v1/avatar/<userId>/<hash>-<size>.webp`，严格匹配后直接读同名对象，不查库，一年期 immutable。
+- **提供**：设置 `PUBLIC_IMG_BASE` 后从桶的公开域名加载（第 2.3 节），未设置时经 `/img/v1/avatar/<userId>/<hash>-<size>.webp`（第 2.2 节）。对象带一年期 immutable 缓存头，换头像就是换地址。后台「清除头像」同时清除两种地址的 CDN 缓存。
 - **写入权限**：Better Auth 的 `/update-user`、`/sign-up/email` 和后台创建、修改用户的接口带 `image` 时一律拒绝（`src/server/auth/profile-guard.ts`），`users.image` 只能由头像上传写入。
 - **进程**：这是 web 进程里唯一的 sharp 工作，首次使用时才加载，同一进程一次只解码一张。
 - **显示**：页头、个人中心、评论和后台都用同一个 `<Avatar>`（`src/ui/Avatar.tsx`）。有图时显示图片，没有头像或图片加载失败时显示名字的首字。
@@ -447,7 +468,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **字体**：页面主标题、包名、角色名、画师名和卡片标题用 `TP Rounded`（寒蝉圆黑体 v3.750 的 Bold 与 Heavy，OFL-1.1）；正文的拉丁字母与数字用自托管的 Nunito（latin 与 latin-ext 可变字重），中文用系统字体。`bun scripts/fonts/build.ts` 取 GB2312、ASCII、常用标点、假名和站点用字做子集，排版特性只保留浏览器默认启用的 ccmp、liga、kern，以及 Chrome 挤压相邻标点时用的 halt（`locl` 与 `aalt` 都已去掉），用 cn-font-split 切成按 `unicode-range` 加载的 woff2 分片，输出提交在 `public/fonts/`。分片按用字分层：首页、表情包、包页、角色图鉴和单张页上的站点文字（`scripts/fonts/site-chars.txt` 第一行）连同空格占一个分片；ASCII 一个分片；目录全部标题和名称的用字（`scripts/fonts/catalog-title-chars.txt`，约 400 字）在 Bold 里分成 4 个大分片，在 Heavy 里每 20 字一个分片；其余按频率自动切分。卡片标题用 Bold，一页卡片会用到大部分标题用字，之后的页面直接用缓存；Heavy 只排一页的 h1，小分片更省。用生产标题实测手机首访，字体（含 Nunito 38 KB）首页 180 KB、9 个文件，表情包 155 KB，包页 69 KB，角色图鉴 64 KB；`tests/pages/font-cost.ts` 可以给别的分片方案估价。上游字体的 `locl` 对所有语言生效，会把「户」「令」和数字换成日文字形，构建脚本最后检查这几个字。
 - **白昼与夜潮**（`src/ui/shell/theme.ts`）：两套设计令牌，夜潮在 `html[data-theme="night"]`。偏好存在 `localStorage` 的 `tp-theme`，默认跟随系统；页头的月亮 / 太阳按钮在白昼和夜潮之间切换，个人中心「设置」里的夜潮主题可以选跟随系统、白昼或夜潮，两处读写同一个偏好。`<head>` 里的内联脚本在首次绘制前设置主题和 `theme-color`，夜间页面不会先闪白。贴纸底板（`--tp-well`）在两套主题里都是浅色纸面，因为很多贴纸有深色描边或不透明的白底。
 - **角色颜色**（`src/ui/pages/model.ts`）：`characters.theme_color`（调色板名或 CSS 颜色）有值时用它；没有时按 slug 做 31 进制哈希，从 13 个设计色里取一个。服务端和客户端结果相同，封面、标签和描边因此不会全是同一种颜色。
-- **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
+- **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。位于视口中部的自动播放要等滚动停下 200 ms、并且视口里的海报都加载完（`src/ui/usePreview.ts`）：快速滚动时贴纸只是经过中部，2026-10-21 在 330 张的长包上实测，滚到底再滚回会加载约 120 个 `a160`（按生产体积约 10 MB），改后为 0。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
 - **页面外壳**：页头（含主题切换和「打包」按钮）、手机底部标签栏、页脚（显示目录总数）、站点公告条，模拟登录时置顶的「结束模拟」条，`Ctrl K` 命令面板（首次打开时才加载，联想来自 `suggestFn` 的进程内索引）。任何未匹配的地址都在站点外壳里渲染 404 页，并返回 404 状态码（`src/routes/_site/$.tsx`）。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
 - **站点与后台之间**：登录后，页头头像打开账号菜单（`src/ui/shell/AccountMenu.tsx`，手机上是底部弹层）。菜单依次是：名字和角色、个人中心、我的投稿、通知、设置；站长和管理员另有「管理台」；最后是退出登录。菜单在登录后才加载，角色取水合后重新确认的 viewer，不取边缘缓存的 HTML。个人中心对站长和管理员也显示「管理台」按钮。后台顶栏有带文字的「返回站点」（手机上也显示），侧栏标志链接到首页，侧栏底部和手机抽屉里有个人中心和退出登录。
 - **下拉选择**（`src/ui/Select.tsx`）：不用原生 `<select>`。原生菜单在 macOS 上盖在控件上，颜色跟随系统而不是站点主题，夜潮里选项文字看不清。现在的触发器与输入框同高同样式；列表挂在触发器下方，左缘对齐、至少与触发器同宽，下方放不下时向上翻。列表按内容定高，需要滚动时隐藏滚动条；手机上改为底部弹层。键盘支持方向键、Home、End、Enter、空格、Esc（焦点回到触发器）和按首字跳转。
@@ -560,6 +581,14 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 
 返回 /packs 现在保留全部已加载卡片和滚动位置，优化前会回到第一页顶部。
 
+图片加载（2026-10-21）：
+
+- **冷图**：生产上从开发机取包末尾的海报，经 `/img` 未命中缓存的中位数 913 ms（4 次），经桶的公开域名未命中的中位数 357 ms（18 次）；命中时两者都约 8 ms。公开域名省掉了源站这一跳（第 2.3 节）。Smart Tiered Cache 还能让大部分边缘节点的未命中不再各自回源。
+- **首屏贴纸**：服务端不知道视口，首屏贴纸保持 `loading="lazy"`，只有 LCP 候选（包封面、目录前几张封面、首页浮动贴纸）是 eager 和 `fetchpriority="high"`。在 330 张的长包上试过把前 16–24 张改成 eager 或高优先级：桌面首屏贴纸的完成时间不变（约 780 ms），手机 LCP 反而多 60–100 ms（手机首屏只有封面，贴纸在底栏之下），所以没有采用。
+- **长列表**：330 张的包页 1,514 个元素、JS 堆约 6 MB，手机滚到底再滚回 99–100% 的帧在 20 ms 内，不需要虚拟列表。试过 `content-visibility: auto`，桌面滚动更卡（20 ms 内的帧从 78% 降到 26–28%），没有采用。卡顿来自滚动时中部自动播放的 `a160`，改为滚动停下后才播放（第 8.1 节）。
+- **评论区占位**：包页评论区的占位按空评论区的高度预留（桌面 500 px、手机 540 px），提前三屏开始加载。之前手机快速滚到页底时，评论加载完把页脚推下去，CLS 0.157；现在 0.0001。
+- **尺寸**：`p240` 在手机（DPR 3）上的显示宽度 × DPR 与原图宽度之比在 0.5–2.0 之间，长包上全部 ≤ 0.9。桌面 DPR 1 时原图比显示尺寸大：包页贴纸 1.9 倍，目录封面的小格和角色头像 2.5–4.8 倍，潮汐画廊筛选条的角色小头像（22 px）11 倍；DPR 2 时减半。没有为此增加更小的档位：原图大多是 300 px，桌面 DPR 1 上一张 `p240` 只有 5–15 KB，省下的字节不足以抵消新档位的生成和回填。`a160` 在手机的大格上会被放大 2–3.6 倍，播放时比海报略糊；放大档位会让每张预览从 60–130 KB 变成约 2 倍，没有改。
+
 性能预算（目标值）：首屏 JS ≤ 110 KB（gzip）、CSS ≤ 30 KB、字体 ≤ 150 KB/页、LCP ≤ 2.5 s（4G 手机）、CLS ≤ 0.02、INP ≤ 150 ms、单页请求 ≤ 40 个。现状：首屏 JS 约 175 KB（框架约 119 KB），未达成；LCP 1.8–2.2 s、CLS ≤ 0.001 达标；字体：全站标题用字集中在少数共享的圆体分片里，首访字体（含 Nunito）首页 180 KB、/packs 155 KB、表情包页 69 KB、/characters 64 KB，之后的页面基本不再加载新分片（实测，手机 Slow 4G）。替换分片的发布同时保留上一版分片一个周期，避免仍缓存旧 CSS 的页面取不到字体。
 
 ---
@@ -623,7 +652,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - 客户端 IP 取 `cf-connecting-ip`（Better Auth 的 `advanced.ipAddress.ipAddressHeaders` 和 `src/server/http/client.ts`），不读 `X-Forwarded-For`。可信的前提见第 2 节。
 - 自定义的 `src/start.ts` 会替换 Start 默认的 CSRF 中间件，所以手动加回 `createCsrfMiddleware()`，范围是服务端函数；服务端路由不在其内，`POST /api/batch/sign` 自己检查来源。Better Auth 的 `trustedOrigins` 只有 `SITE_URL`。
 - 每个响应都带安全头：`Content-Security-Policy`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy`（关闭摄像头、麦克风、定位），生产环境另加 `Strict-Transport-Security: max-age=31536000`。
-- CSP 要点：`default-src 'self'`；`script-src` 含 `'unsafe-inline'`（Start 输出内联的水合脚本和主题启动脚本，nonce 尚未接入）、`'unsafe-eval'` 和 `'wasm-unsafe-eval'`（Cap 编译 WASM）；`worker-src`、`child-src` 含 `blob:`（Cap 的求解线程）；`img-src` 与 `connect-src` 含存储源（查看原图是 302 到预签名链接），`connect-src` 另含 Cap 源；`frame-ancestors 'none'`、`object-src 'none'`。
+- CSP 要点：`default-src 'self'`；`script-src` 含 `'unsafe-inline'`（Start 输出内联的水合脚本和主题启动脚本，nonce 尚未接入）、`'unsafe-eval'` 和 `'wasm-unsafe-eval'`（Cap 编译 WASM）；`worker-src`、`child-src` 含 `blob:`（Cap 的求解线程）；`img-src` 与 `connect-src` 含存储源（查看原图是 302 到预签名链接），`img-src` 另含 `PUBLIC_IMG_BASE` 的源，`connect-src` 另含 Cap 源；`frame-ancestors 'none'`、`object-src 'none'`。
 - `'unsafe-eval'` 的原因：Cap 的检测脚本运行在一个沙箱化的 `srcdoc` iframe 里，要用 eval 执行代码。srcdoc 框架继承页面的 CSP，没有 `'unsafe-eval'` 时浏览器拦下 eval，组件一直等到「Instrumentation timeout」，停在「验证中」，生产上注册因此无法完成。这个指令无法只对该框架生效，所以加在整页的 `script-src` 上（`src/server/http/security.ts`）。
 
 数据与密钥：
@@ -686,7 +715,7 @@ deploy/         Caddy、防火墙、发布与环境脚本
 
 一个镜像、四个入口，都直接用 Bun 运行：web 为 `bun .output/server/index.mjs`（Nitro 构建产物），worker、migrate、命令行分别是 `bun src/worker.ts`、`bun src/migrate.ts`、`bun src/cli.ts`，从 TypeScript 源码运行，不另外打包。
 
-命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`、`import-portraits <manifest.json | -> [--dry-run] [--no-colors]`、`derive-colors [--dry-run]`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
+命令行（`src/cli.ts`）：`promote-admin`、`set-role`、`import-v1 [--dry-run]`、`backfill-dims`、`backfill-derived`、`presign-selftest`、`import-portraits <manifest.json | -> [--dry-run] [--no-colors]`、`derive-colors [--dry-run]`、`media set-cache-control --prefix <前缀> [--dry-run] [--concurrency N]`、`media check-public [--base <域名>]`、`backup decrypt <文件或对象键> <输出.dump>`、`backup encrypt-existing [--dry-run]`。导入与回填在一次性的 worker 容器里执行，资源限制与 worker 相同（`deploy/README.md`「首次部署」）。
 
 镜像 `ghcr.io/yuri-nagasaki/wuwa-emotes` 由 CI 构建（第 12.3 节），`Dockerfile` 多阶段构建：安装全部依赖并 `bun run build`；另装只含生产依赖的 `node_modules` 并删掉 musl 版本的原生包（基础镜像是 glibc，这些包永远加载不了）；运行层从 PGDG 安装 `postgresql-client-18`（`pg_dump`）和 `tini`，复制 `.output/`、`src/`、`drizzle/`，以 `bun` 用户运行，`tini` 作为 PID 1 转发信号。
 
@@ -783,7 +812,8 @@ deploy/         Caddy、防火墙、发布与环境脚本
 | DNS | 站点域名与 `www` 的 A 记录指向源站，保持代理开启（橙云）；不建任何指向源站的灰云记录 |
 | SSL/TLS | 源站用 Origin CA 证书，模式「完全（严格）」；开启「始终使用 HTTPS」 |
 | Cache Rules | `/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」；`/fonts/*` 与服务端函数 `/_serverFn/*` 遵从源站头（源站给字体分片一年 immutable、`tp-rounded.css` 一小时，见 `vite.config.ts` 的 `routeRules`；字体重新构建后清除 `tp-rounded.css`）；HTML 遵从源站头。`/assets/*` 由 Nitro 加上 `public, max-age=31536000, immutable` |
-| Tiered Cache | 开启 Smart Tiered Cache |
+| Tiered Cache | 开启 Smart Tiered Cache：冷图由上层机房回源，大部分边缘节点不再各自回源 |
+| 桶的自定义域 | `i.sparxie.moe` 绑定桶 `wuwa`（第 2.3 节）。WAF 自定义规则：主机名为 `i.sparxie.moe` 且路径不以 `/derived/v1/`、`/characters/v1/portraits/`、`/avatars/` 开头时阻止。规则生效、`media check-public` 通过之后才设置 `PUBLIC_IMG_BASE` |
 | 缓存清除 | 令牌只给 Zone · Cache Purge 权限；只在删除时按 URL 清除，衍生图与 ZIP 都按版本或内容哈希命名 |
 | R2 令牌 | 只授权桶 `wuwa`，权限为对象读写 |
 | R2 CORS | 桶 `wuwa`：允许站点源的 GET（浏览器端打包）与 PUT（上传），允许头 `content-type`，暴露 `ETag` |
@@ -802,11 +832,19 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | `media.full` | 按需生成 `full` | exclusive | 2 次 | 900 秒 | 1 |
 | `zip.build` | 整包 ZIP | exclusive（单例键为包 ID） | 3 次 | 1800 秒 | 1 |
 | `stats.rollup` | 每小时第 5 分钟汇总下载计数 | singleton | 1 次 | 300 秒 | 1 |
-| `db.backup` | 每天 03:00 `pg_dump -Fc` 到 `backups/postgres/` | singleton | 2 次 | 3600 秒 | 1 |
+| `db.backup` | 每天 03:00 `pg_dump -Fc`，加密后写到 `backups/postgres/` | singleton | 2 次 | 3600 秒 | 1 |
 | `r2.alert` | 每天 04:00 检查 R2 读操作告警 | singleton | 1 次 | 300 秒 | 1 |
 | `cleanup.daily` | 每天 04:30 清理窗口表与过期投稿 | singleton | 1 次 | 1800 秒 | 1 |
 
 备份把连接参数经 `PG*` 环境变量传给 `pg_dump`，密码不出现在进程列表里；失败的备份不留下对象。ZIP 只在内容变化时重建（第 6.1 节）。
+
+**备份加密**（`src/server/media/backup-crypto.ts`）：备份里有所有账号的邮箱、密码哈希和会话令牌，而桶有公开域名、备份的键可以按日期猜出，所以备份上传前必须加密。
+
+- 算法：AES-256-GCM 加密整个 `pg_dump` 输出流，每个备份一个随机 96 位 IV。文件 = 头（`CHAOCHIBAK`、版本 1、IV，作为附加认证数据）‖ 密文 ‖ 16 字节认证标签，对象键以 `.dump.enc` 结尾。
+- 密钥：`BACKUP_ENCRYPTION_KEY`，32 个随机字节的 base64（`openssl rand -base64 32`），只在服务器的 `app-env` 里。站长必须在服务器之外另存一份：服务器丢失时，没有密钥的备份无法恢复。
+- 生产环境没有密钥（或用了公开的开发密钥）时备份在启动 `pg_dump` 之前失败：记错误日志 `backup: database backup FAILED`，任务失败，不上传任何东西。密钥在备份时检查，不在启动时检查，web 副本不需要它。开发与测试用代码里公开的开发密钥。
+- 恢复：`bun src/cli.ts backup decrypt <文件或对象键> <输出.dump>` 先写 `<输出>.partial`，认证标签通过后才改名，密钥错误或文件被截断时不留下输出；之后照常 `pg_restore`（`deploy/README.md`「备份与恢复」）。
+- 加密前写入的明文 `.dump`：`bun src/cli.ts backup encrypt-existing [--dry-run]` 逐个流式加密为 `.dump.enc`，重新下载解密核对 SHA-256，一致才删除明文。
 
 ---
 
@@ -819,6 +857,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | 检查 | 内容 |
 |---|---|
 | `tests/unit/server-fn-guard.test.ts` | 每个服务端函数都声明了权限中间件（第 5.1 节） |
+| `tests/unit/get-input-size.test.ts` | GET 服务端函数的输入写在 URL 里：任何 GET 的校验器接受数组、集合或无法读出的输入时失败，除非列入白名单并且最大输入按客户端的编码方式不到 8 KB。起因是 `favoriteStatusFn` 曾用 GET 传最多 200 个目标，约 100 个（URL 约 23 KB）时 Cloudflare 返回 520。现有一个白名单项：`stickerSourceFn` 最多 60 个 ID，最大 4,375 字节 |
 | `tests/admin/matrix.test.ts`、`tests/admin/audit.test.ts` | 后台服务端函数在未登录与三种角色下的权限矩阵；每个写操作都写审计日志 |
 | `tests/integration/presign-put.test.ts` | 预签名 PUT 把大小和类型签进签名头，在 RustFS 上拒绝其他类型与无长度的流式请求体 |
 | `tests/integration/signed-in-hint.test.ts` | 登录提示 Cookie 跟随会话 Cookie 设置与清除（登录、注册、验证邮件、模拟登录、退出、会话失效、补设）；不带会话 Cookie 的请求不会收到任何 `Set-Cookie`（第 2.1 节） |

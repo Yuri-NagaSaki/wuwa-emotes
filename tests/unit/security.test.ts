@@ -72,6 +72,19 @@ describe('CSP', () => {
     expect(directives(buildCsp(prodCfg)).get('connect-src')).not.toContain('ws:')
   })
 
+  test('img-src adds the PUBLIC_IMG_BASE origin when set; connect-src does not (no script reads those bytes)', () => {
+    const plain = directives(buildCsp(prodCfg))
+    expect(plain.get('img-src')).not.toContain('https://i.sparxie.example')
+    const cfg = securityConfig({ ...prodLike(), PUBLIC_IMG_BASE: 'https://i.sparxie.example' })
+    const d = directives(buildCsp(cfg))
+    expect(d.get('img-src')).toContain('https://i.sparxie.example')
+    expect(d.get('connect-src')).not.toContain('https://i.sparxie.example')
+    // a base with a path (path-style bucket) contributes its origin only
+    const path = directives(buildCsp(securityConfig({ ...prodLike(), PUBLIC_IMG_BASE: 'http://127.0.0.1:9100/bucket' })))
+    expect(path.get('img-src')).toContain('http://127.0.0.1:9100')
+    expect(securityConfig({ ...prodLike(), PUBLIC_IMG_BASE: '' }).imageOrigins).toEqual([])
+  })
+
   test('Cap origin follows CAP_API_ENDPOINT', () => {
     const cfg = securityConfig({ ...prodLike(), CAP_API_ENDPOINT: 'https://captcha.example:8443/abc/' })
     expect(directives(buildCsp(cfg)).get('connect-src')).toContain('https://captcha.example:8443')

@@ -73,6 +73,8 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 | `CAP_SECRET_KEY` | Cap 服务器管理员 | 以 `sk-` 开头，只放在服务器上 |
 | `SMTP_URL`、`MAIL_FROM` | 邮件服务商 | 注册验证与找回密码使用 |
 | `CF_ZONE_ID`、`CF_PURGE_TOKEN` | 站长在 Cloudflare 控制台创建 | 令牌只给 Zone.Cache Purge 权限 |
+| `BACKUP_ENCRYPTION_KEY` | 运维生成：`openssl rand -base64 32` | 数据库备份的加密密钥。生产环境没有它时每天的备份失败、不上传任何东西。站长必须在服务器之外另存一份（密码管理器等）：服务器丢失时，没有密钥的备份无法恢复。更换后旧备份仍要用旧密钥解密 |
+| `PUBLIC_IMG_BASE` | 站长绑定桶的自定义域之后 | 例如 `https://i.sparxie.moe`，不带末尾斜杠。留空时网页图片走 `/img`。只有在「桶的公开域名」一节的检查通过后才设置 |
 
 不要在 `app-env` 里设置 `CI` 或 `TEST`：任何一个都会关闭 web 服务的平滑停止。
 
@@ -82,7 +84,38 @@ install -m 600 /opt/chaochi/src/deploy/env.template /opt/chaochi/app-env
 2. 在 SSL/TLS →「源服务器」中创建 Origin CA 证书：主机名填 `sparxie.moe` 和 `*.sparxie.moe`，格式选 PEM。把证书保存为 `/opt/chaochi/certs/origin.pem`，把私钥保存为 `/opt/chaochi/certs/origin-key.pem`，两者权限都设为 600。
 3. 证书文件放好并重载 proxy（见「证书与 TLS 模式」）之后，再把 SSL/TLS 加密模式设为「完全（严格）」。证书文件放好之前，proxy 使用 Caddy 内部 CA，只能配合「完全」模式；此时设为「完全（严格）」会出现 526 错误。
 4. 开启「始终使用 HTTPS」。源站不监听 80 端口，`http://` 请求需要 Cloudflare 在边缘重定向。
-5. 缓存规则：`/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」（Use cache-control header if present, bypass cache if not）；开启 Smart Tiered Cache。其余规则见 `docs/ARCHITECTURE.md` 第 12.4 节。
+5. 缓存规则：`/img/*` 设为符合缓存条件，边缘 TTL 选「如果存在 Cache-Control 标头则使用，否则绕过缓存」（Use cache-control header if present, bypass cache if not）；开启 Smart Tiered Cache（缓存 → Tiered Cache，一个开关）：冷图由上层机房统一回源，大部分边缘节点不再各自回源，这是一次未命中耗时的大头。其余规则见 `docs/ARCHITECTURE.md` 第 12.4 节。
+6. 桶的公开域名，见下一节。
+
+## 桶的公开域名
+
+网页图片（海报、动图预览、立绘、头像）可以由桶 `wuwa` 的自定义域 `i.sparxie.moe` 直接提供，不经过源站（`docs/ARCHITECTURE.md` 第 2.3 节）。桶里还有数据库备份、原图、待审核预览图、ZIP 和上传暂存，所以这个域名必须只放行图片。按顺序做：
+
+1. 站长：R2 → 桶 `wuwa` → 设置 → 自定义域，添加 `i.sparxie.moe`。
+2. 站长：安全性 → WAF → 自定义规则，新建一条，操作选「阻止」，表达式：
+
+   ```text
+   (http.host eq "i.sparxie.moe" and not starts_with(http.request.uri.path, "/derived/v1/") and not starts_with(http.request.uri.path, "/characters/v1/portraits/") and not starts_with(http.request.uri.path, "/avatars/"))
+   ```
+
+3. 运维：在服务器上检查，必须全部 PASS：
+
+   ```bash
+   docker compose run --rm --no-deps worker bun src/cli.ts media check-public --base https://i.sparxie.moe
+   ```
+
+   它在桶里为每个前缀取一个真实存在的键：海报、立绘（有头像时也查头像）必须返回 200、`image/webp` 和一年期 immutable；`backups/`、`assets/`、`meta/` 以及存在时的 `review/v1/`、`zips/`、`uploads/tmp/`、`sync/` 必须返回 403 或 404，从不 200。只打印前缀和状态码。
+4. 运维（可选）：给缺少缓存头的旧对象补上，先预演；已正确的对象跳过并计数：
+
+   ```bash
+   docker compose run --rm --no-deps worker bun src/cli.ts media set-cache-control --prefix derived/v1/ --dry-run
+   docker compose run --rm --no-deps worker bun src/cli.ts media set-cache-control --prefix characters/v1/portraits/ --dry-run
+   ```
+
+   报告「would update 0」时不需要正式执行；否则去掉 `--dry-run` 再执行一次。命令只接受 `derived/`、`characters/v1/portraits/`、`avatars/` 下的前缀。
+5. 运维：在 `app-env` 里设置 `PUBLIC_IMG_BASE=https://i.sparxie.moe`，然后执行 `deploy/rollout.sh --force <当前标签>`（标签是 `/opt/chaochi/state/releases.log` 最后一行的第二列），逐个重建副本和 worker；重建的容器才会读新的环境文件。页面的图片地址随之改变；`/img` 继续提供所有图片，旧链接和缓存里的旧 HTML 不受影响。
+
+撤回：删掉 `PUBLIC_IMG_BASE`，再执行一次 `deploy/rollout.sh --force <当前标签>`。
 
 ## 首次部署
 
@@ -227,30 +260,49 @@ docker compose logs -f --tail 100 worker
 
 ## 备份与恢复
 
-worker 的 `db.backup` 定时任务每天 03:00（Asia/Shanghai）执行 `pg_dump -Fc`，写到 R2 的 `backups/postgres/<年>/<月>/<日>/<时间戳>.dump`，R2 生命周期保留 30 天。成功时 worker 日志出现 `backup: database dumped`：
+worker 的 `db.backup` 定时任务每天 03:00（Asia/Shanghai）执行 `pg_dump -Fc`，用 `BACKUP_ENCRYPTION_KEY` 加密（AES-256-GCM）后写到 R2 的 `backups/postgres/<年>/<月>/<日>/<时间戳>.dump.enc`，R2 生命周期保留 30 天。成功时 worker 日志出现 `backup: database dumped`；没有密钥时出现 `backup: database backup FAILED`，不上传任何东西：
 
 ```bash
 docker compose logs worker | grep 'backup:'
 ```
 
-发布有风险的迁移前或维护前，另做一份本机备份：
+密钥只在服务器的 `app-env` 和站长另存的副本里。服务器丢失时，用另存的密钥在新服务器的 `app-env` 里写回同一个值，才能解密 R2 里的备份。
+
+加密上线之前写入的明文备份（`.dump`）要转换一次，先预演：
+
+```bash
+docker compose run --rm --no-deps worker bun src/cli.ts backup encrypt-existing --dry-run
+docker compose run --rm --no-deps worker bun src/cli.ts backup encrypt-existing
+```
+
+它逐个把明文备份流式加密为 `.dump.enc`，重新下载解密并核对 SHA-256，一致才删除明文，最后报告找到、加密、核对和删除的个数。转换后的对象从转换当天起重新计算 30 天生命周期。
+
+发布有风险的迁移前或维护前，另做一份本机备份（明文，只留在服务器上）：
 
 ```bash
 mkdir -p /opt/chaochi/backups
 docker compose exec -T db pg_dump -U chaochi -d chaochi -Fc > /opt/chaochi/backups/chaochi-$(date +%Y%m%d-%H%M).dump
 ```
 
-从 R2 恢复时，先用 Cloudflare 控制台或任意 S3 客户端把 `.dump` 文件下载到 `/opt/chaochi/backups/`，再按下面的步骤恢复。
+从 R2 恢复时，先把备份解密到 `/opt/chaochi/backups/`。下面的命令在一次性的 worker 容器里运行，以 root 身份把结果写进挂载的主机目录；参数是对象键（Cloudflare 控制台里看到的完整路径），也可以是已下载到 `/opt/chaochi/backups/` 的文件（写作 `/backups/<文件名>`）：
+
+```bash
+docker compose run --rm --no-deps --user root -v /opt/chaochi/backups:/backups worker \
+  bun src/cli.ts backup decrypt backups/postgres/<年>/<月>/<日>/<时间戳>.dump.enc /backups/restore.dump
+```
+
+解密先写 `restore.dump.partial`，认证通过后才改名为 `restore.dump`；密钥不对或文件不完整时命令失败，不留下输出。可以先用 `docker compose exec -T db pg_restore --list < /opt/chaochi/backups/restore.dump | head` 确认文件可读。
 
 恢复会清空当前数据库并让网站停止服务。执行前确认备份文件完整，并先另做一份当前数据库的备份。
 
 1. 停止写入数据库的服务：`docker compose stop worker web-a web-b`。此时网站不可用。
 2. 删除并重建数据库：`docker compose exec -T db dropdb -U chaochi --force chaochi`，然后 `docker compose exec -T db createdb -U chaochi chaochi`。
-3. 恢复数据：`docker compose exec -T db pg_restore -U chaochi -d chaochi --no-owner --exit-on-error --single-transaction < <备份文件>`。不要对现有数据库用 `--clean`：pg-boss 的分区表会让它失败。
+3. 恢复数据：`docker compose exec -T db pg_restore -U chaochi -d chaochi --no-owner --exit-on-error --single-transaction < /opt/chaochi/backups/restore.dump`。不要对现有数据库用 `--clean`：pg-boss 的分区表会让它失败。
 4. 启动服务：`docker compose up -d --no-deps web-a web-b worker`。`docker compose start` 在这里不可用，它要求一次性服务 `migrate` 的容器存在。
 5. 用 `docker compose ps` 确认 web-a、web-b 为 healthy。
+6. 删除明文的 `/opt/chaochi/backups/restore.dump`。
 
-在新服务器上恢复时，先按「首次部署」克隆源码，`docker compose up -d db`，对新建的空数据库执行第 3 步，再从开发机执行 `deploy/release.sh <标签>`。
+在新服务器上恢复时，先按「首次部署」克隆源码、写好 `app-env`（含原来的 `BACKUP_ENCRYPTION_KEY`），`docker compose up -d db`，解密后对新建的空数据库执行第 3 步，再从开发机执行 `deploy/release.sh <标签>`。
 
 ## 防火墙维护
 
@@ -278,6 +330,8 @@ docker compose exec -T db pg_dump -U chaochi -d chaochi -Fc > /opt/chaochi/backu
 
 - [ ] 生命周期规则：前缀 `uploads/tmp/` 7 天后删除；前缀 `backups/` 30 天后删除。
 - [ ] Cloudflare 缓存规则 `/img/*` 遵从源站缓存头，开启 Smart Tiered Cache（见「Cloudflare 设置」第 5 步）。
+- [ ] 自定义域 `i.sparxie.moe` 只放行 `/derived/v1/`、`/characters/v1/portraits/`、`/avatars/`（WAF 规则），`media check-public` 全部 PASS（见「桶的公开域名」）。
+- [ ] `app-env` 里有 `BACKUP_ENCRYPTION_KEY`，站长另存了一份；R2 里没有明文的 `.dump`（`backup encrypt-existing` 报告找到 0 个）。
 
 ## Cap
 

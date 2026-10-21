@@ -4,7 +4,7 @@ import { deleteAvatarFiles, swapAvatarHash } from '../account/avatar'
 import { audit } from '../audit'
 import { auth } from '../auth/auth'
 import { db, schema } from '../db/client'
-import { avatarUrl } from '../media/keys'
+import { avatarPath, avatarUrl, isAvatarHash } from '../media/keys'
 import { purgeImgUrls } from '../media/purge'
 import { HttpError } from '../perm/fn'
 import { type Actor, assertOwner, badRequest, likePattern, many, notFound, pageOf, roleOf, toIso, toNum } from './common'
@@ -193,7 +193,9 @@ export async function clearUserAvatar(actor: Actor, input: { userId: string }, d
   if (!swapped) throw notFound('这个用户')
   if (swapped.previous == null) return { cleared: false }
   await deleteAvatarFiles(u.id, swapped.previous)
-  const urls = [avatarUrl(u.id, swapped.previous, 256), avatarUrl(u.id, swapped.previous, 64)].filter((x): x is string => !!x)
+  // origin paths: the purge adds each object's public URL when PUBLIC_IMG_BASE is set
+  const prev = swapped.previous
+  const urls = isAvatarHash(prev) ? [avatarPath(u.id, prev, 256), avatarPath(u.id, prev, 64)] : []
   let purge: { urls: number; purged: number; skipped: boolean; error: string | null } = { urls: urls.length, purged: 0, skipped: false, error: null }
   try {
     const r = await deps.purge(urls)

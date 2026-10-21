@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { ConfigError, parseEnv } from '#/server/env'
+import { ConfigError, DEV_BACKUP_KEY, parseEnv } from '#/server/env'
 
 // parseEnv only; never env(), so nothing here is cached for other test files.
 
@@ -66,5 +66,26 @@ describe('production requirements', () => {
 
   test('rejects a short AUTH_SECRET', () => {
     expect(() => parseEnv({ ...PROD_BASE, AUTH_SECRET: 'short' })).toThrow(/AUTH_SECRET/)
+  })
+})
+
+describe('public images and backups', () => {
+  test('PUBLIC_IMG_BASE: unset by default, trailing slash dropped, http(s) only, no query', () => {
+    expect(parseEnv({ NODE_ENV: 'development' }).PUBLIC_IMG_BASE).toBe('')
+    expect(parseEnv(PROD_BASE).PUBLIC_IMG_BASE).toBe('')
+    expect(parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'https://i.sparxie.example/' }).PUBLIC_IMG_BASE).toBe('https://i.sparxie.example')
+    expect(parseEnv({ NODE_ENV: 'development', PUBLIC_IMG_BASE: 'http://127.0.0.1:9000/chaochi-x' }).PUBLIC_IMG_BASE).toBe('http://127.0.0.1:9000/chaochi-x')
+    expect(() => parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'ftp://i.example' })).toThrow(/PUBLIC_IMG_BASE/)
+    expect(() => parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'https://i.example/?x=1' })).toThrow(/PUBLIC_IMG_BASE/)
+  })
+
+  test('a production config without BACKUP_ENCRYPTION_KEY still parses (the web replicas do not need it)', () => {
+    expect(parseEnv(PROD_BASE).BACKUP_ENCRYPTION_KEY).toBe('')
+  })
+
+  test('development gets the public dev backup key; production never does', () => {
+    expect(parseEnv({ NODE_ENV: 'development' }).BACKUP_ENCRYPTION_KEY).toBe(DEV_BACKUP_KEY)
+    expect(parseEnv({ NODE_ENV: 'test' }).BACKUP_ENCRYPTION_KEY).toBe(DEV_BACKUP_KEY)
+    expect(parseEnv(PROD_BASE).BACKUP_ENCRYPTION_KEY).not.toBe(DEV_BACKUP_KEY)
   })
 })

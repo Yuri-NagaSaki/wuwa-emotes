@@ -2,7 +2,11 @@ import { toast } from '../Toast'
 
 // Clipboard actions shared by tiles and the single-emoji dialog. The clipboard only takes PNG, so a
 // sticker is drawn onto a canvas first; animated stickers would lose their motion, so they get a hint
-// to use 保存原图 instead (docs/ARCHITECTURE.md §8).
+// to use 保存原图 instead (docs/ARCHITECTURE.md §8). The canvas reads image bytes, so both images come
+// from the origin's /img: a poster from the bucket's public domain (PUBLIC_IMG_BASE) would taint the
+// canvas. `full` is always an /img path (src/server/media/keys.ts), and the poster fallback is the same
+// path with the p240 variant. (No shared helper import here: it would add a chunk to the pack page's
+// navigation, which costs a round trip on HTTP/1.1.)
 
 export interface CopyableEmoji {
   full: string
@@ -21,7 +25,7 @@ export async function copyImage(e: CopyableEmoji) {
       const img = new Image()
       img.src = e.full
       await img.decode().catch(async () => {
-        img.src = e.poster
+        img.src = e.full.startsWith('/img/v1/full/') ? e.full.replace('/img/v1/full/', '/img/v1/p240/') : e.poster
         await img.decode()
       })
       const canvas = document.createElement('canvas')

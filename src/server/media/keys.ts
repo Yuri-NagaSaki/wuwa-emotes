@@ -1,7 +1,9 @@
 import { EMOJI_ID_RE, PACK_KEY_RE } from '#/shared/ids'
+import { env } from '../env'
 
 // Object key layout in bucket `wuwa` (docs/ARCHITECTURE.md §3). Objects are never moved; derived keys
 // can be computed from (storagePackKey, emojiId, variantRev) without a lookup.
+// Server only: the URL helpers read PUBLIC_IMG_BASE from env().
 
 export type Variant = 'p240' | 'a160' | 'full'
 export type ReviewVariant = 'p240' | 'a160'
@@ -41,8 +43,14 @@ export function portraitKey(ref: PortraitRef): string {
   return `${PORTRAIT_PREFIX}${ref.name}.${ref.hash8}-${ref.width}.webp`
 }
 
-export function portraitUrl(ref: PortraitRef): string {
+/** The origin's path for a portrait (always /img, whatever PUBLIC_IMG_BASE says). */
+export function portraitPath(ref: PortraitRef): string {
   return `/img/v1/portrait/${ref.name}.${ref.hash8}-${ref.width}.webp`
+}
+
+/** Where a browser loads a portrait from (webImageUrl). */
+export function portraitUrl(ref: PortraitRef, base?: string): string {
+  return webImageUrl(portraitKey(ref), portraitPath(ref), base)
 }
 
 function portraitRef(name: string, hash8: string, width: string): PortraitRef | null {
@@ -83,12 +91,56 @@ export function uploadTmpKey(uploadId: string, filename: string, now = new Date(
   return `uploads/tmp/${y}/${m}/${d}/${uploadId}/${safe}`
 }
 
+export const BACKUP_PREFIX = 'backups/'
+/** Encrypted dumps (src/server/media/backup-crypto.ts); the plaintext `.dump` objects are from before. */
+export const BACKUP_SUFFIX = '.dump.enc'
+
 export function backupKey(now = new Date()): string {
   const iso = now.toISOString()
-  return `backups/postgres/${iso.slice(0, 4)}/${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.replace(/[:.]/g, '-')}.dump`
+  return `${BACKUP_PREFIX}postgres/${iso.slice(0, 4)}/${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.replace(/[:.]/g, '-')}${BACKUP_SUFFIX}`
 }
 
-// ---- public URLs ----
+// ---- public web images ----
+//
+// p240, a160, character portraits and avatars are public and immutable (every key carries a revision
+// or a content hash). With PUBLIC_IMG_BASE set (the bucket's custom domain, e.g. https://i.sparxie.moe)
+// browsers load them straight from the bucket; unset, from the origin's /img, as before. `full` stays on
+// /img either way: it is rendered on first open (a 302 to the poster until then). Review images stay on
+// /review-img. JavaScript that reads image bytes (clipboard copy on a canvas) uses the /img path, so
+// nothing depends on bucket CORS (src/shared/web-image.ts).
+
+export const IMMUTABLE = 'public, max-age=31536000, immutable'
+/** Prefixes of the public web images; nothing else may be reachable on PUBLIC_IMG_BASE. */
+export const PUBLIC_IMAGE_PREFIXES = ['derived/v1/', PORTRAIT_PREFIX, 'avatars/'] as const
+
+export function isPublicImageKey(key: string): boolean {
+  return PUBLIC_IMAGE_PREFIXES.some((p) => key.startsWith(p))
+}
+
+/** Cache-Control for a new object: public images are cached for a year; others keep the default. */
+export function objectCacheControl(key: string): string | undefined {
+  return isPublicImageKey(key) ? IMMUTABLE : undefined
+}
+
+/** PUBLIC_IMG_BASE without a trailing slash, or '' when browsers should use /img. */
+export function publicImgBase(): string {
+  return env().PUBLIC_IMG_BASE
+}
+
+/** `${PUBLIC_IMG_BASE}/<key>`, or null when PUBLIC_IMG_BASE is unset. */
+export function publicObjectUrl(key: string, base = publicImgBase()): string | null {
+  return base ? `${base}/${key}` : null
+}
+
+/**
+ * The one place that decides where a browser loads a public web image from: the bucket's public base
+ * when PUBLIC_IMG_BASE is set, otherwise the origin path. Every web image URL goes through here.
+ */
+export function webImageUrl(key: string, originPath: string, base = publicImgBase()): string {
+  return publicObjectUrl(key, base) ?? originPath
+}
+
+// ---- /img URLs ----
 
 export interface ImgRef {
   variant: Variant
@@ -97,8 +149,15 @@ export interface ImgRef {
   rev: number
 }
 
-export function imgUrl(ref: ImgRef): string {
+/** The origin's /img path of a derived image (redirects, CDN purges, same-origin byte reads). */
+export function imgPath(ref: ImgRef): string {
   return `/img/v1/${ref.variant}/${ref.packKey}/${ref.emojiId}.r${ref.rev}.webp`
+}
+
+/** Where a browser loads a derived image from: p240 and a160 through webImageUrl, `full` from /img. */
+export function imgUrl(ref: ImgRef, base?: string): string {
+  if (ref.variant === 'full') return imgPath(ref)
+  return webImageUrl(derivedKey(ref.variant, ref.packKey, ref.emojiId, ref.rev), imgPath(ref), base)
 }
 
 export function reviewImgUrl(variant: ReviewVariant, packKey: string, emojiId: string): string {
@@ -163,13 +222,18 @@ export function avatarKeys(userId: string, hash: string): string[] {
   return AVATAR_SIZES.map((s) => avatarKey(userId, hash, s))
 }
 
+/** The origin's /img path of an avatar (CDN purges, and the URL when PUBLIC_IMG_BASE is unset). */
+export function avatarPath(userId: string, hash: string, size: AvatarSize): string {
+  return `/img/v1/avatar/${userId}/${hash}-${size}.webp`
+}
+
 /**
- * The one place users.image becomes a URL: /img/v1/avatar/<userId>/<hash>-<size>.webp, or null when
+ * The one place users.image becomes a URL (through webImageUrl, like every web image), or null when
  * the stored value is not a 16-hex hash (no avatar, or anything else that ended up in the column).
  */
-export function avatarUrl(userId: string, hash: string | null | undefined, size: AvatarSize): string | null {
+export function avatarUrl(userId: string, hash: string | null | undefined, size: AvatarSize, base?: string): string | null {
   if (!isAvatarUserId(userId) || !isAvatarHash(hash)) return null
-  return `/img/v1/avatar/${userId}/${hash}-${size}.webp`
+  return webImageUrl(avatarKey(userId, hash, size), avatarPath(userId, hash, size), base)
 }
 
 const AVATAR_PATH_RE = /^\/img\/v1\/avatar\/([^/]+)\/([^/]+)-(256|64)\.webp$/

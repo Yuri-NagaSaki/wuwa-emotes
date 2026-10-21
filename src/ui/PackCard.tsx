@@ -132,7 +132,8 @@ export function packCardShape(p: TierProps & Pick<PackCardProps, 'artists' | 'of
  */
 export const PackCard = memo(function PackCard(p: PackCardProps) {
   const v = coverVariant(p.variant ?? 'four', p.images.length)
-  const shown = v === 'one' ? p.images.slice(0, 1) : p.images.slice(0, 4)
+  // the strip shows three (components.css hides a fourth): rendering it would still fetch it when eager
+  const shown = p.images.slice(0, v === 'one' ? 1 : v === 'strip' ? 3 : 4)
   const cover = useAnimatedPreview<HTMLAnchorElement>(shown[0] ?? '', p.coverPreview)
   const chars = p.characters ?? []
   const tiers = packCardTiers(p)

@@ -5,7 +5,7 @@ import { sendJob } from '../jobs/boss'
 import { Q } from '../jobs/queues'
 import { log } from '../log'
 import { IMMUTABLE } from './img'
-import { derivedKey, imgUrl, reviewKey, VARIANTS } from './keys'
+import { derivedKey, imgPath, reviewKey, VARIANTS } from './keys'
 import { copyObject, deleteObjects, headObject } from './s3'
 
 // Review → publish and takedown (docs/ARCHITECTURE.md §3 rule 5, §5.2, §6.3).
@@ -118,7 +118,7 @@ export async function deleteEmojiFiles(emoji: string | EmojiFiles): Promise<{ de
   for (let rev = 1; rev <= e.variantRev; rev++) {
     for (const variant of VARIANTS) {
       keys.push(derivedKey(variant, e.storagePackKey, e.id, rev))
-      imgUrls.push(siteUrl(imgUrl({ variant, packKey: e.storagePackKey, emojiId: e.id, rev })))
+      imgUrls.push(siteUrl(imgPath({ variant, packKey: e.storagePackKey, emojiId: e.id, rev })))
     }
   }
   keys.push(reviewKey('p240', e.storagePackKey, e.id), reviewKey('a160', e.storagePackKey, e.id))

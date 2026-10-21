@@ -2,7 +2,8 @@ import { describe, expect, test } from 'bun:test'
 import { AVATAR_MAX_BYTES, avatarFormFile, sniffImage } from '#/server/account/avatar-input'
 import { carriesImage, guardProfileUpdate } from '#/server/auth/profile-guard'
 import { handleImg, IMMUTABLE, type ImgDeps } from '#/server/media/img'
-import { avatarKey, avatarKeys, avatarUrl, isAvatarHash, parseAvatarPath } from '#/server/media/keys'
+import { avatarKey, avatarKeys, avatarPath, avatarUrl, isAvatarHash, parseAvatarPath } from '#/server/media/keys'
+import { cdnUrls } from '#/server/media/purge'
 
 const USER = 'Ab3dEf6hIj9kLm2nOp5qRs8tUv1wXy4z'
 const HASH = '0a1b2c3d4e5f6a7b'
@@ -21,6 +22,16 @@ describe('avatar keys and URLs', () => {
     for (const id of ['', 'a/b', 'a.b', '..', 'x'.repeat(65), 'a b']) expect(avatarUrl(id, HASH, 256)).toBeNull()
     expect(isAvatarHash(HASH)).toBe(true)
     expect(isAvatarHash(123)).toBe(false)
+  })
+
+  test('with a public image base the avatar loads from the bucket; purges cover both URLs', () => {
+    const base = 'https://i.example.test'
+    expect(avatarUrl(USER, HASH, 256, base)).toBe(`${base}/avatars/v1/${USER}/${HASH}-256.webp`)
+    expect(avatarUrl(USER, 'nope', 256, base)).toBeNull()
+    expect(cdnUrls([avatarPath(USER, HASH, 64)], 'https://site.example.test', base)).toEqual([
+      `https://site.example.test/img/v1/avatar/${USER}/${HASH}-64.webp`,
+      `${base}/avatars/v1/${USER}/${HASH}-64.webp`,
+    ])
   })
 
   test('parseAvatarPath round-trips and rejects anything else', () => {
