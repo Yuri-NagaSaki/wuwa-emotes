@@ -88,7 +88,7 @@ async function resendVerification(email: string): Promise<Failure | null> {
 }
 
 /** 「验证邮件已发出」: where it went, how long the link lasts, the spam folder, 重新发送 and the way back. */
-function VerificationSent({ email, back }: { email: string; back: ReactNode }) {
+function VerificationSent({ email, back, afterSignUp }: { email: string; back: ReactNode; afterSignUp?: boolean }) {
   const [left, restart] = useCooldown(RESEND_COOLDOWN, true)
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null)
@@ -107,6 +107,7 @@ function VerificationSent({ email, back }: { email: string; back: ReactNode }) {
     <>
       <SentPanel title="验证邮件已发出">
         我们给 <b className="dyn">{email}</b> 发了一封验证邮件，请在 {VERIFY_TTL}内点击邮件里的链接完成验证。没收到的话，先看看垃圾邮件文件夹。
+        {afterSignUp ? ' 这个邮箱如果已经注册过，收到的会是一封登录提醒，直接登录即可。' : null}
       </SentPanel>
       {note ? <AuthNotice tone={note.tone}>{note.text}</AuthNotice> : null}
       <Button block onClick={resend} disabled={busy || left > 0}>
@@ -283,6 +284,7 @@ export function RegisterPage({ next }: { next?: string }) {
       {sentTo ? (
         <VerificationSent
           email={sentTo}
+          afterSignUp
           back={
             <AppLink to="/login" className={buttonClass({ block: true })}>
               返回登录

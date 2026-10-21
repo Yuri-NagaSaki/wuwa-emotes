@@ -17,10 +17,14 @@ export const toggleFavoriteFn = createServerFn({ method: 'POST' })
     return toggleFavorite(context.viewer.id, data.target, data.folderId)
   })
 
-/** Which of the given targets the viewer has favorited, as "pack:<id>" / "emoji:<id>"; [] when signed out. */
-export const favoriteStatusFn = createServerFn({ method: 'GET' })
+/**
+ * Which of the given targets the viewer has favorited, as "pack:<id>" / "emoji:<id>"; [] when signed out.
+ * POST: a GET carries its input in the URL, and 100 targets already pass the 16 KB that Cloudflare and
+ * the origin accept (520). The client asks in batches of 100 (STATUS_BATCH in src/ui/pages/useFavorite.ts).
+ */
+export const favoriteStatusFn = createServerFn({ method: 'POST' })
   .middleware([publicFn])
-  .validator(z.object({ targets: z.array(target).max(200) }))
+  .validator(z.object({ targets: z.array(target).max(100) }))
   .handler(async ({ data, context }) => {
     const { favoriteStatus } = await import('./service')
     return favoriteStatus(context.viewer?.id ?? null, data.targets)

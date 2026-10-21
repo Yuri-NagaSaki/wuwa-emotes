@@ -13,3 +13,10 @@ export function log(): pino.Logger {
   })
   return instance
 }
+
+const EMAIL = /([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*(@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/g
+
+/** "s***@gmail.com": enough to tell addresses apart in a log without keeping them. */
+export function maskEmails(text: string): string {
+  return text.replace(EMAIL, '$1***$2')
+}

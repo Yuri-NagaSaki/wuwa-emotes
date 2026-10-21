@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from '#/server/auth/policy'
+import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, EXISTING_NOTICE_WINDOW_MS, mayNoticeExisting, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from '#/server/auth/policy'
 
 // src/server/auth/policy.ts: which Better Auth endpoints need a Cap token, and the per-IP limits that
 // stand in for Cap on the verification mail. The HTTP behaviour is covered in
@@ -35,5 +35,15 @@ describe('link lifetimes', () => {
     expect(durationText(5400)).toBe('90 分钟')
     expect(durationText(VERIFY_EMAIL_EXPIRES_IN)).toBe('1 小时')
     expect(durationText(RESET_PASSWORD_EXPIRES_IN)).toBe('1 小时')
+  })
+})
+
+describe('notice to an address that signs up again', () => {
+  test('one per address per window, case-insensitive', () => {
+    const t0 = 1_000_000_000
+    expect(mayNoticeExisting('Someone@Example.com', t0)).toBe(true)
+    expect(mayNoticeExisting('someone@example.com', t0 + 1000)).toBe(false)
+    expect(mayNoticeExisting('other@example.com', t0 + 1000)).toBe(true)
+    expect(mayNoticeExisting('someone@example.com', t0 + EXISTING_NOTICE_WINDOW_MS)).toBe(true)
   })
 })

@@ -35,3 +35,23 @@ export function durationText(seconds: number): string {
   if (seconds >= 3600 && seconds % 3600 === 0) return `${seconds / 3600} 小时`
   return `${Math.max(1, Math.round(seconds / 60))} 分钟`
 }
+
+/** At most one 「这个邮箱已经注册过」 notice per address per window (kept per web process). */
+export const EXISTING_NOTICE_WINDOW_MS = 10 * 60_000
+const existingNoticeAt = new Map<string, number>()
+
+/**
+ * Whether the notice to an address that signed up again may go out now; records the send. Sign-up
+ * already needs a Cap token and is limited per IP (AUTH_RATE_RULES); this keeps one inbox from being
+ * flooded through it.
+ */
+export function mayNoticeExisting(email: string, now = Date.now()): boolean {
+  const key = email.trim().toLowerCase()
+  const last = existingNoticeAt.get(key)
+  if (last !== undefined && now - last < EXISTING_NOTICE_WINDOW_MS) return false
+  existingNoticeAt.set(key, now)
+  if (existingNoticeAt.size > 5000) {
+    for (const [k, t] of existingNoticeAt) if (now - t >= EXISTING_NOTICE_WINDOW_MS) existingNoticeAt.delete(k)
+  }
+  return true
+}

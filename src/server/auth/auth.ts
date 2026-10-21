@@ -6,13 +6,23 @@ import { tanstackStartCookies } from 'better-auth/tanstack-start'
 import { db, schema } from '../db/client'
 import { env } from '../env'
 import { hashValue } from '../http/client'
+import { log, maskEmails } from '../log'
 import { mailConfigured, sendMail } from '../mail'
 import { ac, authRoles } from './access'
 import { CAP_HEADER, capErrorMessage, verifyCapToken } from './cap'
-import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
+import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, mayNoticeExisting, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
 import { signedInHintHook } from './signed-in-hint'
 
 export { CAP_PROTECTED_PATHS } from './policy'
+
+/** Better Auth's own log lines (existing-email sign-ups, failed sends) into pino, addresses masked. */
+function authLog(level: 'debug' | 'info' | 'warn' | 'error', message: string, ...args: unknown[]) {
+  const detail = args
+    .map((a) => (a instanceof Error ? a.message : typeof a === 'string' ? a : null))
+    .filter((a): a is string => Boolean(a))
+    .map((a) => maskEmails(a).slice(0, 300))
+  log()[level](detail.length ? { detail } : {}, `auth: ${maskEmails(message)}`)
+}
 
 function createAuth() {
   const e = env()
@@ -41,6 +51,21 @@ function createAuth() {
       resetPasswordTokenExpiresIn: RESET_PASSWORD_EXPIRES_IN,
       // a reset means the old password may be known to someone else: sign every device out
       revokeSessionsOnPasswordReset: true,
+      // Signing up with an address that already has an account answers like a new sign-up (so the
+      // form does not reveal which addresses are registered) and sends nothing by default. Tell the
+      // owner of the address instead, so 「验证邮件已发出」 is never followed by an empty inbox.
+      onExistingUserSignUp: async ({ user }) => {
+        if (!mayNoticeExisting(user.email)) return
+        try {
+          await sendMail(
+            user.email,
+            `${e.SITE_NAME} · 这个邮箱已经注册过`,
+            `有人（可能是你）刚刚用这个邮箱在${e.SITE_NAME}注册。这个邮箱已经有账号了，不需要再注册。\n\n直接登录：${e.SITE_URL}/login\n忘记密码：${e.SITE_URL}/forgot-password\n\n如果不是你本人操作，请忽略这封邮件，你的账号没有任何变化。`,
+          )
+        } catch {
+          // already logged by sendMail; the sign-up answer must not change
+        }
+      },
       sendResetPassword: async ({ user, url }) => {
         await sendMail(
           user.email,
@@ -78,6 +103,7 @@ function createAuth() {
       // per IP; /send-verification-email has no Cap check, so its rule is the strict one
       customRules: { ...AUTH_RATE_RULES },
     },
+    logger: { level: 'info', log: authLog },
     advanced: {
       ipAddress: { ipAddressHeaders: ['cf-connecting-ip'] },
       useSecureCookies: e.NODE_ENV === 'production',

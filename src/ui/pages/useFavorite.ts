@@ -50,6 +50,7 @@ export async function toggleFavorite(target: FavoriteTarget): Promise<void> {
     const { toggleFavoriteFn } = await fns()
     const r = await toggleFavoriteFn({ data: { target: { type: target.type, id: String(target.id) } } })
     set(key, r.favorited)
+    if (askedFor) asked.add(key)
     toast({ message: r.favorited ? '已收藏' : '已取消收藏', detail: r.favorited ? '在「我的 · 收藏夹」里查看' : undefined, icon: 'heart' })
   } catch (err) {
     set(key, was)
@@ -75,27 +76,66 @@ export function useFavoriteKeys(): ReadonlySet<string> {
 const EMPTY: ReadonlySet<string> = new Set()
 export { keyOf as favoriteKey }
 
-/** Load the viewer's hearts for the targets on screen (signed-in viewers only, once per target set). */
+/** Most targets one favoriteStatusFn call carries (the server allows the same). */
+export const STATUS_BATCH = 100
+
+// Keys already asked about for `askedFor` (answered or on the way), so a page that grows (the next
+// batch of a long pack, infinite scroll) only asks about what is new. Cleared when the viewer changes.
+let asked = new Set<string>()
+let askedFor: string | null = null
+
+/** The targets not asked about yet, without duplicates, in calls of at most `size`. Pure. */
+export function statusBatches<T>(targets: readonly T[], key: (t: T) => string, seen: ReadonlySet<string>, size = STATUS_BATCH): T[][] {
+  const fresh: T[] = []
+  const taken = new Set<string>()
+  for (const t of targets) {
+    const k = key(t)
+    if (seen.has(k) || taken.has(k)) continue
+    taken.add(k)
+    fresh.push(t)
+  }
+  const out: T[][] = []
+  for (let i = 0; i < fresh.length; i += size) out.push(fresh.slice(i, i + size))
+  return out
+}
+
+/** Forget the hearts of the previous viewer (sign-out, another account). */
+function resetFor(viewerId: string | null) {
+  if (askedFor === viewerId) return
+  asked = new Set()
+  askedFor = viewerId
+  if (favorited.size) {
+    favorited = new Set()
+    emit()
+  }
+}
+
+/** Load the viewer's hearts for the targets on screen (signed-in viewers only; each target once). */
 export function useFavoriteStatus(targets: readonly FavoriteTarget[]): void {
-  const signedIn = Boolean(useOptionalSiteConfig()?.viewer)
+  const viewerId = useOptionalSiteConfig()?.viewer?.id ?? null
   const sig = targets.map(keyOf).join(',')
   useEffect(() => {
-    if (!signedIn || !targets.length) return
-    let stale = false
-    void fns()
-      .then(({ favoriteStatusFn }) => favoriteStatusFn({ data: { targets: targets.slice(0, 200).map((t) => ({ type: t.type, id: String(t.id) })) } }))
-      .then((keys) => {
-        if (stale) return
-        const next = new Set(favorited)
-        for (const t of targets) next.delete(keyOf(t))
-        for (const k of keys) next.add(k)
-        favorited = next
-        emit()
-      })
-      .catch(() => undefined)
-    return () => {
-      stale = true
+    resetFor(viewerId)
+    if (!viewerId || !targets.length) return
+    for (const batch of statusBatches(targets, keyOf, asked)) {
+      const keys = batch.map(keyOf)
+      for (const k of keys) asked.add(k)
+      void fns()
+        .then(({ favoriteStatusFn }) => favoriteStatusFn({ data: { targets: batch.map((t) => ({ type: t.type, id: String(t.id) })) } }))
+        .then((on) => {
+          if (askedFor !== viewerId) return
+          const yes = new Set(on)
+          const next = new Set(favorited)
+          // a heart toggled while the answer was on its way keeps the toggle
+          for (const k of keys) if (!pending.has(k)) (yes.has(k) ? next.add(k) : next.delete(k))
+          favorited = next
+          emit()
+        })
+        .catch(() => {
+          // asked again the next time these targets are on screen
+          if (askedFor === viewerId) for (const k of keys) asked.delete(k)
+        })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sig covers the targets
-  }, [signedIn, sig])
+  }, [viewerId, sig])
 }
