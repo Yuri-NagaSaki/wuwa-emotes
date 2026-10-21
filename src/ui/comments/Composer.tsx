@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { HONEYPOT_FIELD, MAX_BODY, MAX_STICKERS, MIN_FILL_MS } from '#/server/comments/constants'
 import { commentFormTokenFn, createCommentFn, editCommentFn, previewCommentFn } from '#/server/comments/fns'
 import type { CommentItem, CreateResult, PreviewResult, Sticker, ThreadConfig } from '#/server/comments/types'
+import { Avatar } from '../Avatar'
 import { Button, IconButton } from '../Button'
 import { capHeaders } from '../cap/load'
 import { useInvisibleCap } from '../cap/useInvisibleCap'
 import { cx } from '../cx'
 import { Input, Textarea } from '../Field'
 import { Icon } from '../Icon'
+import { useOptionalSiteConfig } from '../site-config'
 import { toast } from '../Toast'
 import { StickerPicker } from './StickerPicker'
 import { composeBody, errorMessage, guestIdentity, markersIn, rememberGuest, rememberStickers, splitBody, stickersInHtml } from './util'
@@ -51,6 +53,8 @@ const CAP_REJECTED: ReadonlySet<string> = new Set(['请先完成人机验证', '
 
 export function Composer(props: ComposerProps) {
   const { viewer, config, replyTo, editing, phone, compact } = props
+  // the thread's viewer has no picture; the site chrome's viewer (same account) does
+  const site = useOptionalSiteConfig()
   const initial = editing ? splitBody(editing.bodySrc ?? '', stickersInHtml(editing.html)) : { text: '', stickers: [] }
   const [text, setText] = useState(initial.text)
   const [stickers, setStickers] = useState<Sticker[]>(initial.stickers)
@@ -228,9 +232,7 @@ export function Composer(props: ComposerProps) {
         </div>
       ) : viewer ? (
         <div className="who">
-          <span className="avatar sm" aria-hidden="true">
-            {[...viewer.name][0] ?? '?'}
-          </span>
+          <Avatar name={viewer.name} src={site?.viewer?.id === viewer.id ? site.viewer.avatarUrl : null} size="sm" />
           <span>
             以 <b>{viewer.name}</b> 的身份评论
           </span>

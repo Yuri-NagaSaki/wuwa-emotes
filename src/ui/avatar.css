@@ -1,0 +1,45 @@
+/* 头像: the <Avatar> picture (src/ui/Avatar.tsx; box, size and letter rules are .avatar in components.css),
+   the 设置 avatar row and the crop dialog (src/ui/AvatarCrop.tsx). Linked by <Avatar> itself. */
+
+/* a picture fills the round box, which clips it (overflow: hidden on .avatar); transparent PNGs sit on card */
+.avatar.has-img { background: var(--tp-card); }
+.avatar img { display: block; border-radius: inherit; -webkit-user-drag: none; user-select: none; }
+
+/* 设置 › 头像 */
+.set-row.av-row { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; align-items: center; column-gap: 16px; row-gap: 12px; }
+.set-row.av-row > div:first-child { min-width: 0; }
+.av-row .av-text { min-width: 0; }
+.av-row .av-acts { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.av-row .av-err { grid-column: 2 / -1; margin: 0; font-size: 13px; color: var(--tp-err); }
+@media (max-width: 760px) {
+  .set-row.av-row { grid-template-columns: 64px minmax(0, 1fr); }
+  .av-row .av-acts { grid-column: 2; justify-content: flex-start; }
+}
+
+/* crop dialog: a square stage that clips the picture, a round mask showing the result */
+.av-crop { display: grid; gap: 14px; justify-items: center; width: 100%; }
+.av-crop .av-hint { margin: 0; font-size: 13px; color: var(--tp-muted); text-align: center; }
+.av-stage { position: relative; width: min(300px, 100%); aspect-ratio: 1; border-radius: var(--r-lg); overflow: hidden; background: var(--tp-sunk, #1c1a16); touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.av-stage.is-drag { cursor: grabbing; }
+.av-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+/* everything outside the circle is dimmed; the ring marks the edge */
+.av-stage .av-mask { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 999px rgba(12, 20, 22, 0.55); outline: 2px solid rgba(255, 255, 255, 0.85); outline-offset: -2px; pointer-events: none; }
+.av-stage .av-load { position: absolute; inset: 0; display: grid; place-items: center; color: #e9f7f3; font-size: 13px; }
+.av-zoom { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; width: min(300px, 100%); color: var(--tp-muted); }
+.av-zoom svg.i { width: 18px; height: 18px; }
+.av-zoom input { -webkit-appearance: none; appearance: none; width: 100%; height: 28px; background: transparent; margin: 0; cursor: pointer; }
+.av-zoom input::-webkit-slider-runnable-track { height: 6px; border-radius: 3px; background: var(--tp-line-2); }
+.av-zoom input::-moz-range-track { height: 6px; border-radius: 3px; background: var(--tp-line-2); }
+.av-zoom input::-webkit-slider-thumb { -webkit-appearance: none; width: 22px; height: 22px; margin-top: -8px; border-radius: 50%; background: var(--tp-teal); border: 3px solid var(--tp-card); box-shadow: var(--sh-base); }
+.av-zoom input::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--tp-teal); border: 3px solid var(--tp-card); box-shadow: var(--sh-base); }
+/* the focus ring (base.css :focus-visible) goes on the thumb, not around the whole track */
+.av-zoom input:focus-visible { outline: none; box-shadow: none; }
+.av-zoom input:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--tp-ink), 0 0 0 6px var(--tp-focus); }
+.av-zoom input:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 2px var(--tp-ink), 0 0 0 6px var(--tp-focus); }
+.av-crop .av-err { margin: 0; font-size: 13px; color: var(--tp-err); text-align: center; }
+/* phone: 取消 and 保存 side by side in the sheet footer */
+.av-sheet-acts { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+/* desktop: the notice modal's look, a little wider for the stage */
+.modal.av-modal { width: min(440px, 100%); }
+.modal.av-modal .modal-body { padding: 40px 40px 36px; }
+.modal.av-modal .acts { margin-top: 2px; }

@@ -1,8 +1,9 @@
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useState } from 'react'
-import { adminBanUserFn, adminImpersonateFn, adminRevokeSessionsFn, adminSetRoleFn, adminSetSubmitModeFn, adminUnbanUserFn } from '#/server/admin/fns/system'
+import { adminBanUserFn, adminClearAvatarFn, adminImpersonateFn, adminRevokeSessionsFn, adminSetRoleFn, adminSetSubmitModeFn, adminUnbanUserFn } from '#/server/admin/fns/system'
 import type { UserListData, UserRow } from '#/server/admin/types'
 import { can, ROLES, type Perm, type Role, type SubmitMode } from '#/shared/roles'
+import { Avatar } from '../Avatar'
 import { Button } from '../Button'
 import { Field, Input } from '../Field'
 import { fmtN } from '../format'
@@ -151,7 +152,7 @@ export function UsersPage({ data, search }: { data: UserListData; search: UsersS
                 <tr key={u.id}>
                   <td>
                     <div className="cell">
-                      <span className="avatar sm">{[...u.name][0] ?? '?'}</span>
+                      <Avatar name={u.name} src={u.avatarUrl} size="sm" />
                       <div style={{ minWidth: 0 }}>
                         <b>{u.name}</b>
                         {u.banned ? <span className="st err">已封禁</span> : null}
@@ -214,7 +215,7 @@ function UserManager({ user }: { user: UserRow }) {
   return (
     <>
       <div className="adm-user-head">
-        <span className="avatar lg">{[...user.name][0] ?? '?'}</span>
+        <Avatar name={user.name} src={user.avatarUrl} size="lg" />
         <div style={{ minWidth: 0 }}>
           <b className="adm-dyn">{user.name}</b>
           <small className="mono">{user.email}</small>
@@ -301,6 +302,16 @@ function UserManager({ user }: { user: UserRow }) {
           </Button>
         </div>
       </section>
+
+      {user.avatarUrl ? (
+        <section className="adm-section">
+          <h4>头像</h4>
+          <span className="hint">清除后显示名字的首字；头像文件会删除，CDN 上的缓存一并清除。</span>
+          <Button size="sm" icon="trash" disabled={busy != null} onClick={() => act('avatar', () => adminClearAvatarFn({ data: { userId: user.id } }), '已清除头像')}>
+            清除头像
+          </Button>
+        </section>
+      ) : null}
 
       <section className="adm-section">
         <h4>模拟登录</h4>

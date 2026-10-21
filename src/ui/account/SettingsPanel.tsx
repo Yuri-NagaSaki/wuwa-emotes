@@ -1,7 +1,8 @@
 import { useNavigate, useRouter } from '@tanstack/react-router'
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ChangeEvent, type FormEvent } from 'react'
 import type { MeSummary } from '#/server/account/service'
-import { deleteAccountFn } from '#/server/account/fn'
+import { deleteAccountFn, removeAvatarFn } from '#/server/account/fn'
+import { Avatar } from '../Avatar'
 import { Button } from '../Button'
 import { cx } from '../cx'
 import { Check, Field, Input } from '../Field'
@@ -15,10 +16,13 @@ import { PasswordMeter } from './AuthLayout'
 import { authClient, authErrorText, passwordStrength, STRENGTH_TEXT } from './auth-client'
 import { ago, errorText, fullDate } from './text'
 
-// 设置: display name, 夜潮 theme, password, signed-in devices, sign out, 注销账号. Name, password and
-// sessions use Better Auth's endpoints; sessions store only hashes of IP and user agent, so devices are
-// listed by time, with the current one marked. The theme is this browser's choice (tp-theme, the same
-// preference the header's moon / sun button sets).
+// 设置: 头像, display name, 夜潮 theme, password, signed-in devices, sign out, 注销账号. Name, password
+// and sessions use Better Auth's endpoints; sessions store only hashes of IP and user agent, so devices
+// are listed by time, with the current one marked. The theme is this browser's choice (tp-theme, the
+// same preference the header's moon / sun button sets). The avatar goes through setAvatarFn after the
+// crop dialog (src/ui/AvatarCrop.tsx, loaded when a picture is chosen).
+
+const AvatarCrop = lazy(() => import('../AvatarCrop'))
 
 interface SessionRow {
   id: string
@@ -40,6 +44,7 @@ export function SettingsPanel({ summary }: { summary: MeSummary }) {
 
   return (
     <div className="settings-grid">
+      <AvatarRow summary={summary} onChanged={() => router.invalidate()} />
       <NameRow summary={summary} onSaved={() => router.invalidate()} />
       <div className="set-row">
         <div>
@@ -69,6 +74,83 @@ export function SettingsPanel({ summary }: { summary: MeSummary }) {
         </Button>
       </div>
       <DeleteRow onDeleted={() => signedOut('账号已注销')} isAdmin={summary.role === 'admin'} />
+    </div>
+  )
+}
+
+const AVATAR_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
+/** The browser decodes the picture to crop it; the upload itself is the 512 px crop. */
+const AVATAR_PICK_MAX = 30 * 1024 * 1024
+
+function AvatarRow({ summary, onChanged }: { summary: MeSummary; onChanged: () => void }) {
+  const input = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [open, setOpen] = useState(false)
+  const [removing, setRemoving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  function pick(e: ChangeEvent<HTMLInputElement>) {
+    const f = e.currentTarget.files?.[0]
+    e.currentTarget.value = '' // the same file can be picked again
+    if (!f) return
+    if (!AVATAR_TYPES.includes(f.type)) return setError('只支持 PNG、JPG、WebP、GIF')
+    if (f.size > AVATAR_PICK_MAX) return setError('图片太大，请选一张 30 MB 以内的')
+    setError(null)
+    setFile(f)
+    setOpen(true)
+  }
+
+  async function remove() {
+    setRemoving(true)
+    setError(null)
+    try {
+      await removeAvatarFn({ data: {} })
+      toast('头像已移除')
+      onChanged()
+    } catch (err) {
+      setError(errorText(err, '移除失败，请稍后再试'))
+    } finally {
+      setRemoving(false)
+    }
+  }
+
+  return (
+    <div className="set-row av-row">
+      <Avatar name={summary.name} src={summary.avatarUrl} size={64} loading="eager" />
+      <div className="av-text">
+        <b>头像</b>
+        <small>支持 PNG、JPG、WebP、GIF（动图只保留第一帧）</small>
+      </div>
+      <div className="av-acts">
+        <Button size="sm" icon="image" onClick={() => input.current?.click()}>
+          更换头像
+        </Button>
+        {summary.avatarUrl ? (
+          <Button size="sm" variant="ghost" disabled={removing} onClick={remove}>
+            移除
+          </Button>
+        ) : null}
+      </div>
+      {error ? (
+        <p className="av-err" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <input ref={input} type="file" accept={AVATAR_TYPES.join(',')} hidden onChange={pick} />
+      {file ? (
+        <Suspense fallback={null}>
+          <AvatarCrop
+            file={file}
+            open={open}
+            onOpenChange={setOpen}
+            onSaved={() => {
+              setOpen(false)
+              toast('头像已更新')
+              onChanged()
+            }}
+          />
+        </Suspense>
+      ) : null}
     </div>
   )
 }

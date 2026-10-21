@@ -125,3 +125,58 @@ export function parseReviewImgPath(pathname: string): { variant: ReviewVariant; 
   if (!PACK_KEY_RE.test(packKey!) || !EMOJI_ID_RE.test(emojiId!)) return null
   return { variant: variant as ReviewVariant, packKey: packKey!, emojiId: emojiId! }
 }
+
+// ---- user avatars (头像) ----
+//
+// avatars/v1/<userId>/<hash>-<256|64>.webp, written by src/server/account/avatar.ts. <hash> is the first
+// 16 hex of the SHA-256 of the 256 px output, so a new avatar is a new key (immutable caching);
+// users.image holds only the hash. /img/v1/avatar/<userId>/<hash>-<size>.webp maps to exactly that key.
+
+export const AVATAR_SIZES = [256, 64] as const
+export type AvatarSize = (typeof AVATAR_SIZES)[number]
+export const AVATAR_PREFIX = 'avatars/v1/'
+const AVATAR_HASH_RE = /^[0-9a-f]{16}$/
+// Better Auth ids are 32 alphanumerics; - and _ are allowed for ids made elsewhere, nothing path-like
+const AVATAR_USER_RE = /^[A-Za-z0-9_-]{1,64}$/
+
+export interface AvatarRef {
+  userId: string
+  hash: string
+  size: AvatarSize
+}
+
+/** users.image as the avatar upload stores it: 16 lowercase hex, nothing else. */
+export function isAvatarHash(value: unknown): value is string {
+  return typeof value === 'string' && AVATAR_HASH_RE.test(value)
+}
+
+export function isAvatarUserId(value: unknown): value is string {
+  return typeof value === 'string' && AVATAR_USER_RE.test(value)
+}
+
+export function avatarKey(userId: string, hash: string, size: AvatarSize): string {
+  return `${AVATAR_PREFIX}${userId}/${hash}-${size}.webp`
+}
+
+/** Both sizes of one avatar (written together, deleted together). */
+export function avatarKeys(userId: string, hash: string): string[] {
+  return AVATAR_SIZES.map((s) => avatarKey(userId, hash, s))
+}
+
+/**
+ * The one place users.image becomes a URL: /img/v1/avatar/<userId>/<hash>-<size>.webp, or null when
+ * the stored value is not a 16-hex hash (no avatar, or anything else that ended up in the column).
+ */
+export function avatarUrl(userId: string, hash: string | null | undefined, size: AvatarSize): string | null {
+  if (!isAvatarUserId(userId) || !isAvatarHash(hash)) return null
+  return `/img/v1/avatar/${userId}/${hash}-${size}.webp`
+}
+
+const AVATAR_PATH_RE = /^\/img\/v1\/avatar\/([^/]+)\/([^/]+)-(256|64)\.webp$/
+
+/** Strictly parse /img/v1/avatar/<userId>/<hash>-<size>.webp. Anything else returns null. */
+export function parseAvatarPath(pathname: string): AvatarRef | null {
+  const m = AVATAR_PATH_RE.exec(pathname)
+  if (!m || !isAvatarUserId(m[1]) || !isAvatarHash(m[2])) return null
+  return { userId: m[1]!, hash: m[2]!, size: Number(m[3]) as AvatarSize }
+}

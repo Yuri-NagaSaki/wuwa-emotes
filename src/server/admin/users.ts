@@ -1,8 +1,11 @@
 import { eq, sql, type SQL } from 'drizzle-orm'
 import { ROLES, type Role, type SubmitMode } from '#/shared/roles'
+import { deleteAvatarFiles, swapAvatarHash } from '../account/avatar'
 import { audit } from '../audit'
 import { auth } from '../auth/auth'
 import { db, schema } from '../db/client'
+import { avatarUrl } from '../media/keys'
+import { purgeImgUrls } from '../media/purge'
 import { HttpError } from '../perm/fn'
 import { type Actor, assertOwner, badRequest, likePattern, many, notFound, pageOf, roleOf, toIso, toNum } from './common'
 import type { UserListData, UserRow } from './types'
@@ -69,6 +72,7 @@ export async function listUsers(input: { q?: string; role?: Role; submitMode?: S
     id: string
     name: string
     email: string
+    image: string | null
     role: string
     submit_mode: SubmitMode
     banned: boolean
@@ -80,7 +84,7 @@ export async function listUsers(input: { q?: string; role?: Role; submitMode?: S
     approved: number
     sessions: number
   }>(sql`
-    SELECT u.id, u.name, u.email, u.role, u.submit_mode, u.banned, u.ban_reason, u.ban_expires, u.created_at,
+    SELECT u.id, u.name, u.email, u.image, u.role, u.submit_mode, u.banned, u.ban_reason, u.ban_expires, u.created_at,
       (SELECT max(s.updated_at) FROM sessions s WHERE s.user_id = u.id) AS last_active,
       (SELECT count(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > now())::int AS sessions,
       (SELECT count(*) FROM packs p WHERE p.owner_id = u.id)::int AS packs,
@@ -97,6 +101,7 @@ export async function listUsers(input: { q?: string; role?: Role; submitMode?: S
         id: r.id,
         name: r.name,
         email: r.email,
+        avatarUrl: avatarUrl(r.id, r.image, 256),
         role: roleOf(r.role),
         submitMode: r.submit_mode,
         banned: r.banned,
@@ -170,6 +175,34 @@ export async function revokeSessions(actor: Actor, headers: Headers, input: { us
   await call(() => auth().api.revokeUserSessions({ body: { userId: u.id }, headers }))
   await audit(actor, 'user.revoke_sessions', { type: 'user', id: u.id }, { name: u.name })
   return { ok: true }
+}
+
+export interface ClearAvatarDeps {
+  /** Cloudflare purge by URL (src/server/media/purge.ts). */
+  purge(urls: string[]): Promise<{ purged: number; skipped: boolean }>
+}
+
+/**
+ * 清除头像 (站长): the user's avatar back to the letter, both files deleted and their URLs purged from
+ * the CDN (a cleared avatar is usually one that should not be seen). Audited with the purge outcome.
+ */
+export async function clearUserAvatar(actor: Actor, input: { userId: string }, deps: ClearAvatarDeps = { purge: (urls) => purgeImgUrls(urls) }) {
+  assertOwner(actor)
+  const u = await loadUser(input.userId)
+  const swapped = await swapAvatarHash(u.id, null)
+  if (!swapped) throw notFound('这个用户')
+  if (swapped.previous == null) return { cleared: false }
+  await deleteAvatarFiles(u.id, swapped.previous)
+  const urls = [avatarUrl(u.id, swapped.previous, 256), avatarUrl(u.id, swapped.previous, 64)].filter((x): x is string => !!x)
+  let purge: { urls: number; purged: number; skipped: boolean; error: string | null } = { urls: urls.length, purged: 0, skipped: false, error: null }
+  try {
+    const r = await deps.purge(urls)
+    purge = { ...purge, purged: r.purged, skipped: r.skipped }
+  } catch (err) {
+    purge.error = (err as Error).message
+  }
+  await audit(actor, 'user.avatar_clear', { type: 'user', id: u.id }, { name: u.name, from: swapped.previous, purge })
+  return { cleared: true }
 }
 
 /**

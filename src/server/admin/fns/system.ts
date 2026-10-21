@@ -3,7 +3,7 @@ import { getRequest } from '@tanstack/react-start/server'
 import { requirePerm } from '../../perm/fn'
 import { auditListInput, banInput, jobActionInput, setRoleInput, siteSettingsInput, submitModeInput, userIdInput, userListInput } from '../inputs'
 import { auditActions, getJobs, getSettings, getStorage, jobAction, listAudit, saveSiteSettings } from '../system'
-import { banUser, impersonateUser, listUsers, revokeSessions, setSubmitMode, setUserRole, unbanUser } from '../users'
+import { banUser, clearUserAvatar, impersonateUser, listUsers, revokeSessions, setSubmitMode, setUserRole, unbanUser } from '../users'
 
 // 站长-only pages (docs/ARCHITECTURE.md §5.1): 用户与权限 (users), 存储 (storage), 任务队列 (system),
 // 审计日志 (audit), 系统设置 (settings). Better Auth admin endpoints get the caller's own headers.
@@ -46,6 +46,11 @@ export const adminImpersonateFn = createServerFn({ method: 'POST' })
   .middleware([requirePerm('users')])
   .validator(userIdInput)
   .handler(({ data, context }) => impersonateUser(context.viewer, headers(), data))
+
+export const adminClearAvatarFn = createServerFn({ method: 'POST' })
+  .middleware([requirePerm('users')])
+  .validator(userIdInput)
+  .handler(({ data, context }) => clearUserAvatar(context.viewer, data))
 
 // ---------- 存储 (storage) ----------
 

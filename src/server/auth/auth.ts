@@ -11,6 +11,7 @@ import { mailConfigured, sendMail } from '../mail'
 import { ac, authRoles } from './access'
 import { CAP_HEADER, capErrorMessage, verifyCapToken } from './cap'
 import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, mayNoticeExisting, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
+import { guardProfileUpdate } from './profile-guard'
 import { signedInHintHook } from './signed-in-hint'
 
 export { CAP_PROTECTED_PATHS } from './policy'
@@ -120,6 +121,7 @@ function createAuth() {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        guardProfileUpdate(ctx) // users.image is set only by the avatar upload (profile-guard.ts)
         if (!CAP_PROTECTED_PATHS.has(ctx.path)) return
         const result = await verifyCapToken(ctx.headers?.get(CAP_HEADER))
         if (!result.ok) {

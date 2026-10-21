@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { BADGE_LABELS, REACTION_KEYS, REACTION_LABELS, type ReactionKey } from '#/server/comments/constants'
 import type { CommentItem as Item, ThreadConfig } from '#/server/comments/types'
+import { Avatar } from '../Avatar'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
 import { Menu, type MenuEntry } from '../Menu'
@@ -35,14 +36,10 @@ export interface CommentItemProps {
   children?: ReactNode
 }
 
-function Avatar({ item, small }: { item: Item; small?: boolean }) {
-  if (!item.author) return <span className={cx('avatar gone', small && 'sm')} aria-hidden="true" />
-  const c = `var(--c-${item.author.color})`
-  return (
-    <span className={cx('avatar', small && 'sm')} aria-hidden="true" style={{ borderColor: c, background: `color-mix(in srgb, ${c} 30%, var(--tp-card))` } as CSSProperties}>
-      {[...item.author.name][0] ?? '?'}
-    </span>
-  )
+function AuthorAvatar({ item, small }: { item: Item; small?: boolean }) {
+  const size = small ? 'sm' : 'md'
+  if (!item.author) return <Avatar name="" gone size={size} />
+  return <Avatar name={item.author.name} src={item.author.avatarUrl} color={item.author.color} size={size} />
 }
 
 function ReactionButton({ k, n, mine, config, onClick }: { k: ReactionKey; n?: number; mine?: boolean; config: ThreadConfig; onClick: () => void }) {
@@ -113,7 +110,7 @@ export function CommentItem({ item, reply, viewer, config, actions, children }: 
 
   return (
     <div id={`c-${item.id}`} className={cx('cmt', item.pinned && shown && 'is-pinned', gone && 'is-gone', item.state === 'pending' && 'is-pending')}>
-      <Avatar item={item} small={reply} />
+      <AuthorAvatar item={item} small={reply} />
       <div>
         <div className="cmt-h">
           {item.author ? <b>{item.author.name}</b> : <b>{item.state === 'deleted' ? '已删除' : '已隐藏'}</b>}

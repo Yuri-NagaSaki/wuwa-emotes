@@ -3,9 +3,13 @@ import { authCall } from '../integration/setup'
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { and, eq, ne } from 'drizzle-orm'
 import { saveTag } from '#/server/admin/taxonomy'
-import { banUser, impersonateUser, listUsers, revokeSessions, setSubmitMode, setUserRole, unbanUser } from '#/server/admin/users'
+import { setAvatar } from '#/server/account/avatar'
+import { banUser, clearUserAvatar, impersonateUser, listUsers, revokeSessions, setSubmitMode, setUserRole, unbanUser } from '#/server/admin/users'
 import { getViewer } from '#/server/auth/session'
 import { db, schema } from '#/server/db/client'
+import { avatarKey } from '#/server/media/keys'
+import { headObject } from '#/server/media/s3'
+import { makePng } from '../media/helpers'
 
 // 用户与权限: Better Auth admin endpoints called with the caller's headers, the last-admin trigger,
 // 投稿模式, bans, sessions and impersonation, each with its audit row.
@@ -132,6 +136,34 @@ describe('impersonation', () => {
     const [a] = await auditRows('tag.create', tag.id)
     expect(a!.actorId).toBe(t.id)
     expect(a!.impersonatedBy).toBe(owner.id)
+  })
+})
+
+describe('清除头像', () => {
+  test('站长 clears a user\'s avatar: files deleted, URLs purged, audited; 管理员 cannot', async () => {
+    const t = await userWithRole('user', 'avatar-target')
+    await setAvatar(t.actor, await makePng(80, 80, 7))
+    const hash = (await userRow(t.id)).image!
+    const listed = (await listUsers({ q: t.id })).rows[0]!
+    expect(listed.avatarUrl).toBe(`/img/v1/avatar/${t.id}/${hash}-256.webp`)
+
+    const denied = await clearUserAvatar(manager.actor, { userId: t.id }).catch((e) => e)
+    expect(denied.status).toBe(403)
+    expect((await userRow(t.id)).image).toBe(hash)
+
+    const purged: string[][] = []
+    const res = await clearUserAvatar(owner.actor, { userId: t.id }, { purge: async (urls) => (purged.push(urls), { purged: urls.length, skipped: false }) })
+    expect(res).toEqual({ cleared: true })
+    expect((await userRow(t.id)).image).toBeNull()
+    expect(await headObject(avatarKey(t.id, hash, 256))).toBeNull()
+    expect(await headObject(avatarKey(t.id, hash, 64))).toBeNull()
+    expect(purged).toEqual([[`/img/v1/avatar/${t.id}/${hash}-256.webp`, `/img/v1/avatar/${t.id}/${hash}-64.webp`]])
+    const [a] = await auditRows('user.avatar_clear', t.id)
+    expect(a!.actorId).toBe(owner.id)
+    expect(a!.diff).toMatchObject({ from: hash, purge: { urls: 2, purged: 2, error: null } })
+    expect((await listUsers({ q: t.id })).rows[0]!.avatarUrl).toBeNull()
+    // nothing left to clear
+    expect(await clearUserAvatar(owner.actor, { userId: t.id })).toEqual({ cleared: false })
   })
 })
 
