@@ -3,6 +3,7 @@ import { useCallback, useState, type ReactNode } from 'react'
 import { cx } from '../cx'
 import { fmtN } from '../format'
 import { Icon, type IconName } from '../Icon'
+import { Select } from '../Select'
 import { toast } from '../Toast'
 
 // Building blocks of the admin pages, on top of the kit and src/ui/styles/admin.css (.adm-h, .panel,
@@ -140,7 +141,7 @@ export function BulkBar({ count, unit, children, onClear }: { count: number; uni
   )
 }
 
-/** Native select inside the kit's input pill (compact, keyboard friendly, no inner scroll). */
+/** The kit's Select as an admin filter (compact pill with its label, teal once set) or form control. */
 export function SelectField<T extends string>({
   label,
   value,
@@ -160,21 +161,16 @@ export function SelectField<T extends string>({
   plain?: boolean
 }) {
   return (
-    <div className={cx('input sm adm-select', !plain && value !== '' && 'is-set', plain && 'is-plain', className)}>
-      {plain ? null : (
-        <span className="adm-select-l" aria-hidden="true">
-          {label}
-        </span>
-      )}
-      <select id={id} aria-label={label} value={value} onChange={(e) => onChange(e.currentTarget.value as T | '')}>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-      <Icon name="down" size="sm" />
-    </div>
+    <Select<T | ''>
+      id={id}
+      label={label}
+      prefix={plain ? undefined : label}
+      size={plain ? 'md' : 'sm'}
+      value={value}
+      options={options}
+      onChange={onChange}
+      className={cx('adm-select', !plain && value !== '' && 'is-set', plain && 'is-plain', className)}
+    />
   )
 }
 
