@@ -1,5 +1,5 @@
 import { useRouterState } from '@tanstack/react-router'
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconButton } from '../Button'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
@@ -131,6 +131,9 @@ function ThemeToggle() {
   )
 }
 
+/** The avatar with its account menu (AccountMenu.tsx, loaded only once someone is signed in). */
+const AccountMenu = lazy(() => import('./AccountMenu'))
+
 function UserSlot({ user }: { user: HeaderUser | null }) {
   if (!user) {
     return (
@@ -140,10 +143,17 @@ function UserSlot({ user }: { user: HeaderUser | null }) {
       </AppLink>
     )
   }
+  const face = user.avatarUrl ? <img src={user.avatarUrl} alt="" width={40} height={40} /> : <span aria-hidden="true">{[...user.name][0] ?? '?'}</span>
   return (
-    <AppLink to="/me" className="avatar user-slot" aria-label={`个人中心（${user.name}）`}>
-      {user.avatarUrl ? <img src={user.avatarUrl} alt="" width={40} height={40} /> : <span aria-hidden="true">{[...user.name][0] ?? '?'}</span>}
-    </AppLink>
+    <Suspense
+      fallback={
+        <span className="avatar user-slot" aria-hidden="true">
+          {face}
+        </span>
+      }
+    >
+      <AccountMenu user={user} face={face} />
+    </Suspense>
   )
 }
 

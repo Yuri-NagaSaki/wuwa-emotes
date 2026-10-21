@@ -24,7 +24,13 @@
 .adm-top .input { min-height: 38px; width: 260px; padding: 0 12px; border-width: 2px; }
 .adm-top .input input { height: 34px; font-size: 13.5px; }
 .adm-top .adm-burger { display: none; }
-.adm-me .ibtn { margin-left: auto; }
+.adm-me-acts { margin-left: auto; display: flex; gap: 2px; }
+/* the brand links to the public site; so does 返回站点 in the top bar (also on phones) and the drawer */
+a.adm-logo:hover b { color: var(--tp-teal-ink); }
+.adm-top .adm-back { flex: none; height: 38px; }
+.adm-site { display: flex; align-items: center; gap: 10px; margin: 10px 8px 2px; padding: 9px 12px; border-radius: 12px; border: 2px solid var(--tp-line); background: var(--tp-card); font-weight: 800; color: var(--tp-ink); font-size: 14px; }
+.adm-site:hover { border-color: var(--tp-teal); }
+.adm-site svg.i { width: 18px; height: 18px; color: var(--tp-teal-ink); }
 .adm-top .bell { position: relative; }
 .adm-body { flex: 1; padding: 22px 24px 40px; display: grid; grid-auto-rows: max-content; gap: 20px; align-content: start; }
 .adm-h { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
@@ -171,6 +177,7 @@
   .adm-top .adm-burger { display: inline-grid; }
   .adm-top { padding: calc(10px + var(--safe-top)) 14px 10px; }
   .adm-top .input, .adm-top .hide-sm { display: none; }
+  .adm-top .adm-back { height: 36px; padding: 0 12px; font-size: 13px; }
   .adm-body { padding: 16px 14px calc(30px + var(--safe-bottom)); gap: 16px; }
   .adm-h h1 { font-size: 22px; }
   .adm-h .acts { margin-left: 0; width: 100%; }

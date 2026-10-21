@@ -36,6 +36,7 @@ import { AppLink } from '../link'
 import { Modal, ModalClose } from '../Modal'
 import { PackCard } from '../PackCard'
 import { Seg } from '../Seg'
+import { Select } from '../Select'
 import { Switch } from '../Switch'
 import { toast } from '../Toast'
 import { errorText } from '../account/text'
@@ -507,7 +508,7 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
               ) : null}
               <Field label="我的身份">
                 <Seg
-                  size="sm"
+                  size="form"
                   className={editable ? undefined : 'is-disabled'}
                   label="我的身份"
                   options={IDENTITIES.map((i) => ({ value: i.value, label: i.label }))}
@@ -533,16 +534,8 @@ export function SubmitForm({ ctx, detail, kind: kindProp, packSlug, onCreated }:
               <Field label="授权凭证" aside="选填">
                 <Input icon="link" type="url" placeholder="聊天截图或公开声明的链接" value={decl.proofUrl} disabled={!editable} onChange={(e) => setD('proofUrl', e.currentTarget.value)} />
               </Field>
-              <Field label="许可协议">
-                <div className="input">
-                  <select value={decl.license} disabled={!editable || kind === 'add_emojis'} onChange={(e) => setD('license', e.currentTarget.value)} aria-label="许可协议">
-                    {LICENSE_OPTIONS.map((o) => (
-                      <option key={o.value} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <Field label="许可协议" id="sub-license">
+                <Select id="sub-license" label="许可协议" value={decl.license} options={LICENSE_OPTIONS} disabled={!editable || kind === 'add_emojis'} onChange={(v) => setD('license', v)} />
               </Field>
               <div className="full set-row" style={{ padding: '12px 14px' }}>
                 <div>

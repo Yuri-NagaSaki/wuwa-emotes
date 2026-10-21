@@ -7,14 +7,14 @@ h1.adm-dyn, h3.adm-dyn { font-weight: 800; }
 .adm-thumb-empty { display: inline-grid; place-items: center; border-radius: 12px; background: var(--tp-sunk); color: var(--tp-faint); flex: none; border: 1.5px dashed var(--tp-line-2); }
 .tbl .th-img.adm-thumb-empty { padding: 0; }
 
-/* native select inside the kit's input pill */
-.adm-select { position: relative; min-height: 36px; padding: 0 10px 0 14px; gap: 6px; border-width: 2px; background: var(--tp-card); }
-.adm-select select { appearance: none; -webkit-appearance: none; height: 32px; font-size: 13px; font-weight: 700; color: var(--tp-ink); padding-right: 18px; cursor: pointer; flex: 1; }
-.adm-select svg.i { position: absolute; right: 10px; pointer-events: none; width: 14px; height: 14px; }
-.adm-select-l { font-size: 12.5px; font-weight: 800; color: var(--tp-muted); white-space: nowrap; }
+/* compact pills of the filter rows: the kit's Select (SelectField) and the date fields share the look */
+.adm-select { min-height: 36px; padding: 0 10px 0 14px; gap: 6px; border-width: 2px; background: var(--tp-card); }
+.adm-select .sel-v { font-size: 13px; font-weight: 700; color: var(--tp-ink); }
+.adm-select .sel-chev { width: 14px; height: 14px; }
+.adm-select-l, .adm-select .sel-l { font-size: 12.5px; font-weight: 800; color: var(--tp-muted); white-space: nowrap; }
 .adm-select.is-set { border-color: var(--tp-teal); background: var(--tp-teal-bg); }
-.adm-select.is-plain { min-height: 46px; border-width: 2.5px; background: var(--tp-input); }
-.adm-select.is-plain select { height: 41px; font-size: 14px; }
+.adm-select.is-plain { min-height: 46px; padding: 0 14px 0 16px; border-width: 2.5px; background: var(--tp-input); }
+.adm-select.is-plain .sel-v { font-size: 14px; font-weight: 600; }
 .filters .input.sm { min-height: 36px; }
 /* search forms take part in the filter row (and stretch to full width on phones) */
 .filters > form[role="search"] { display: contents; }

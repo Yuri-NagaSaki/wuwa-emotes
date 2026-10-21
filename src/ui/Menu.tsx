@@ -1,5 +1,5 @@
 import { Menu as BaseMenu } from '@base-ui/react/menu'
-import type { ReactElement } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 import { cx } from './cx'
 import { Icon, type IconName } from './Icon'
 import { AppLink } from './link'
@@ -14,16 +14,19 @@ export interface MenuProps {
   trigger: ReactElement
   items: readonly MenuEntry[]
   align?: 'start' | 'center' | 'end'
+  /** Non-interactive block above the items (e.g. who is signed in). */
+  header?: ReactNode
 }
 
 /** Dropdown menu: a lifted sheet sized to its items (no frame line, no inner scroll). */
-export function Menu({ trigger, items, align = 'end' }: MenuProps) {
+export function Menu({ trigger, items, align = 'end', header }: MenuProps) {
   return (
     <BaseMenu.Root>
       <BaseMenu.Trigger render={trigger} />
       <BaseMenu.Portal>
         <BaseMenu.Positioner className="pop-layer" side="bottom" align={align} sideOffset={8}>
           <BaseMenu.Popup className="menu">
+            {header ? <div className="menu-h">{header}</div> : null}
             {items.map((it, i) => {
               if (it.kind === 'separator') return <BaseMenu.Separator key={i} className="menu-sep" />
               const inner = (

@@ -82,15 +82,18 @@
 .pill-stat svg.i { width: 15px; height: 15px; }
 
 /* ============ inputs ============ */
-.field { display: grid; gap: 6px; }
+/* align-content: start: in a form-grid row a field shorter than its neighbour (no hint) keeps its
+   label and control at the top instead of stretching them, so both columns line up */
+.field { display: grid; gap: 6px; align-content: start; }
 .field > label, .field > .lab { font-size: 13.5px; font-weight: 800; color: var(--tp-ink); display: flex; justify-content: space-between; gap: 8px; }
 .field > label small, .field > .lab small { font-weight: 600; color: var(--tp-muted); }
 .input { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 0 16px; border-radius: var(--pill); background: var(--tp-input); border: 2.5px solid var(--tp-line-2); color: var(--tp-body); transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease); }
-.input input, .input select { flex: 1; min-width: 0; border: 0; background: none; outline: none; height: 41px; font-weight: 600; color: var(--tp-ink); }
+.input input { flex: 1; min-width: 0; border: 0; background: none; outline: none; height: 41px; font-weight: 600; color: var(--tp-ink); }
 .input input::placeholder { color: var(--tp-faint); font-weight: 500; }
-.input:focus-within { border-color: var(--tp-focus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tp-focus) 30%, transparent); }
+/* a Select trigger is itself the pill: it shows focus only for the keyboard (.select:focus-visible) */
+.input:focus-within:not(:where(.select)) { border-color: var(--tp-focus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tp-focus) 30%, transparent); }
 /* the pill shows focus (above), so the field inside draws no second ring (global :focus-visible) */
-.input input:focus-visible, .input select:focus-visible { outline: none; box-shadow: none; }
+.input input:focus-visible { outline: none; box-shadow: none; }
 .input svg.i { color: var(--tp-faint); }
 .input.is-err { border-color: var(--tp-err); box-shadow: 0 3px 0 0 color-mix(in srgb, var(--tp-err) 35%, transparent); }
 .input.sm { min-height: 38px; padding: 0 12px; }
@@ -112,6 +115,17 @@
 .seg button { border: 0; background: none; height: 32px; padding: 0 14px; border-radius: var(--pill); font-weight: 800; font-size: 13.5px; color: var(--tp-muted); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: all var(--t-fast) var(--ease); }
 .seg button[aria-pressed="true"] { background: var(--tp-card); color: var(--tp-ink); box-shadow: var(--sh-base); }
 .seg.sm button { height: 28px; padding: 0 10px; font-size: 12.5px; }
+/* form size (Seg size="form"), beside inputs: 46 px tall like .input, the full column, equal buttons,
+   labels on one line. When the widest label (--seg-em, set by Seg.tsx) with comfortable padding does
+   not fit --n times, the buttons fold into two columns; every row is again 46 px (36 px button +
+   10 px), level with the inputs */
+.seg.form {
+  --g: 2px; --cell: calc(var(--seg-em, 4) * 1em + 28px);
+  display: grid; width: 100%; min-width: 0; padding: 3px; border-radius: 23px; font-size: 13.5px;
+  column-gap: var(--g); row-gap: 10px; grid-auto-rows: 36px;
+  grid-template-columns: repeat(auto-fill, minmax(clamp(calc((100% - (var(--n) - 1) * var(--g)) / var(--n) - 0.5px), calc((var(--n) * var(--cell) + (var(--n) - 1) * var(--g) - 100%) * 999), calc((100% - var(--g)) / 2 - 0.5px)), 1fr));
+}
+.seg.form button { height: auto; min-width: 0; padding: 0 10px; justify-content: center; overflow: hidden; }
 
 /* ============ section heads ============ */
 .sec { margin-top: 48px; }
@@ -643,3 +657,42 @@ cap-widget {
 .menu-it[data-highlighted] { background: var(--tp-sand); }
 .menu-it.danger, .menu-it.danger svg.i { color: var(--tp-err); }
 .menu-sep { height: 2px; background: var(--tp-line); margin: 4px 6px; border: 0; }
+/* the menu's header block (Menu header=…: who is signed in) and the same entries as a phone sheet list */
+.menu-h { display: grid; gap: 1px; padding: 8px 12px 10px; margin-bottom: 4px; border-bottom: 2px solid var(--tp-line); }
+.menu-h b { color: var(--tp-ink); font-size: 14.5px; max-width: 16em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-h small { color: var(--tp-muted); font-size: 12.5px; font-weight: 700; }
+.menu-list { display: grid; gap: 2px; }
+.menu-list .menu-it { width: 100%; min-height: 46px; border: 0; background: none; font-size: 15px; text-align: left; }
+.menu-list .menu-it:hover { background: var(--tp-sand); }
+
+/* ---------- Select (src/ui/Select.tsx): the input pill as a button, its list in a lifted panel ---------- */
+.select { cursor: pointer; text-align: left; color: var(--tp-ink); font-weight: 600; padding-right: 14px; }
+.select:hover { border-color: color-mix(in srgb, var(--tp-teal) 55%, var(--tp-line-2)); }
+.select[aria-expanded="true"] { border-color: var(--tp-teal); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tp-teal) 20%, transparent); }
+.select:focus-visible { outline: none; border-color: var(--tp-focus); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tp-focus) 30%, transparent); }
+.select:disabled { cursor: not-allowed; color: var(--tp-muted); opacity: 0.7; }
+.select .sel-l { color: var(--tp-muted); white-space: nowrap; }
+/* every label sits in one grid cell (the others hidden), so the pill is as wide as the longest */
+.sel-v { flex: 1; min-width: 0; display: grid; }
+.sel-v > span { grid-area: 1 / 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sel-v > .sel-size { visibility: hidden; }
+.select .sel-chev { flex: none; color: var(--tp-faint); transition: transform var(--t) var(--ease); }
+.select[aria-expanded="true"] .sel-chev { transform: rotate(180deg); }
+/* above drawers, so a Select inside a Sheet opens over it */
+.pop-layer.sel-layer { z-index: 55; }
+/* sized to its options; a long list scrolls inside (no bar, base.css) */
+.sel-pop { min-width: var(--anchor-width); max-width: min(440px, calc(100vw - 16px)); max-height: min(var(--available-height, 360px), 360px); overflow-y: auto; overscroll-behavior: contain; padding: 6px; background: var(--tp-card); border-radius: var(--r); box-shadow: var(--sh-lift), 0 0 0 1px color-mix(in srgb, var(--tp-line-2) 60%, transparent); animation: tp-pop var(--t-fast) var(--ease) both; transform-origin: var(--transform-origin, top left); }
+.sel-pop[data-closed] { animation: tp-pop-out var(--t-fast) var(--ease) both; }
+.sel-pop:focus-visible { outline: none; box-shadow: var(--sh-lift), 0 0 0 1px color-mix(in srgb, var(--tp-line-2) 60%, transparent); }
+.sel-list { display: grid; gap: 2px; }
+/* the list has the focus; the active option shows it */
+.sel-list:focus-visible { outline: none; box-shadow: none; }
+.sel-opt { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 7px 12px; border-radius: 12px; font-weight: 700; font-size: 14px; line-height: 1.5; color: var(--tp-ink); cursor: pointer; user-select: none; }
+.sel-opt > span { flex: 1; min-width: 0; }
+.sel-opt.is-active { background: var(--tp-sand); }
+.sel-opt[aria-selected="true"] { background: var(--tp-teal-bg); color: var(--tp-on-teal); }
+[data-theme="night"] .sel-opt[aria-selected="true"] { color: var(--tp-teal-ink); }
+.sel-opt[aria-selected="true"].is-active { box-shadow: inset 0 0 0 2px var(--tp-teal); }
+.sel-list:focus-visible .sel-opt.is-active { outline: 2px solid var(--tp-ink); outline-offset: -2px; }
+.sel-opt[aria-disabled="true"] { color: var(--tp-disabled); cursor: not-allowed; }
+.sel-sheet .sel-opt { min-height: 46px; font-size: 15px; }

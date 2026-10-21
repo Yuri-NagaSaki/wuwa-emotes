@@ -1,5 +1,5 @@
 import { useRouter } from '@tanstack/react-router'
-import { useCallback, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import { cx } from '../cx'
 import { fmtN } from '../format'
 import { Icon, type IconName } from '../Icon'
@@ -140,7 +140,12 @@ export function BulkBar({ count, unit, children, onClear }: { count: number; uni
   )
 }
 
-/** Native select inside the kit's input pill (compact, keyboard friendly, no inner scroll). */
+// Route loaders import guarded() from this module, so it is in the main bundle of every page. The
+// Select (Base UI popover and dialog) is therefore loaded on demand: the server renders it, hydration
+// waits for it, and a client-side visit shows the same pill until it arrives.
+const LazySelect = lazy(() => import('../Select').then((m) => ({ default: m.Select })))
+
+/** The kit's Select as an admin filter (compact pill with its label, teal once set) or form control. */
 export function SelectField<T extends string>({
   label,
   value,
@@ -159,22 +164,33 @@ export function SelectField<T extends string>({
   /** Form control: no inline label, no "filter is set" highlight. */
   plain?: boolean
 }) {
-  return (
-    <div className={cx('input sm adm-select', !plain && value !== '' && 'is-set', plain && 'is-plain', className)}>
-      {plain ? null : (
-        <span className="adm-select-l" aria-hidden="true">
-          {label}
-        </span>
-      )}
-      <select id={id} aria-label={label} value={value} onChange={(e) => onChange(e.currentTarget.value as T | '')}>
+  const cls = cx('input select', !plain && 'sm', 'adm-select', !plain && value !== '' && 'is-set', plain && 'is-plain', className)
+  const fallback = (
+    <span className={cls} aria-hidden="true">
+      {plain ? null : <span className="sel-l">{label}</span>}
+      <span className="sel-v">
         {options.map((o) => (
-          <option key={o.value} value={o.value}>
+          <span key={o.value} className={o.value === value ? undefined : 'sel-size'}>
             {o.label}
-          </option>
+          </span>
         ))}
-      </select>
-      <Icon name="down" size="sm" />
-    </div>
+      </span>
+      <Icon name="down" size="sm" className="sel-chev" />
+    </span>
+  )
+  return (
+    <Suspense fallback={fallback}>
+      <LazySelect
+        id={id}
+        label={label}
+        prefix={plain ? undefined : label}
+        size={plain ? 'md' : 'sm'}
+        value={value}
+        options={options}
+        onChange={onChange as (v: string) => void}
+        className={cx('adm-select', !plain && value !== '' && 'is-set', plain && 'is-plain', className)}
+      />
+    </Suspense>
   )
 }
 
