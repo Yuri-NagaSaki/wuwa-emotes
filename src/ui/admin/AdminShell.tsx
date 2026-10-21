@@ -48,13 +48,35 @@ function AdminNav({ role, badges, onNavigate }: { role: Role | null; badges?: Ad
   )
 }
 
-function Brand({ siteName }: { siteName: string }) {
+/** Site name + 管理台; links to the public site. */
+function Brand({ siteName, onNavigate }: { siteName: string; onNavigate?: () => void }) {
   return (
-    <div className="adm-logo">
+    <AppLink to="/" className="adm-logo" aria-label={`${siteName}首页`} onClick={onNavigate}>
       <LogoMark />
       <div>
         <b>{siteName}</b>
         <small>管理台</small>
+      </div>
+    </AppLink>
+  )
+}
+
+/** Who is signed in, with 个人中心 and 退出登录 (bottom of the sidebar and of the phone drawer). */
+function AdminMe({ viewer, onSignOut, onNavigate }: { viewer: AdminViewer; onSignOut?: () => void; onNavigate?: () => void }) {
+  return (
+    <div className="adm-me">
+      <span className="avatar sm" style={{ borderColor: 'var(--c-teal)' }} aria-hidden="true">
+        {[...viewer.name][0] ?? '?'}
+      </span>
+      <div>
+        <b>{viewer.name}</b>
+        <small>{ROLES[viewer.role].name}</small>
+      </div>
+      <div className="adm-me-acts">
+        <AppLink to="/me" className="ibtn" aria-label="个人中心" title="个人中心" onClick={onNavigate}>
+          <Icon name="user" />
+        </AppLink>
+        {onSignOut ? <IconButton look="plain" icon="logout" label="退出登录" title="退出登录" onClick={onSignOut} /> : null}
       </div>
     </div>
   )
@@ -111,18 +133,7 @@ export function AdminShell({ siteName, viewer, pathname, crumbs, badges, onSearc
       <aside className="adm-side">
         <Brand siteName={siteName} />
         <AdminNav role={role} badges={badges} />
-        {viewer ? (
-          <div className="adm-me">
-            <span className="avatar sm" style={{ borderColor: 'var(--c-teal)' }} aria-hidden="true">
-              {[...viewer.name][0] ?? '?'}
-            </span>
-            <div>
-              <b>{viewer.name}</b>
-              <small>{ROLES[viewer.role].name}</small>
-            </div>
-            {onSignOut ? <IconButton look="plain" icon="logout" label="退出登录" onClick={onSignOut} /> : null}
-          </div>
-        ) : null}
+        {viewer ? <AdminMe viewer={viewer} onSignOut={onSignOut} /> : null}
       </aside>
       <div className="adm-main">
         <header className="adm-top">
@@ -148,15 +159,21 @@ export function AdminShell({ siteName, viewer, pathname, crumbs, badges, onSearc
               <Input name="q" icon="search" placeholder="搜索包、表情 ID、用户" aria-label="搜索后台" />
             </form>
           ) : null}
-          <AppLink to="/" className="ibtn hide-sm" aria-label="查看前台" title="查看前台">
-            <Icon name="external" />
+          <AppLink to="/" className={buttonClass({ size: 'sm' }, 'adm-back')}>
+            <Icon name="home" />
+            返回站点
           </AppLink>
         </header>
         <main className="adm-body">{body}</main>
       </div>
       <Sheet open={menu} onOpenChange={setMenu} title="后台导航" bare className="adm-drawer">
-        <Brand siteName={siteName} />
+        <Brand siteName={siteName} onNavigate={() => setMenu(false)} />
+        <AppLink to="/" className="adm-site" onClick={() => setMenu(false)}>
+          <Icon name="home" />
+          返回站点
+        </AppLink>
         <AdminNav role={role} badges={badges} onNavigate={() => setMenu(false)} />
+        {viewer ? <AdminMe viewer={viewer} onSignOut={onSignOut} onNavigate={() => setMenu(false)} /> : null}
       </Sheet>
     </div>
   )

@@ -1,6 +1,7 @@
 import { useLocation } from '@tanstack/react-router'
 import { useEffect, useRef, type ReactNode } from 'react'
 import type { MeSummary } from '#/server/account/service'
+import { isStaff } from '../admin/nav'
 import { buttonClass } from '../Button'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
@@ -48,6 +49,12 @@ export function MeShell({ summary, children }: { summary: MeSummary; children: R
               新建投稿
             </AppLink>
           )}
+          {isStaff(summary.role) ? (
+            <AppLink to="/admin" className={buttonClass({ size: 'sm', block: true })}>
+              <Icon name="gauge" />
+              管理台
+            </AppLink>
+          ) : null}
         </div>
       </div>
       <nav ref={tabs} className="me-tabs" aria-label="个人中心">
