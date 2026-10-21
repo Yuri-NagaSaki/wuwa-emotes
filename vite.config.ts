@@ -12,7 +12,8 @@ export default defineConfig({
   plugins: [
     nitro({
       preset: 'bun',
-      // sharp is only used by the worker; keep native/optional packages out of the web bundle.
+      // sharp runs in the worker and, for 头像 uploads, in the web process (imported on first use); like
+      // pg-native it stays out of the bundle and loads its native packages from node_modules.
       rollupConfig: { external: ['sharp', 'pg-native'] },
       // Fonts in public/ get no Cache-Control by default, so Cloudflare bypassed them and browsers kept
       // revalidating. TP Rounded shards are named by content hash; the stylesheet listing them is not,

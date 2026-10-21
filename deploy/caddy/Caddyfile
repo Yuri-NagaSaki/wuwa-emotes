@@ -50,6 +50,13 @@
 	@not_loopback not remote_ip 127.0.0.0/8 ::1
 	header @not_loopback -X-Chaochi-Upstream
 
+	# Uploads go straight to R2 with presigned URLs, so the app only receives JSON and the 头像 crop
+	# (at most 2 MB). TanStack Start reads a whole body before a server function's validator runs: this
+	# caps what one request can make a replica hold. Larger bodies get 413.
+	request_body {
+		max_size 8MB
+	}
+
 	reverse_proxy {$CHAOCHI_UPSTREAMS} {
 		lb_policy round_robin
 		# A request that meets a stopping or restarting replica is retried on the other one.
