@@ -124,8 +124,53 @@
 .pn a.next { text-align: right; justify-items: end; }
 .pn span.none { border-radius: var(--r); border: 2px dashed var(--tp-line); }
 .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 30px; align-items: start; }
-/* comments under the grid, full width with the page content (no side column); .sec spaces it */
+/* under the grid (B站 video page): the comments on the left, 相关推荐 (RelatedPacks.tsx) in a right
+   column from 1100 px; narrower, one column with the related row first. The section owns the space
+   above it (the thread's own .sec margin is dropped), so both columns start on the same line. */
+.pack-lower { margin-top: 48px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; align-items: start; }
+.pack-lower > * { min-width: 0; }
+.pack-lower .cm.sec { margin-top: 0; }
+/* both column heads are the height of the loaded thread's head (its sort control), placeholder too */
+.pack-lower .cm-head, .rel-head { min-height: 38px; }
 .pack-comments { min-width: 0; }
+.pack-related { order: -1; display: grid; gap: 14px; align-content: start; }
+.rel-head { display: flex; align-items: center; gap: 12px; }
+.rel-head h2 { font-size: 22px; }
+.rel-list { list-style: none; margin: 0; padding: 0; }
+.rel-item { display: grid; color: var(--tp-ink); border-radius: var(--r); min-width: 0; }
+/* the well: the pack's color over the paper well (as card covers), the sticker inset with the
+   concentric radius; the well clips (corner rule, components.css) */
+.rel-cover { display: grid; place-items: center; aspect-ratio: 1; padding: 6px; border-radius: 16px; overflow: hidden; border: 2px solid color-mix(in srgb, var(--acc, var(--c-mint)) 35%, var(--tp-line)); background-color: color-mix(in srgb, var(--acc, var(--c-mint)) 22%, var(--tp-well)); background-image: radial-gradient(color-mix(in srgb, var(--acc, var(--c-mint)) 45%, transparent) 1.2px, transparent 1.3px); background-size: 12px 12px; --media-r: 8px; transition: transform var(--t) var(--ease), border-color var(--t-fast) var(--ease); }
+.rel-cover img { width: 100%; height: 100%; min-width: 0; min-height: 0; object-fit: contain; border-radius: var(--media-r); }
+.rel-body { display: grid; gap: 5px; min-width: 0; align-content: start; }
+.rel-t { font-family: var(--tp-font-display); font-weight: 800; font-size: 14.5px; line-height: 21px; height: 42px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; transition: color var(--t-fast) var(--ease); }
+.rel-meta { display: flex; align-items: center; gap: 6px; min-width: 0; height: 20px; white-space: nowrap; font-size: 12.5px; color: var(--tp-muted); font-weight: 700; }
+.rel-meta .flag { flex: none; height: 18px; padding: 0 6px; border-radius: 6px; font-size: 11px; }
+.rel-by { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rel-n { flex: none; font-family: var(--tp-font-num); }
+.rel-by + .rel-n::before { content: "·"; margin-right: 6px; }
+.rel-item:hover .rel-t { color: var(--tp-teal-ink); }
+.rel-item:hover .rel-cover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc, var(--c-mint)) 70%, var(--tp-line)); }
+@media (min-width: 1100px) {
+  .pack-lower.has-related { grid-template-columns: minmax(0, 1fr) 376px; column-gap: 40px; }
+  .pack-related { order: 0; }
+  .rel-list { display: grid; gap: 4px; margin: 0 -8px; }
+  .rel-item { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; padding: 8px; transition: background-color var(--t-fast) var(--ease); }
+  .rel-item:hover { background: var(--tp-sand); }
+  /* the row is the cover's height: a one-line title sits with its meta line in the middle */
+  .rel-t { height: auto; max-height: 42px; }
+}
+/* tablets and phones: one row of small cards that scrolls sideways (snap, no bar), bleeding to the
+   screen edges; the cards show the cover, the title and the count */
+@media (max-width: 1099.98px) {
+  .rel-list { display: flex; gap: 12px; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x mandatory; scrollbar-width: none; margin: -8px calc(-1 * var(--gutter)); padding: 8px var(--gutter); scroll-padding-inline: var(--gutter); }
+  .rel-list::-webkit-scrollbar { display: none; }
+  .rel-list > li { flex: 0 0 148px; scroll-snap-align: start; }
+  .rel-item { gap: 8px; }
+  .rel-t { font-size: 13.5px; line-height: 19px; height: 38px; }
+  .rel-by { display: none; }
+  .rel-by + .rel-n::before { content: none; }
+}
 /* the placeholder holds the height of an empty loaded thread for a signed-in viewer (desktop 500 px,
    phones 540 px, measured 2026-10-21; the guest composer is 8–56 px taller): when the thread arrives
    the content only grows a little, and the footer below does not jump (CLS 0.16 on a 330-sticker pack
@@ -298,6 +343,7 @@ html { scrollbar-gutter: stable; }
 }
 @media (max-width: 760px) {
   .cm-slot { min-height: 540px; }
+  .pack-lower { margin-top: 36px; gap: 24px; }
   /* sticker grids are three across on phones (the prototype's 方格 3 列) */
   .grid-tiles.t120, .grid-tiles.t132, .grid-tiles.t150 { --tile: 96px; }
   .hero { padding-top: 0; }

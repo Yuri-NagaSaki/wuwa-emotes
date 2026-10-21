@@ -15,6 +15,7 @@ import { CommentsSlot } from './CommentsSlot'
 import { EmojiDialogHost, prefetchEmojiDialog } from './dialog-loader'
 import type { EmojiDialogProps } from './EmojiDialog'
 import { artistHref, characterHref, dialogPack, fromPackEmoji, KIND_LABEL, licenseLabel, longDate, packAccent, packHref } from './model'
+import { RelatedPacks } from './RelatedPacks'
 import { TileItem, useLiveTiles, useStableActions } from './tile-items'
 import { Toggle } from './Toggle'
 import { useAddToBatch } from './useBatch'
@@ -23,6 +24,8 @@ import { favoriteKey, toggleFavorite, useFavorite, useFavoriteKeys, useFavoriteS
 
 // 包详情 /packs/:slug (and /e/:emojiId with the dialog open). The route owns the dialog's history
 // (route masking: the address bar shows /e/<id>); this component only reports open/switch/close.
+// Under the sticker grid, .pack-lower holds the comments and 相关推荐 (RelatedPacks): two columns from
+// 1100 px, else one with the related row first (pages.css).
 
 // The dialog code loads when the page is idle (or when a tile is pressed), not with the page
 // (dialog-loader.tsx). The /e deep link passes the component itself, so its server HTML and hydration
@@ -48,7 +51,15 @@ function PackFlags({ pack }: { pack: PackDetail }) {
   return null
 }
 
-export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink, dialog: Dialog = EmojiDialogHost }: PackPageProps) {
+/**
+ * A related pack opens in the same route: the page starts over for the new pack (selection, live
+ * tiles, the comment thread and its draft), as when it comes from another page.
+ */
+export function PackPage(props: PackPageProps) {
+  return <PackPageBody key={props.pack.id} {...props} />
+}
+
+function PackPageBody({ pack, open, onOpen, onIndex, onClose, deepLink, dialog: Dialog = EmojiDialogHost }: PackPageProps) {
   const dpack = useMemo(() => dialogPack(pack), [pack])
   const items = useMemo(() => pack.emojis.map((e) => fromPackEmoji(e, dpack)), [pack.emojis, dpack])
   const [selecting, setSelecting] = useState(false)
@@ -298,8 +309,11 @@ export function PackPage({ pack, open, onOpen, onIndex, onClose, deepLink, dialo
           )}
         </TileGrid>
 
-        <div className="pack-comments">
-          <CommentsSlot packId={pack.id} stickers={pack.emojis} />
+        <div className={cx('pack-lower', pack.related.length > 0 && 'has-related')}>
+          <div className="pack-comments">
+            <CommentsSlot packId={pack.id} stickers={pack.emojis} />
+          </div>
+          <RelatedPacks packs={pack.related} />
         </div>
       </div>
 
