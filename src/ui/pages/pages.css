@@ -126,7 +126,11 @@
 .split { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 30px; align-items: start; }
 /* comments under the grid, full width with the page content (no side column); .sec spaces it */
 .pack-comments { min-width: 0; }
-.cm-slot { display: grid; gap: 12px; }
+/* the placeholder holds the height of an empty loaded thread for a signed-in viewer (desktop 500 px,
+   phones 540 px, measured 2026-10-21; the guest composer is 8–56 px taller): when the thread arrives
+   the content only grows a little, and the footer below does not jump (CLS 0.16 on a 330-sticker pack
+   scrolled to the end on a phone, before) */
+.cm-slot { display: grid; gap: 12px; align-content: start; min-height: 500px; }
 .cm-slot .card.dashed { text-align: center; color: var(--tp-muted); font-size: 14px; }
 .side-stack { display: grid; gap: 22px; margin-top: 48px; }
 .side-stack h3 { font-size: 16px; margin-bottom: 12px; }
@@ -289,6 +293,7 @@ html { scrollbar-gutter: stable; }
   .char-hero .acts { grid-column: 1 / -1; justify-items: start; grid-auto-flow: column; justify-content: start; }
 }
 @media (max-width: 760px) {
+  .cm-slot { min-height: 540px; }
   /* sticker grids are three across on phones (the prototype's 方格 3 列) */
   .grid-tiles.t120, .grid-tiles.t132, .grid-tiles.t150 { --tile: 96px; }
   .hero { padding-top: 0; }

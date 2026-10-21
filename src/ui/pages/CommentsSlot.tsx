@@ -4,7 +4,10 @@ import { Icon } from '../Icon'
 
 // The comment thread of a pack (src/ui/comments, docs/ARCHITECTURE.md §9). Threads are per viewer,
 // so nothing of them is in the shared HTML: the server renders this placeholder, and the comments
-// code (with its own stylesheet) loads once the section comes within ~1.5 screens of the viewport.
+// code (with its own stylesheet) loads once the section comes within ~3 screens of the viewport. The
+// placeholder reserves the height of an empty thread (pages.css .cm-slot), and starting three screens
+// ahead lets a phone (Fast 4G, CPU 4×) finish loading before a quick scroll reaches it, so the footer
+// below does not jump.
 
 const CommentsSection = lazy(() => import('../comments').then((m) => ({ default: m.CommentsSection })))
 
@@ -27,7 +30,7 @@ export function CommentsSlot({ packId, stickers }: { packId: number; stickers: r
   useEffect(() => {
     const el = ref.current
     if (!el || near) return
-    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { rootMargin: '150% 0px' })
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { rootMargin: '300% 0px' })
     io.observe(el)
     return () => io.disconnect()
   }, [near])
