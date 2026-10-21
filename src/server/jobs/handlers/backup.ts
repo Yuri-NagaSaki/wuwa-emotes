@@ -1,13 +1,16 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { env } from '../../env'
 import { log } from '../../log'
+import { backupKeyFor, encryptStream } from '../../media/backup-crypto'
 import { backupKey } from '../../media/keys'
 import { createUpload, deleteObjects, headObject } from '../../media/s3'
 
-// db.backup (daily 03:00 Asia/Shanghai): `pg_dump -Fc` of DATABASE_URL streamed to
-// backups/postgres/<yyyy>/<mm>/<dd>/<timestamp>.dump as a multipart upload (R2 lifecycle keeps 30 days).
-// The connection settings go to pg_dump through PG* environment variables, never argv, so the password
-// does not show up in the process list. A failed dump never leaves an object behind.
+// db.backup (daily 03:00 Asia/Shanghai): `pg_dump -Fc` of DATABASE_URL, encrypted with AES-256-GCM on the
+// way (src/server/media/backup-crypto.ts) and streamed to backups/postgres/<yyyy>/<mm>/<dd>/<timestamp>.dump.enc
+// as a multipart upload (R2 lifecycle keeps 30 days). Plaintext never leaves the process: without a key
+// in production the job fails before pg_dump starts. The connection settings go to pg_dump through PG*
+// environment variables, never argv, so the password does not show up in the process list. A failed dump
+// never leaves an object behind.
 
 export class BackupError extends Error {}
 
@@ -28,7 +31,24 @@ export function pgEnv(url: string): Record<string, string> {
   return out
 }
 
-export async function runDbBackup(opts: { now?: Date; databaseUrl?: string; pgDump?: string } = {}): Promise<{ key: string; bytes: number }> {
+export interface BackupOptions {
+  now?: Date
+  databaseUrl?: string
+  pgDump?: string
+  /** Encryption key; default backupKeyFor(env()). null refuses (production without BACKUP_ENCRYPTION_KEY). */
+  key?: Buffer | null
+}
+
+export async function runDbBackup(opts: BackupOptions = {}): Promise<{ key: string; bytes: number }> {
+  let encKey: Buffer | null
+  try {
+    encKey = opts.key === undefined ? backupKeyFor(env()) : opts.key
+  } catch (err) {
+    throw new BackupError(`database backup refused: ${(err as Error).message}`)
+  }
+  if (!encKey) {
+    throw new BackupError('database backup refused: BACKUP_ENCRYPTION_KEY is not set, and backups are never uploaded unencrypted')
+  }
   const pgDump = opts.pgDump ?? 'pg_dump'
   const childEnv: Record<string, string> = {
     PATH: process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin',
@@ -55,7 +75,9 @@ export async function runDbBackup(opts: { now?: Date; databaseUrl?: string; pgDu
     child.once('error', reject)
     child.once('close', (code, signal) => resolve(code ?? (signal ? 128 : 1)))
   })
-  const upload = createUpload(key, child.stdout, { contentType: 'application/octet-stream' })
+  const encrypted = encryptStream(encKey)
+  child.stdout.pipe(encrypted)
+  const upload = createUpload(key, encrypted, { contentType: 'application/octet-stream' })
   // if the upload dies, stop pg_dump too, or it blocks forever on a full pipe
   const uploaded = upload.done().catch((err: unknown) => {
     child.kill('SIGTERM')
@@ -80,5 +102,11 @@ export async function runDbBackup(opts: { now?: Date; databaseUrl?: string; pgDu
 }
 
 export async function dbBackupJob() {
-  await runDbBackup()
+  try {
+    await runDbBackup()
+  } catch (err) {
+    // the worker loop only logs finished jobs; a backup that did not happen must be visible
+    log().error({ err: (err as Error).message }, 'backup: database backup FAILED')
+    throw err
+  }
 }

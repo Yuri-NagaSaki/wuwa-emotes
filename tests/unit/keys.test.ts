@@ -46,8 +46,8 @@ describe('object keys', () => {
     expect(uploadTmpKey('up1', '', at)).toBe('uploads/tmp/2026/01/05/up1/file')
   })
 
-  test('backup keys are dated', () => {
-    expect(backupKey(new Date('2026-10-20T03:00:00.123Z'))).toBe('backups/postgres/2026/10/20/2026-10-20T03-00-00-123Z.dump')
+  test('backup keys are dated and name the encrypted format', () => {
+    expect(backupKey(new Date('2026-10-20T03:00:00.123Z'))).toBe('backups/postgres/2026/10/20/2026-10-20T03-00-00-123Z.dump.enc')
   })
 })
 

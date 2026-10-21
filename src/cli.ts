@@ -20,6 +20,10 @@
 //   bun src/cli.ts media check-public [--base https://i.sparxie.moe]
 //                                            what the bucket's public domain serves: web images 200 and
 //                                            cacheable, backups/uploads/originals 403 or 404 (PASS/FAIL)
+//   bun src/cli.ts backup decrypt <file | backups/…key> <out.dump>
+//                                            decrypt an encrypted backup with BACKUP_ENCRYPTION_KEY for pg_restore
+//   bun src/cli.ts backup encrypt-existing [--dry-run]
+//                                            encrypt the plaintext .dump backups in the bucket, verify, delete them
 import { eq } from 'drizzle-orm'
 import { audit } from './server/audit'
 import { closeDb, db, schema } from './server/db/client'
@@ -166,6 +170,39 @@ async function mediaCmd(args: string[]) {
   throw new Error('usage: media set-cache-control … | media check-public [--base URL]')
 }
 
+async function backupCmd(args: string[]) {
+  const [sub, ...rest] = args
+  const { env } = await import('./server/env')
+  const { backupKeyFor } = await import('./server/media/backup-crypto')
+  const key = () => {
+    const k = backupKeyFor(env())
+    if (!k) throw new Error('BACKUP_ENCRYPTION_KEY is not set')
+    return k
+  }
+  if (sub === 'decrypt') {
+    const [source, out, ...extra] = rest
+    if (!source || !out || extra.length) throw new Error('usage: backup decrypt <file | backups/…key> <out.dump>')
+    const { decryptBackupFile } = await import('./server/media/backup-tools')
+    const r = await decryptBackupFile(source, out, key())
+    console.log(`backup decrypt: ${source} → ${out} (${r.bytes} bytes, sha256 ${r.sha256}); check it with pg_restore --list ${out}`)
+    return
+  }
+  if (sub === 'encrypt-existing') {
+    const flags = parseFlags(rest, { 'dry-run': 'boolean' })
+    const dryRun = flags['dry-run'] === true
+    const { encryptExistingBackups } = await import('./server/media/backup-tools')
+    const r = await encryptExistingBackups(key(), { dryRun, log: (l) => console.log(`  ${l}`) })
+    console.log(
+      dryRun
+        ? `encrypt-existing (dry run): ${r.found} plaintext backup(s) would be encrypted, verified and deleted`
+        : `encrypt-existing: found ${r.found} plaintext backup(s), encrypted ${r.encrypted}, verified ${r.verified}, deleted ${r.deleted}, failed ${r.failed.length}`,
+    )
+    if (r.failed.length) process.exitCode = 1
+    return
+  }
+  throw new Error('usage: backup decrypt <file | key> <out.dump> | backup encrypt-existing [--dry-run]')
+}
+
 const USAGE = [
   'commands:',
   '  promote-admin <email>',
@@ -178,6 +215,8 @@ const USAGE = [
   '  derive-colors [--dry-run]',
   '  media set-cache-control --prefix derived/v1/ [--dry-run] [--concurrency 8]',
   '  media check-public [--base https://i.sparxie.moe]',
+  '  backup decrypt <file | backups/…key> <out.dump>',
+  '  backup encrypt-existing [--dry-run]',
 ].join('\n')
 
 async function main() {
@@ -211,6 +250,9 @@ async function main() {
       break
     case 'media':
       await mediaCmd(args)
+      break
+    case 'backup':
+      await backupCmd(args)
       break
     default:
       console.log(USAGE)

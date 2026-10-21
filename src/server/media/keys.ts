@@ -91,9 +91,13 @@ export function uploadTmpKey(uploadId: string, filename: string, now = new Date(
   return `uploads/tmp/${y}/${m}/${d}/${uploadId}/${safe}`
 }
 
+export const BACKUP_PREFIX = 'backups/'
+/** Encrypted dumps (src/server/media/backup-crypto.ts); the plaintext `.dump` objects are from before. */
+export const BACKUP_SUFFIX = '.dump.enc'
+
 export function backupKey(now = new Date()): string {
   const iso = now.toISOString()
-  return `backups/postgres/${iso.slice(0, 4)}/${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.replace(/[:.]/g, '-')}.dump`
+  return `${BACKUP_PREFIX}postgres/${iso.slice(0, 4)}/${iso.slice(5, 7)}/${iso.slice(8, 10)}/${iso.replace(/[:.]/g, '-')}${BACKUP_SUFFIX}`
 }
 
 // ---- public web images ----

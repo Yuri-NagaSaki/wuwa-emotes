@@ -7,6 +7,9 @@ const bool = z
   .enum(['1', '0', 'true', 'false', 'yes', 'no', ''])
   .transform((v) => v === '1' || v === 'true' || v === 'yes')
 
+/** The development backup key (dev-only-backup-key-not-secret!! as base64). */
+export const DEV_BACKUP_KEY = 'ZGV2LW9ubHktYmFja3VwLWtleS1ub3Qtc2VjcmV0ISE='
+
 const DEV_DEFAULTS: Record<string, string> = {
   SITE_URL: 'http://localhost:3000',
   DATABASE_URL: 'postgres://chaochi:chaochi@127.0.0.1:5432/chaochi',
@@ -18,6 +21,9 @@ const DEV_DEFAULTS: Record<string, string> = {
   S3_ACCESS_KEY_ID: 'devaccess',
   S3_SECRET_ACCESS_KEY: 'devsecret123',
   S3_FORCE_PATH_STYLE: 'true',
+  // 32 bytes, base64; public on purpose (dev and tests only). Production refuses this value
+  // (src/server/media/backup-crypto.ts), so a missing key can never fall back to it.
+  BACKUP_ENCRYPTION_KEY: DEV_BACKUP_KEY,
 }
 
 /** An http(s) URL without query or fragment; the trailing slash is dropped ('' when unset). */
@@ -61,6 +67,10 @@ const schema = z.object({
   // Public web images (p240, a160, portraits, avatars) straight from the bucket's custom domain, e.g.
   // https://i.sparxie.moe. Empty: every image URL is the origin's /img path (src/server/media/keys.ts).
   PUBLIC_IMG_BASE: publicBase,
+
+  // AES-256-GCM key for database backups: 32 random bytes, base64 (`openssl rand -base64 32`). Checked
+  // when a backup runs, not here: the web replicas start without it (src/server/media/backup-crypto.ts).
+  BACKUP_ENCRYPTION_KEY: z.string().default(''),
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 })
