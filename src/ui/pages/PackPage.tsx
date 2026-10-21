@@ -111,6 +111,8 @@ function PackPageBody({ pack, open, onOpen, onIndex, onClose, deepLink, dialog: 
   useEffect(() => prefetchEmojiDialog({ idle: true }), [])
 
   const zipLabel = zipBusy ? (dl.building ? '正在生成 ZIP…' : '准备下载…') : '整包下载'
+  // a detail the edge cached before 相关推荐 shipped (stale-while-revalidate) has no `related`
+  const related = pack.related ?? []
   const groups = pack.tags.group
 
   return (
@@ -309,11 +311,11 @@ function PackPageBody({ pack, open, onOpen, onIndex, onClose, deepLink, dialog: 
           )}
         </TileGrid>
 
-        <div className={cx('pack-lower', pack.related.length > 0 && 'has-related')}>
+        <div className={cx('pack-lower', related.length > 0 && 'has-related')}>
           <div className="pack-comments">
             <CommentsSlot packId={pack.id} stickers={pack.emojis} />
           </div>
-          <RelatedPacks packs={pack.related} />
+          <RelatedPacks packs={related} />
         </div>
       </div>
 

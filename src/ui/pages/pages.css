@@ -134,6 +134,10 @@
 .pack-lower .cm-head, .rel-head { min-height: 38px; }
 .pack-comments { min-width: 0; }
 .pack-related { order: -1; display: grid; gap: 14px; align-content: start; }
+/* The column's height is known ahead (fixed rows: head 38 + gap 14 + the row of 219 px cards; desktop
+   n rows of 104 px with 4 px gaps): it holds that height before a client-side page renders the list
+   (RelatedPacks.tsx), and off screen it skips style, layout and paint, so nothing moves either way */
+.pack-related { --rel-h: 271px; min-height: var(--rel-h); content-visibility: auto; contain-intrinsic-block-size: auto var(--rel-h); }
 .rel-head { display: flex; align-items: center; gap: 12px; }
 .rel-head h2 { font-size: 22px; }
 .rel-list { list-style: none; margin: 0; padding: 0; }
@@ -153,7 +157,7 @@
 .rel-item:hover .rel-cover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc, var(--c-mint)) 70%, var(--tp-line)); }
 @media (min-width: 1100px) {
   .pack-lower.has-related { grid-template-columns: minmax(0, 1fr) 376px; column-gap: 40px; }
-  .pack-related { order: 0; }
+  .pack-related { order: 0; --rel-h: calc(48px + var(--rel-n, 10) * 108px); }
   .rel-list { display: grid; gap: 4px; margin: 0 -8px; }
   .rel-item { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; padding: 8px; transition: background-color var(--t-fast) var(--ease); }
   .rel-item:hover { background: var(--tp-sand); }
