@@ -42,6 +42,12 @@ secretGroup = 1
   paths = ['''^deploy/cloudflare-ips\.txt$''']
 
 [[allowlists]]
+description = "DEV_BACKUP_KEY in src/server/env.ts: base64 of the ASCII text dev-only-backup-key-not-secret!!, the backup key for development and tests. Public on purpose; production refuses this value (src/server/media/backup-crypto.ts)"
+targetRules = ["generic-api-key"]
+regexTarget = "secret"
+regexes = ['''^ZGV2LW9ubHktYmFja3VwLWtleS1ub3Qtc2VjcmV0ISE=$''']
+
+[[allowlists]]
 description = "Pack slugs in JSON key / packKey fields (design prototype data, DEVELOPMENT.md examples): lowercase words, numbers and dates joined by hyphens, with at least one letter after f, so hex ids and UUIDs are still reported"
 targetRules = ["generic-api-key"]
 regexTarget = "match"
