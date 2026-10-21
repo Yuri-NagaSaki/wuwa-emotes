@@ -255,6 +255,10 @@ html { scrollbar-gutter: stable; }
 .sr-groups { display: grid; gap: 4px; }
 
 /* ============ docs: about / links / legal ============ */
+/* one reading column centred in the page: the title block and the TOC + text share it, so the text
+   measure (--doc-measure) sets the width and the page keeps equal space on both sides */
+.wrap.doc-page { --doc-measure: 70ch; max-width: calc(220px + 36px + var(--doc-measure) + 2 * var(--gutter)); }
+.doc-page .prose { max-width: none; }
 .doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: 36px; align-items: start; margin-top: 24px; }
 .toc { position: sticky; top: calc(var(--head-h) + 20px); display: grid; gap: 2px; font-size: 13.5px; }
 .toc a { padding: 6px 12px; border-radius: 10px; color: var(--tp-muted); font-weight: 700; }
@@ -350,7 +354,8 @@ html { scrollbar-gutter: stable; }
   .top-hit { grid-template-columns: auto 1fr; }
   .top-hit .btn { grid-column: 1 / -1; }
   .doc { grid-template-columns: 1fr; gap: 12px; }
-  .toc { position: static; display: flex; overflow-x: auto; gap: 4px; }
+  .toc { position: static; display: flex; overflow-x: auto; gap: 4px; scrollbar-width: none; }
+  .toc::-webkit-scrollbar { display: none; }
   .toc a { white-space: nowrap; background: var(--tp-sand); }
   .prose { font-size: 15px; }
   .links-grid { grid-template-columns: 1fr; }

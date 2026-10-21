@@ -150,7 +150,7 @@ export function AboutPage({ siteName, stats }: { siteName: string; stats: Catalo
     },
   ]
   return (
-    <div className="wrap narrow">
+    <div className="wrap doc-page">
       <div className="page-h">
         <h1>关于{siteName}</h1>
         <span className="sub">一个由潮友维护的鸣潮表情仓库</span>
@@ -172,7 +172,7 @@ const PALETTE = ['mint', 'pink', 'blue', 'yellow', 'purple', 'orange', 'green', 
 
 export function LinksPage() {
   return (
-    <div className="wrap narrow">
+    <div className="wrap doc-page">
       <div className="page-h">
         <h1>友情链接</h1>
         <span className="sub">海内存知己。外站链接一律不带本站的统计参数，也不加载对方的图标。</span>
@@ -346,7 +346,7 @@ function legalSections(doc: LegalDoc, siteName: string): Section[] {
 export function LegalPage({ doc, siteName }: { doc: LegalDoc; siteName: string }) {
   const meta = LEGAL_DOCS.find((d) => d.id === doc)!
   return (
-    <div className="wrap narrow">
+    <div className="wrap doc-page">
       <div className="page-h">
         <nav className="crumbs" aria-label="位置">
           <AppLink to="/">首页</AppLink>
