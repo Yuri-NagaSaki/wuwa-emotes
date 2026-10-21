@@ -81,6 +81,7 @@ flowchart LR
 - 原图、ZIP 和上传不经过应用：应用只签发链接，浏览器直连 R2 的 S3 端点。
 - 源站不监听 80 端口。`http://` 由 Cloudflare「始终使用 HTTPS」在边缘重定向。
 - Caddy 只服务 `CHAOCHI_DOMAIN`，`www.` 子域 301 到主域；其他 Host 直接断开连接，未知 SNI 和直接用 IP 访问因为没有匹配的证书而握手失败（`deploy/caddy/Caddyfile`）。
+- 请求体最大 8 MB（Caddy `request_body`），超出返回 413。表情上传用预签名链接直传 R2，应用只收到 JSON 和头像裁切图（不超过 2 MB）。TanStack Start 在服务端函数的校验运行之前就读完整个请求体，所以上限放在代理层。
 - 客户端 IP 只取 `CF-Connecting-IP`，不读 `X-Forwarded-For`。这个头可信的前提是：nftables 只允许 Cloudflare 网段连接 443，Caddy 只信任来自这些网段的该头并原样转发，应用容器不映射任何端口。
 
 ### 2.1 路由与缓存
@@ -416,13 +417,23 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **立绘**：`bun src/cli.ts import-portraits <manifest.json>` 读取 `{ name, url, slug?, crop? }` 列表，按 slug、名称、别名或去掉分隔符的名称匹配角色；逐个下载（顺序进行、有间隔、不带 Referer），从顶部裁成 3:4，写 240 px 宽的 WebP（来源够大时另写 480 px），放在 `characters/v1/portraits/<slug>.<hash8>-<w>.webp`，最大宽度的键写入 `characters.portrait_key`（迁移 `0002`）。`<hash8>` 覆盖来源字节、裁切和处理流程，同一来源重跑不做任何改动；同一来源不会成为两个角色的立绘。立绘经 `/img/v1/portrait/…` 提供（第 2.2 节）。
 - **主题色**：`characters.theme_color` 为空时，`import-portraits`（除非加 `--no-colors`）或 `bun src/cli.ts derive-colors` 从立绘取色，没有立绘时用头像贴纸（`src/server/import/colors.ts`）：在 OKLab 空间里跳过背景、近黑、灰色和浅肤色像素，其余像素按彩度平方加权投票给最近的设计色（13 色），彩色像素太少时按中间调的平均色决定，结果以调色板名写入。已有的值不会被覆盖，后台的选择优先。前端的读取规则见第 8.1 节。
 
+### 7.3 用户头像
+
+- **上传**：设置页「头像」选图后，浏览器先裁成正方形并缩放到 512 px（WebP，浏览器不支持时用 PNG），再交给 `setAvatarFn`（`src/server/account/avatar.ts`）。服务端依次检查：大小不超过 2 MB；文件头是 PNG、JPEG、GIF 或 WebP（不信任声明的类型）；每人每小时最多更换 10 次。
+- **解码**：用 sharp 只取第一帧，按 EXIF 转正，`limitInputPixels` 为 2500 万，居中裁成正方形，输出 256 px 和 64 px 两张 WebP，不保留元数据。
+- **存储**：对象键按内容寻址，`avatars/v1/<userId>/<hash>-<256|64>.webp`，`<hash>` 是 256 px 输出的 SHA-256 前 16 位十六进制。`users.image` 只存这个哈希；把它变成地址的只有 `avatarUrl`（`src/server/media/keys.ts`），只接受 16 位十六进制。更换时先写两张新图，再在行锁下替换 `users.image`，最后删除旧图。移除头像、注销账号、站长在后台「清除头像」都会删除对象并写审计日志。
+- **提供**：经 `/img/v1/avatar/<userId>/<hash>-<size>.webp`，严格匹配后直接读同名对象，不查库，一年期 immutable。
+- **写入权限**：Better Auth 的 `/update-user`、`/sign-up/email` 和后台创建、修改用户的接口带 `image` 时一律拒绝（`src/server/auth/profile-guard.ts`），`users.image` 只能由头像上传写入。
+- **进程**：这是 web 进程里唯一的 sharp 工作，首次使用时才加载，同一进程一次只解码一张。
+- **显示**：页头、个人中心、评论和后台都用同一个 `<Avatar>`（`src/ui/Avatar.tsx`）。有图时显示图片，没有头像或图片加载失败时显示名字的首字。
+
 ---
 
 ## 8. 前端
 
 ### 8.1 界面规则
 
-- **页面容器**：最大宽度 1440 px，两侧留白 `clamp(16px, 3vw, 32px)`。说明类页面（`/about`、`/links`、`/legal`）用 1200 px 的阅读栏，左缘与页头对齐（`src/ui/styles/tokens.css` 的 `--maxw`、`--gutter`、`--maxw-narrow`）。
+- **页面容器**：最大宽度 1440 px，两侧留白 `clamp(16px, 3vw, 32px)`。说明类页面（`/about`、`/links`、`/legal/*`）是居中的一栏：目录 220 px、间距 36 px、正文 70ch，标题和正文共用这一栏（`.wrap.doc-page`，`src/ui/pages/pages.css`）。宽度令牌见 `src/ui/styles/tokens.css` 的 `--maxw`、`--gutter`。
 - **瀑布流**（`src/ui/masonry-layout.ts`、`src/ui/Masonry.tsx`）：服务端不知道视口宽度，匿名 HTML 又经 CDN 共享，所以布局不能依赖量出来的宽度。每个条目的高度是列宽的仿射函数（媒体按列宽缩放，加上固定高度的文字行），每种列数在一个参考列宽下分配一次列，于是条目的位置也是列宽的仿射函数，由 CSS 的 `calc()` 和容器查询定位。服务端 HTML、水合、改变窗口大小、图片加载和字体替换都不移动任何东西。挂载后只渲染视口附近的条目。
 
   | 模式 | 最小列宽 | 间距 | 列数 |
@@ -438,6 +449,8 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **角色颜色**（`src/ui/pages/model.ts`）：`characters.theme_color`（调色板名或 CSS 颜色）有值时用它；没有时按 slug 做 31 进制哈希，从 13 个设计色里取一个。服务端和客户端结果相同，封面、标签和描边因此不会全是同一种颜色。
 - **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
 - **页面外壳**：页头（含主题切换和「打包」按钮）、手机底部标签栏、页脚（显示目录总数）、站点公告条，模拟登录时置顶的「结束模拟」条，`Ctrl K` 命令面板（首次打开时才加载，联想来自 `suggestFn` 的进程内索引）。任何未匹配的地址都在站点外壳里渲染 404 页，并返回 404 状态码（`src/routes/_site/$.tsx`）。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
+- **站点与后台之间**：登录后，页头头像打开账号菜单（`src/ui/shell/AccountMenu.tsx`，手机上是底部弹层）。菜单依次是：名字和角色、个人中心、我的投稿、通知、设置；站长和管理员另有「管理台」；最后是退出登录。菜单在登录后才加载，角色取水合后重新确认的 viewer，不取边缘缓存的 HTML。个人中心对站长和管理员也显示「管理台」按钮。后台顶栏有带文字的「返回站点」（手机上也显示），侧栏标志链接到首页，侧栏底部和手机抽屉里有个人中心和退出登录。
+- **下拉选择**（`src/ui/Select.tsx`）：不用原生 `<select>`。原生菜单在 macOS 上盖在控件上，颜色跟随系统而不是站点主题，夜潮里选项文字看不清。现在的触发器与输入框同高同样式；列表挂在触发器下方，左缘对齐、至少与触发器同宽，下方放不下时向上翻。列表按内容定高，需要滚动时隐藏滚动条；手机上改为底部弹层。键盘支持方向键、Home、End、Enter、空格、Esc（焦点回到触发器）和按首字跳转。
 - **人机验证**：账号表单、游客评论和被挑战的下载都在后台求解（`src/ui/cap/invisible.ts`、`useInvisibleCap.ts`），不显示 Cap 组件。表单出现时就开始工作量证明，提交时令牌通常已就绪，未就绪时按钮显示「验证中…」并等待；每次求解失败静默重试一次。登录、注册、找回密码在提交按钮上方显示一行状态（`src/ui/cap/CapStatus.tsx`，高度固定，按钮不移动）：求解中「正在进行人机验证…」，下面 2 px 进度条跟随 Cap 自己的进度事件；完成后「已通过人机验证」；失败「人机验证没有完成」和「重试」。令牌放到 4 分钟时自动重新求解，被失败的提交用掉后也立即重新求解。游客评论不显示这一行，只在提交拿不到令牌时显示提示和「重试」。只因令牌被拒（过期或已用过）的请求换新令牌重发一次。`@cap.js/widget` 在需要时才加载，WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
 - **复制图片**（`src/ui/pages/clipboard.ts`）：剪贴板只能写入 PNG，静态贴纸先画到 canvas 再复制；动图复制后只剩一帧，所以提示改用「保存原图」。
 - **组件样张**：`/kit` 展示全部组件，只在开发环境存在。
@@ -892,6 +905,7 @@ v2 → v3（按实现，2026-10-20）：
 - v1 来源地址不再出现在公开页面和 `CREDITS.txt` 里。
 - 发布流程从「`deploy/push-src.sh` 用 rsync 上传源码、服务器上 `rollout.sh --build`」改为「CI 推送 GHCR 镜像、`deploy/release.sh` 让服务器检出提交并拉取镜像」，`push-src.sh` 已删除，镜像名从 `chaochi/app` 改为 `ghcr.io/yuri-nagasaki/wuwa-emotes`（D23）。
 - 生产上发现登录用户会命中边缘缓存里的匿名 HTML（Cloudflare 的缓存键忽略 Cookie），页头一直显示「登录」。加入登录提示 Cookie `tp_signed_in` 与水合后的身份复查（第 2.1 节）。
+- 新增用户头像（第 7.3 节）、页头账号菜单与站点和后台之间的入口、替代原生 `<select>` 的下拉选择（第 8.1 节）；代理层把请求体限制在 8 MB（第 2 节）。
 
 ## 附录 C：v2 文档中的测量与评估（本版未重新测量）
 
