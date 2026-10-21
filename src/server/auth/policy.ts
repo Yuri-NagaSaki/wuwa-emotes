@@ -55,3 +55,8 @@ export function mayNoticeExisting(email: string, now = Date.now()): boolean {
   }
   return true
 }
+
+/** The notice could not be sent: let the next sign-up with this address try again. */
+export function forgetExistingNotice(email: string): void {
+  existingNoticeAt.delete(email.trim().toLowerCase())
+}

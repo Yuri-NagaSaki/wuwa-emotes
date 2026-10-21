@@ -74,7 +74,11 @@ async function resendVerification(email: string): Promise<Failure | null> {
   }
 }
 
-/** 「验证邮件已发出」: where it went, how long the link lasts, the spam folder, 重新发送 and the way back. */
+/**
+ * 「验证邮件已发出」: where it went, how long the link lasts, the spam folder, 重新发送 and the way back.
+ * After a sign-up the address may already be verified (the sign-up answers the same either way), and
+ * Better Auth sends nothing to a verified address on 重新发送; the note after resending says so.
+ */
 function VerificationSent({ email, back, afterSignUp }: { email: string; back: ReactNode; afterSignUp?: boolean }) {
   const [left, restart] = useCooldown(RESEND_COOLDOWN, true)
   const [busy, setBusy] = useState(false)
@@ -87,7 +91,7 @@ function VerificationSent({ email, back, afterSignUp }: { email: string; back: R
     setBusy(false)
     if (err) return setNote({ tone: 'err', text: err.text })
     restart()
-    setNote({ tone: 'ok', text: '已重新发送，请查收' })
+    setNote({ tone: 'ok', text: afterSignUp ? '已重新发送。这个邮箱如果已经验证过，不会再收到邮件，直接登录即可。' : '已重新发送，请查收' })
   }
 
   return (
