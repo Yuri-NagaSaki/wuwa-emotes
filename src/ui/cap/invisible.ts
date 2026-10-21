@@ -29,8 +29,8 @@ export interface CapRequestResult {
 }
 
 /**
- * The background solve: `idle` before the first one starts (and after a token was spent), `solving`
- * while a proof of work runs, `ready` with a fresh token, `failed` when a solve failed twice.
+ * The background solve: `idle` before the first one starts, `solving` while a proof of work runs,
+ * `ready` with a fresh token (and after a request it passed), `failed` when a solve failed twice.
  */
 export type CapPhase = 'idle' | 'solving' | 'ready' | 'failed'
 
@@ -131,11 +131,8 @@ export class CapSession {
         this.warm()
         throw err
       }
-      if (!res.error) {
-        // the token is spent and nothing is on its way
-        if (!this.pending && !this.token) this.set({ phase: 'idle', progress: null })
-        return res
-      }
+      // passed: the line keeps 「已通过」 while the page moves on (sign-in, 邮件已发出)
+      if (!res.error) return res
       const code = res.error.code
       if (code && TOKEN_REJECTED.has(code)) continue
       this.warm()

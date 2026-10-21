@@ -8,14 +8,15 @@ import { useOptionalSiteConfig } from '../site-config'
 import type { ArtSticker } from './art'
 
 // The auth split from the prototype (登录 / 注册 / 找回密码): an art panel on the left, the form card on
-// the right. Phones stack them edge to edge, the art panel reduced to the title, one sentence and the
-// way back. Everything in the card is one column: each child spans the card's full width (titles,
-// text, fields, notices, buttons and link rows alike), so no element ends short of the others.
+// the right. Phones stack them edge to edge, the art panel reduced to the logo, the title and one
+// sentence (at most 220 px; 首页 is in the tab bar). Everything in the card is one column: each child
+// spans the card's full width (titles, text, fields, notices, buttons and link rows alike), so no
+// element ends short of the others.
 //
 // The art panel: a wall of real stickers (loaded by the route from the home data, art.ts) drifting
 // slowly in columns, under a scrim in the panel's tone that is solid behind the text. The wall is
 // decoration only (aria-hidden, absolutely placed, fixed-size wells), so it never moves the layout and
-// the form does not wait for it. Phones keep two short rows behind the title.
+// the form does not wait for it. Phones keep two short rows beside the logo and title.
 
 const PERKS: [IconName, string][] = [
   ['heart', '收藏夹多端同步'],

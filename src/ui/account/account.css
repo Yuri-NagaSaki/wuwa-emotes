@@ -190,7 +190,8 @@
   .auth-art { padding: 24px 20px 22px; gap: 8px; }
   .auth-art .art-copy { max-width: none; }
   .auth-art h2 { font-size: 26px; margin-top: 10px; }
-  .auth-art .perks, .auth-art p.art-stats { display: none; }
+  /* phones: the title and one sentence (the prototype); 首页 is in the tab bar */
+  .auth-art .perks, .auth-art p.art-stats, .auth-art .back { display: none; }
   .auth-art p { margin-top: 8px; font-size: 13.5px; }
   .auth-art .logo-mark { width: 32px; height: 32px; }
   /* two short rows drifting sideways beside the logo and title, above the lead; strips 3+ are not rendered */

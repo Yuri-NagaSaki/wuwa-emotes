@@ -299,16 +299,19 @@ describe("CapSession phase (the account forms' status line)", () => {
     await tick()
     const res = await cap.run(async (t) => (t === 'old' ? { error: { code: 'CAPTCHA_INVALID' } } : ok))
     expect(res).toEqual(ok)
-    expect(phases(statuses)).toEqual(['solving', 'ready', 'solving', 'ready', 'idle'])
+    expect(phases(statuses)).toEqual(['solving', 'ready', 'solving', 'ready'])
   })
 
-  test('a successful submit spends the token: idle', async () => {
+  test('a successful submit stays ready while the page moves on (never back to solving)', async () => {
     const sv = solver(['t1'])
-    const { cap } = session(sv)
+    const { cap, statuses } = session(sv)
     cap.warm()
     await tick()
     await cap.run(async () => ok)
-    expect(cap.phase).toBe('idle')
+    await tick()
+    expect(cap.phase).toBe('ready')
+    expect(phases(statuses)).toEqual(['solving', 'ready'])
+    expect(sv.calls).toBe(1)
   })
 
   test('two rejected tokens in a row: failed', async () => {
