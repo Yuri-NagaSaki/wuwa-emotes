@@ -78,10 +78,13 @@ describe('media check-public', () => {
     expect(r.lines.find((l) => l.line.includes('derived p240'))?.line).toStartWith('FAIL')
   })
 
-  test('FAIL when there is no image to probe; private prefixes without objects are skipped', async () => {
-    const { f } = fakeFetch(() => new Response(null, { status: 404 }))
+  test('FAIL when there is no image to probe; backups/ and uploads/ are probed even when empty', async () => {
+    const { f, calls } = fakeFetch(() => new Response(null, { status: 404 }))
     const r = await checkPublic('https://i.example', { fetch: f, firstKey: async () => null })
     expect(r.ok).toBe(false)
-    expect(r.lines.some((l) => l.line.startsWith('skip') && l.line.includes('backups/'))).toBe(true)
+    expect(calls).toContain('GET /backups/postgres/check-public-probe.dump.enc')
+    expect(calls).toContain('GET /uploads/tmp/check-public-probe')
+    expect(r.lines.find((l) => l.line.includes('database backup'))?.line).toMatch(/^PASS .*made-up key/)
+    expect(r.lines.some((l) => l.line.startsWith('skip') && l.line.includes('assets/'))).toBe(true)
   })
 })

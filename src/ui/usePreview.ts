@@ -27,10 +27,32 @@ function observeBand(el: Element, cb: (inBand: boolean) => void) {
 // Autoplay (the middle band) waits until the posters on screen have loaded: an a160 preview is 60–130 KB,
 // about ten posters' worth, and starting four of them right after a navigation took 35–45% of the
 // image bytes while the page's own posters were still arriving. Hover and focus never wait.
+// It also waits until scrolling pauses: a tile crosses the band in a fraction of a second during a fast
+// scroll, and starting previews on the way loaded ~120 a160 files (≈ 10 MB at production sizes) for one
+// scroll down a 330-sticker pack and back on desktop, with frames of 150–220 ms at 4× CPU.
 const SETTLE_MAX_MS = 6000
+const SCROLL_IDLE_MS = 200
 const settleWaiters = new Set<() => void>()
 let settleTimer: ReturnType<typeof setTimeout> | undefined
 let settleSince = 0
+let lastScroll = -Infinity
+let scrollTracked = false
+
+function trackScroll() {
+  if (scrollTracked) return
+  scrollTracked = true
+  addEventListener(
+    'scroll',
+    () => {
+      lastScroll = performance.now()
+    },
+    { passive: true, capture: true },
+  )
+}
+
+function scrolling(): boolean {
+  return performance.now() - lastScroll < SCROLL_IDLE_MS
+}
 
 function postersPendingInView(): boolean {
   const vh = innerHeight
@@ -45,6 +67,12 @@ function postersPendingInView(): boolean {
 function checkSettled() {
   settleTimer = undefined
   if (!settleWaiters.size) return
+  // still scrolling: the band's tiles are passing through, not being looked at (no time limit)
+  if (scrolling()) {
+    settleSince = performance.now()
+    settleTimer = setTimeout(checkSettled, SCROLL_IDLE_MS)
+    return
+  }
   if (postersPendingInView() && performance.now() - settleSince < SETTLE_MAX_MS) {
     settleTimer = setTimeout(checkSettled, 250)
     return
@@ -54,8 +82,12 @@ function checkSettled() {
   for (const fn of run) fn()
 }
 
-/** Run `fn` once the posters in the viewport have loaded (or after SETTLE_MAX_MS); returns a cancel. */
+/**
+ * Run `fn` once scrolling has paused and the posters in the viewport have loaded (or SETTLE_MAX_MS after
+ * scrolling paused); returns a cancel.
+ */
 function whenPostersLoaded(fn: () => void): () => void {
+  trackScroll()
   if (!settleWaiters.size) settleSince = performance.now()
   settleWaiters.add(fn)
   settleTimer ??= setTimeout(checkSettled, 120)

@@ -13,8 +13,9 @@ const PUBLIC_PROBES = [
   { label: 'avatar', prefix: 'avatars/', optional: true },
 ] as const
 const PRIVATE_PROBES = [
-  { label: 'database backup', prefix: 'backups/' },
-  { label: 'upload', prefix: 'uploads/' },
+  // always probed: with no object there, a made-up key under the prefix (a 404 then proves less)
+  { label: 'database backup', prefix: 'backups/', fallback: 'backups/postgres/check-public-probe.dump.enc' },
+  { label: 'upload', prefix: 'uploads/', fallback: 'uploads/tmp/check-public-probe' },
   { label: 'original', prefix: 'assets/' },
   { label: 'review preview', prefix: 'review/' },
   { label: 'zip', prefix: 'zips/' },
@@ -59,7 +60,8 @@ export async function checkPublic(base: string, deps: CheckPublicDeps = { fetch,
   }
 
   for (const p of PRIVATE_PROBES) {
-    const key = await deps.firstKey(p.prefix)
+    const found = await deps.firstKey(p.prefix)
+    const key = found ?? ('fallback' in p ? p.fallback : null)
     if (!key) {
       lines.push({ ok: true, line: `skip  ${p.label}: no object under ${p.prefix}` })
       continue
@@ -68,7 +70,7 @@ export async function checkPublic(base: string, deps: CheckPublicDeps = { fetch,
     try {
       const res = await deps.fetch(url, { method: 'GET', redirect: 'manual', headers: { range: 'bytes=0-15' }, signal: timeout() })
       await res.body?.cancel().catch(() => undefined)
-      add(res.status === 403 || res.status === 404, `${p.label} ${url} → ${res.status} (want 403 or 404)`)
+      add(res.status === 403 || res.status === 404, `${p.label} ${url} → ${res.status} (want 403 or 404)${found ? '' : ' [no object exists; made-up key]'}`)
     } catch (err) {
       add(false, `${p.label} ${url} → ${(err as Error).message}`)
     }
