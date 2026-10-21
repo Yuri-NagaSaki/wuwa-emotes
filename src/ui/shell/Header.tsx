@@ -1,17 +1,10 @@
-import { useNavigate, useRouter, useRouterState } from '@tanstack/react-router'
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { ROLES } from '#/shared/roles'
-import { isStaff } from '../admin/nav'
+import { useRouterState } from '@tanstack/react-router'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { IconButton } from '../Button'
 import { cx } from '../cx'
 import { Icon } from '../Icon'
 import { AppLink } from '../link'
 import { LogoMark, LogoWord } from '../LogoMark'
-import { Menu, type MenuEntry } from '../Menu'
-import { Sheet } from '../Sheet'
-import { useOptionalSiteConfig } from '../site-config'
-import { toast } from '../Toast'
-import { PHONE_QUERY, useMediaQuery } from '../useMediaQuery'
 import { MAIN_NAV, navKeyFor } from './nav'
 import { isNight, setPref, subscribeTheme } from './theme'
 
@@ -138,83 +131,10 @@ function ThemeToggle() {
   )
 }
 
-/** 退出登录, the same way as 设置 does it (the auth client loads on first use). */
-function useSignOut() {
-  const router = useRouter()
-  const navigate = useNavigate()
-  return async () => {
-    try {
-      const { authClient } = await import('../account/auth-client')
-      const res = await authClient().signOut()
-      if (res.error) throw new Error(res.error.message)
-      toast('已退出登录')
-      await router.invalidate()
-      await navigate({ to: '/login' })
-    } catch {
-      toast({ message: '退出登录失败，请稍后再试', icon: 'warn' })
-    }
-  }
-}
-
-/** The account menu's entries; 管理台 only for staff (站长, 管理员). */
-function accountEntries(staff: boolean, signOut: () => void): MenuEntry[] {
-  return [
-    { kind: 'link', label: '个人中心', icon: 'user', to: '/me' },
-    { kind: 'link', label: '我的投稿', icon: 'upload', to: '/me/submissions' },
-    { kind: 'link', label: '通知', icon: 'bell', to: '/me/notifications' },
-    { kind: 'link', label: '设置', icon: 'sliders', to: '/me/settings' },
-    { kind: 'separator' },
-    ...(staff ? [{ kind: 'link', label: '管理台', icon: 'gauge', to: '/admin' } as const] : []),
-    { label: '退出登录', icon: 'logout', onSelect: signOut },
-  ]
-}
-
-/** Phones: the account menu as a bottom sheet. */
-function AccountSheetList({ entries, onDone }: { entries: readonly MenuEntry[]; onDone: () => void }) {
-  return (
-    <nav className="menu-list" aria-label="账号">
-      {entries.map((it, i) => {
-        if (it.kind === 'separator') return <hr key={i} className="menu-sep" />
-        const inner = (
-          <>
-            {it.icon ? <Icon name={it.icon} /> : null}
-            {it.label}
-          </>
-        )
-        if (it.kind === 'link') {
-          return (
-            <AppLink key={i} to={it.to} className="menu-it" onClick={onDone}>
-              {inner}
-            </AppLink>
-          )
-        }
-        return (
-          <button
-            key={i}
-            type="button"
-            className={cx('menu-it', it.danger && 'danger')}
-            disabled={it.disabled}
-            onClick={() => {
-              onDone()
-              it.onSelect()
-            }}
-          >
-            {inner}
-          </button>
-        )
-      })}
-    </nav>
-  )
-}
+/** The avatar with its account menu (AccountMenu.tsx, loaded only once someone is signed in). */
+const AccountMenu = lazy(() => import('./AccountMenu'))
 
 function UserSlot({ user }: { user: HeaderUser | null }) {
-  // The role comes from the root config's viewer, the one useViewerRefresh re-checks after hydration
-  // (an edge-cached page is anonymous HTML), never from the server HTML: the menu and the sheet
-  // render only when opened, after hydration.
-  const viewer = useOptionalSiteConfig()?.viewer ?? null
-  const phone = useMediaQuery(PHONE_QUERY)
-  const [sheet, setSheet] = useState(false)
-  const signOut = useSignOut()
   if (!user) {
     return (
       <AppLink to="/login" className="btn sm user-slot">
@@ -223,38 +143,17 @@ function UserSlot({ user }: { user: HeaderUser | null }) {
       </AppLink>
     )
   }
-  const role = viewer?.role ?? null
-  const entries = accountEntries(isStaff(role), () => void signOut())
-  const roleName = role ? ROLES[role].name : ''
   const face = user.avatarUrl ? <img src={user.avatarUrl} alt="" width={40} height={40} /> : <span aria-hidden="true">{[...user.name][0] ?? '?'}</span>
-  const label = `账号菜单（${user.name}）`
-  if (phone) {
-    return (
-      <>
-        <button type="button" className="avatar user-slot" aria-label={label} aria-haspopup="dialog" aria-expanded={sheet} onClick={() => setSheet(true)}>
-          {face}
-        </button>
-        <Sheet open={sheet} onOpenChange={setSheet} title={user.name} subtitle={roleName || undefined} className="account-sheet">
-          <AccountSheetList entries={entries} onDone={() => setSheet(false)} />
-        </Sheet>
-      </>
-    )
-  }
   return (
-    <Menu
-      trigger={
-        <button type="button" className="avatar user-slot" aria-label={label}>
+    <Suspense
+      fallback={
+        <span className="avatar user-slot" aria-hidden="true">
           {face}
-        </button>
+        </span>
       }
-      header={
-        <>
-          <b>{user.name}</b>
-          {roleName ? <small>{roleName}</small> : null}
-        </>
-      }
-      items={entries}
-    />
+    >
+      <AccountMenu user={user} face={face} />
+    </Suspense>
   )
 }
 

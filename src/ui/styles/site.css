@@ -39,9 +39,12 @@
 .bottle-btn.is-bump { animation: tp-bump 0.5s var(--spring); }
 @keyframes tp-bump { 0% { transform: scale(1); } 35% { transform: scale(1.14, 0.9); } 70% { transform: scale(0.96, 1.05); } 100% { transform: scale(1); } }
 .head .user-slot { flex: none; }
-/* the avatar opens the account menu (a bottom sheet on phones) */
-.head .avatar.user-slot { padding: 0; cursor: pointer; transition: border-color var(--t-fast) var(--ease); }
-.head .avatar.user-slot:hover, .head .avatar.user-slot[data-popup-open] { border-color: var(--tp-teal); }
+/* the avatar opens the account menu (a bottom sheet on phones; a plain avatar until its code loads) */
+.head .avatar.user-slot { padding: 0; transition: border-color var(--t-fast) var(--ease); }
+.head button.avatar.user-slot { cursor: pointer; }
+.head button.avatar.user-slot:hover, .head .avatar.user-slot[data-popup-open] { border-color: var(--tp-teal); }
+/* the sheet's title is the user's name: body font (the display font only covers the site's own text) */
+.account-sheet .drawer-h h3 { font-family: var(--tp-font-body); font-weight: 900; }
 /* signed-in hint present, viewer being re-checked (src/shared/signed-in-hint.ts): keep 登录's space, show nothing */
 html[data-viewer-pending] .head .user-slot[href="/login"] { visibility: hidden; }
 
