@@ -24,6 +24,8 @@ export interface PublicConfig {
   viewer: ViewerSummary | null
   /** Catalog totals for the footer base line (表情 N 张 · 表情包 N 个); null when the catalog is unavailable. */
   stats: { emojis: number; packs: number } | null
+  /** Origin of PUBLIC_IMG_BASE (web images from the bucket's public domain) for a preconnect; null when unset. */
+  imgOrigin: string | null
 }
 
 async function readSite(): Promise<{ site: PublicConfig['site']; announcement: string | null }> {
@@ -59,6 +61,7 @@ export const getPublicConfig = createServerFn({ method: 'GET' })
       cap: { endpoint: env().CAP_API_ENDPOINT },
       viewer: v ? { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) } : null,
       stats,
+      imgOrigin: env().PUBLIC_IMG_BASE ? new URL(env().PUBLIC_IMG_BASE).origin : null,
     }
   })
 

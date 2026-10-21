@@ -12,6 +12,7 @@ import {
 import { Upload } from '@aws-sdk/lib-storage'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 import { env } from '../env'
+import { objectCacheControl } from './keys'
 
 let client: S3Client | undefined
 let presignClient: S3Client | undefined
@@ -67,8 +68,37 @@ export async function getObjectBytes(key: string): Promise<Uint8Array> {
   return res.Body!.transformToByteArray()
 }
 
+/**
+ * Write an object. Without an explicit Cache-Control, public web images (derived/, portraits, avatars)
+ * get the one-year immutable header, so the bucket's public domain serves them cacheable as is.
+ */
 export async function putObject(key: string, body: Uint8Array | Buffer, contentType: string, cacheControl?: string) {
-  await s3().send(new PutObjectCommand({ Bucket: bucket(), Key: key, Body: body, ContentType: contentType, CacheControl: cacheControl }))
+  await s3().send(
+    new PutObjectCommand({ Bucket: bucket(), Key: key, Body: body, ContentType: contentType, CacheControl: cacheControl ?? objectCacheControl(key) }),
+  )
+}
+
+/**
+ * Rewrite an object's Content-Type and Cache-Control in place (CopyObject onto itself, MetadataDirective
+ * REPLACE). User metadata is passed through, since REPLACE would drop it. With ifMatch the copy fails
+ * (412) if the object changed after it was inspected.
+ */
+export async function replaceObjectHeaders(
+  key: string,
+  headers: { contentType: string; cacheControl: string; metadata?: Record<string, string>; ifMatch?: string },
+) {
+  await s3().send(
+    new CopyObjectCommand({
+      Bucket: bucket(),
+      Key: key,
+      CopySource: `${bucket()}/${encodeURIComponent(key).replace(/%2F/g, '/')}`,
+      CopySourceIfMatch: headers.ifMatch,
+      MetadataDirective: 'REPLACE',
+      ContentType: headers.contentType,
+      CacheControl: headers.cacheControl,
+      Metadata: headers.metadata,
+    }),
+  )
 }
 
 export async function copyObject(fromKey: string, toKey: string, contentType?: string, cacheControl?: string) {
@@ -119,6 +149,12 @@ export async function getObjectRange(key: string, start: number, end: number): P
   return bytes.byteLength > end - start + 1 ? bytes.subarray(0, end - start + 1) : bytes
 }
 
+/** The first key under a prefix, or null when there is none. */
+export async function firstKey(prefix: string): Promise<string | null> {
+  const res = await s3().send(new ListObjectsV2Command({ Bucket: bucket(), Prefix: prefix, MaxKeys: 1 }))
+  return res.Contents?.[0]?.Key ?? null
+}
+
 /** Every key under a prefix (paginated ListObjectsV2). */
 export async function listKeys(prefix: string): Promise<string[]> {
   const keys: string[] = []
@@ -142,7 +178,7 @@ export function createUpload(
 ): Upload {
   return new Upload({
     client: s3(),
-    params: { Bucket: bucket(), Key: key, Body: body, ContentType: opts.contentType, CacheControl: opts.cacheControl },
+    params: { Bucket: bucket(), Key: key, Body: body, ContentType: opts.contentType, CacheControl: opts.cacheControl ?? objectCacheControl(key) },
     partSize: opts.partSize ?? 8 * 1024 * 1024,
     queueSize: opts.queueSize ?? 2,
     leavePartsOnError: false,

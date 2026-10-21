@@ -14,6 +14,12 @@
 //                                            characters.portrait_key, theme colours where empty unless
 //                                            --no-colors (idempotent; `-` reads the manifest from stdin)
 //   bun src/cli.ts derive-colors [--dry-run] theme colours from portraits or avatar stickers, where empty
+//   bun src/cli.ts media set-cache-control --prefix derived/v1/ [--dry-run] [--concurrency 8]
+//                                            one-year immutable Cache-Control and the image Content-Type on
+//                                            existing public web images (derived/, portraits, avatars only)
+//   bun src/cli.ts media check-public [--base https://i.sparxie.moe]
+//                                            what the bucket's public domain serves: web images 200 and
+//                                            cacheable, backups/uploads/originals 403 or 404 (PASS/FAIL)
 import { eq } from 'drizzle-orm'
 import { audit } from './server/audit'
 import { closeDb, db, schema } from './server/db/client'
@@ -131,6 +137,35 @@ async function presignSelftestCmd() {
   if (!r.ok) process.exitCode = 1
 }
 
+async function mediaCmd(args: string[]) {
+  const [sub, ...rest] = args
+  if (sub === 'set-cache-control') {
+    const flags = parseFlags(rest, { prefix: 'string', 'dry-run': 'boolean', concurrency: 'string' })
+    if (typeof flags.prefix !== 'string') throw new Error('usage: media set-cache-control --prefix derived/v1/ [--dry-run] [--concurrency 8]')
+    const { setCacheControl } = await import('./server/media/cache-control')
+    const dryRun = flags['dry-run'] === true
+    const r = await setCacheControl(flags.prefix, { dryRun, concurrency: positiveInt(flags.concurrency, 'concurrency'), log: (l) => console.log(`  ${l}`) })
+    console.log(`set-cache-control ${flags.prefix}: scanned ${r.scanned}, already right ${r.unchanged}, ${dryRun ? 'would update' : 'updated'} ${r.updated}, failed ${r.failed.length}`)
+    for (const f of r.failed.slice(0, 20)) console.log(`  - ${f.key}: ${f.error}`)
+    if (r.failed.length) process.exitCode = 1
+    return
+  }
+  if (sub === 'check-public') {
+    const flags = parseFlags(rest, { base: 'string' })
+    const { env } = await import('./server/env')
+    const base = (typeof flags.base === 'string' ? flags.base : env().PUBLIC_IMG_BASE).replace(/\/+$/, '')
+    if (!base) throw new Error('check-public: set PUBLIC_IMG_BASE or pass --base https://…')
+    const { checkPublic } = await import('./server/media/check-public')
+    const r = await checkPublic(base)
+    console.log(`check-public: ${base}`)
+    for (const l of r.lines) console.log(`  ${l.line}`)
+    console.log(r.ok ? 'check-public: PASS' : 'check-public: FAIL')
+    if (!r.ok) process.exitCode = 1
+    return
+  }
+  throw new Error('usage: media set-cache-control … | media check-public [--base URL]')
+}
+
 const USAGE = [
   'commands:',
   '  promote-admin <email>',
@@ -141,6 +176,8 @@ const USAGE = [
   '  presign-selftest',
   '  import-portraits <manifest.json | -> [--dry-run] [--no-colors] [--delay 800]',
   '  derive-colors [--dry-run]',
+  '  media set-cache-control --prefix derived/v1/ [--dry-run] [--concurrency 8]',
+  '  media check-public [--base https://i.sparxie.moe]',
 ].join('\n')
 
 async function main() {
@@ -171,6 +208,9 @@ async function main() {
       break
     case 'derive-colors':
       await deriveColorsCmd(args)
+      break
+    case 'media':
+      await mediaCmd(args)
       break
     default:
       console.log(USAGE)

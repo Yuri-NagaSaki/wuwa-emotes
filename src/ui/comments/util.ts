@@ -1,5 +1,6 @@
 import { MAX_STICKERS, STICKER_MARKER_RE, stickerMarker } from '#/server/comments/constants'
 import type { Sticker } from '#/server/comments/types'
+import { isWebImageUrl } from '#/shared/web-image'
 
 // Browser-side helpers for the comment components: times, local storage, composing the body.
 
@@ -51,7 +52,7 @@ function write(key: string, value: unknown) {
 
 function isSticker(v: unknown): v is Sticker {
   const s = v as Sticker
-  return !!s && typeof s.id === 'string' && /^r-[0-9a-f]{20}$/.test(s.id) && typeof s.poster === 'string' && s.poster.startsWith('/img/')
+  return !!s && typeof s.id === 'string' && /^r-[0-9a-f]{20}$/.test(s.id) && typeof s.poster === 'string' && isWebImageUrl(s.poster)
 }
 
 export function recentStickers(): Sticker[] {

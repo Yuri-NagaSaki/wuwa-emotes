@@ -68,3 +68,14 @@ describe('production requirements', () => {
     expect(() => parseEnv({ ...PROD_BASE, AUTH_SECRET: 'short' })).toThrow(/AUTH_SECRET/)
   })
 })
+
+describe('public images', () => {
+  test('PUBLIC_IMG_BASE: unset by default, trailing slash dropped, http(s) only, no query', () => {
+    expect(parseEnv({ NODE_ENV: 'development' }).PUBLIC_IMG_BASE).toBe('')
+    expect(parseEnv(PROD_BASE).PUBLIC_IMG_BASE).toBe('')
+    expect(parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'https://i.sparxie.example/' }).PUBLIC_IMG_BASE).toBe('https://i.sparxie.example')
+    expect(parseEnv({ NODE_ENV: 'development', PUBLIC_IMG_BASE: 'http://127.0.0.1:9000/chaochi-x' }).PUBLIC_IMG_BASE).toBe('http://127.0.0.1:9000/chaochi-x')
+    expect(() => parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'ftp://i.example' })).toThrow(/PUBLIC_IMG_BASE/)
+    expect(() => parseEnv({ ...PROD_BASE, PUBLIC_IMG_BASE: 'https://i.example/?x=1' })).toThrow(/PUBLIC_IMG_BASE/)
+  })
+})

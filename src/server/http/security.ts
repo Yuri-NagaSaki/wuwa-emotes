@@ -10,13 +10,18 @@ export interface SecurityConfig {
   capOrigin: string
   /** origins presigned S3 URLs can point at (browser uploads, batch downloads, 查看原图) */
   storageOrigins: string[]
+  /** origin of PUBLIC_IMG_BASE (web images straight from the bucket), when set: img-src only */
+  imageOrigins: string[]
 }
 
-export function securityConfig(e: Pick<Env, 'NODE_ENV' | 'CAP_API_ENDPOINT' | 'S3_ENDPOINT' | 'S3_PUBLIC_ENDPOINT' | 'S3_BUCKET' | 'S3_FORCE_PATH_STYLE'>): SecurityConfig {
+export function securityConfig(
+  e: Pick<Env, 'NODE_ENV' | 'CAP_API_ENDPOINT' | 'S3_ENDPOINT' | 'S3_PUBLIC_ENDPOINT' | 'S3_BUCKET' | 'S3_FORCE_PATH_STYLE'> & Partial<Pick<Env, 'PUBLIC_IMG_BASE'>>,
+): SecurityConfig {
   return {
     production: e.NODE_ENV === 'production',
     capOrigin: new URL(e.CAP_API_ENDPOINT).origin,
     storageOrigins: storageOrigins(e),
+    imageOrigins: e.PUBLIC_IMG_BASE ? [new URL(e.PUBLIC_IMG_BASE).origin] : [],
   }
 }
 
@@ -45,13 +50,16 @@ export function storageOrigins(e: Pick<Env, 'S3_ENDPOINT' | 'S3_PUBLIC_ENDPOINT'
  * - 'unsafe-eval': that instrumentation script evaluates code inside the frame. Without it the browser
  *   blocks the eval, the widget waits for "Instrumentation timeout" and stays at 验证中 (seen on
  *   production). It cannot be scoped to the frame, which inherits this policy.
- * - img-src includes the storage origins: 查看原图 is a 302 to a presigned URL, which an <img> must load.
+ * - img-src includes the storage origins: 查看原图 is a 302 to a presigned URL, which an <img> must load;
+ *   and the PUBLIC_IMG_BASE origin (posters, previews and portraits from the bucket's public domain).
+ *   connect-src does not: scripts read image bytes from the same-origin /img only.
  * Checked in headless Chromium against the production Cap instance: inline script, blob: worker
  * compiling WASM, the instrumentation frame and fetch to the Cap origin work; fetch to other origins is
  * blocked.
  */
 export function buildCsp(cfg: SecurityConfig): string {
   const storage = cfg.storageOrigins.join(' ')
+  const images = [...new Set([...cfg.storageOrigins, ...cfg.imageOrigins])].join(' ')
   const connect = ["'self'", cfg.capOrigin, storage]
   // Vite's HMR client uses a websocket in development
   if (!cfg.production) connect.push('ws:', 'wss:')
@@ -59,7 +67,7 @@ export function buildCsp(cfg: SecurityConfig): string {
     ['default-src', "'self'"],
     ['script-src', "'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval'"],
     ['style-src', "'self' 'unsafe-inline'"],
-    ['img-src', `'self' data: blob: ${storage}`],
+    ['img-src', `'self' data: blob: ${images}`],
     ['font-src', "'self'"],
     ['connect-src', connect.join(' ')],
     ['worker-src', "'self' blob:"],

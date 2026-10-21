@@ -20,6 +20,13 @@ const DEV_DEFAULTS: Record<string, string> = {
   S3_FORCE_PATH_STYLE: 'true',
 }
 
+/** An http(s) URL without query or fragment; the trailing slash is dropped ('' when unset). */
+const publicBase = z
+  .union([z.url({ protocol: /^https?$/ }), z.literal('')])
+  .default('')
+  .refine((v) => !v || (!new URL(v).search && !new URL(v).hash), 'must not have a query or fragment')
+  .transform((v) => v.replace(/\/+$/, ''))
+
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
   SITE_NAME: z.string().min(1).default('潮池'),
@@ -50,6 +57,10 @@ const schema = z.object({
 
   CF_ZONE_ID: z.string().default(''),
   CF_PURGE_TOKEN: z.string().default(''),
+
+  // Public web images (p240, a160, portraits, avatars) straight from the bucket's custom domain, e.g.
+  // https://i.sparxie.moe. Empty: every image URL is the origin's /img path (src/server/media/keys.ts).
+  PUBLIC_IMG_BASE: publicBase,
 
   LOG_LEVEL: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
 })

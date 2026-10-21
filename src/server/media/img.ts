@@ -1,11 +1,14 @@
-import { derivedKey, imgUrl, type ImgRef, parseImgPath, parsePortraitPath, portraitKey } from './keys'
+import { derivedKey, IMMUTABLE, imgPath, type ImgRef, parseImgPath, parsePortraitPath, portraitKey } from './keys'
 
-// /img: the only public path to images. Reads derived/v1/ (published emojis only) and
-// characters/v1/portraits/ (official character portraits, /img/v1/portrait/…).
+// /img: the origin's path to web images. Reads derived/v1/ (published emojis only) and
+// characters/v1/portraits/ (official character portraits, /img/v1/portrait/…). With PUBLIC_IMG_BASE
+// set, pages load p240, a160 and portraits from the bucket's public domain instead; /img keeps serving
+// every variant (old links, cached HTML, same-origin byte reads, development).
 // Hits need no database lookup; a missing `full` variant is the one case that checks the database,
 // so nobody can push a pending (unreviewed) image into derived/ by guessing its URL.
 
-export const IMMUTABLE = 'public, max-age=31536000, immutable'
+export { IMMUTABLE }
+
 const MISS_CACHE = 'public, max-age=60'
 
 export interface ImgObject {
@@ -81,11 +84,12 @@ export async function handleImg(request: Request, deps: ImgDeps): Promise<Respon
     const row = await deps.lookupEmoji(ref.emojiId)
     if (canGenerateFull(ref, row)) {
       await deps.enqueueFull(ref.emojiId)
-      // a160 exists only for animated emojis; static ones fall back to the poster
+      // a160 exists only for animated emojis; static ones fall back to the poster. Same origin even with
+      // PUBLIC_IMG_BASE: the clipboard draws `full` on a canvas, which a cross-origin redirect would taint.
       const fallback = row!.frames > 1 ? 'a160' : 'p240'
       return new Response(null, {
         status: 302,
-        headers: { ...baseHeaders, location: imgUrl({ ...ref, variant: fallback }), 'cache-control': 'no-store' },
+        headers: { ...baseHeaders, location: imgPath({ ...ref, variant: fallback }), 'cache-control': 'no-store' },
       })
     }
   }
