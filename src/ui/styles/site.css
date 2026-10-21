@@ -18,21 +18,21 @@
 
 .head { position: sticky; top: 0; z-index: 30; background: color-mix(in srgb, var(--tp-bg) 92%, transparent); border-bottom: 1.5px solid var(--tp-line); padding-top: var(--safe-top); }
 .head .wrap { display: flex; align-items: center; gap: 22px; height: var(--head-h); }
-.nav { display: flex; gap: 4px; }
-.nav a { padding: 8px 14px; border-radius: var(--pill); font-weight: 700; color: var(--tp-body); font-size: 15px; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
+.nav { display: flex; gap: 4px; flex: none; }
+.nav a { padding: 8px 14px; border-radius: var(--pill); white-space: nowrap; font-weight: 700; color: var(--tp-body); font-size: 15px; transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease); }
 .nav a:hover { background: var(--tp-sand); color: var(--tp-ink); }
 .nav a[aria-current="page"] { background: var(--tp-ink); color: var(--tp-bg); }
-.head-search { flex: 1; max-width: 360px; margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--tp-input); border: 2px solid var(--tp-line-2); border-radius: var(--pill); padding: 0 8px 0 14px; height: 42px; color: var(--tp-faint); font-size: inherit; cursor: text; text-align: left; transition: border-color var(--t-fast) var(--ease); }
+.head-search { flex: 1; min-width: 0; max-width: 360px; margin-left: auto; display: flex; align-items: center; gap: 8px; background: var(--tp-input); border: 2px solid var(--tp-line-2); border-radius: var(--pill); padding: 0 8px 0 14px; height: 42px; color: var(--tp-faint); font-size: inherit; cursor: text; text-align: left; transition: border-color var(--t-fast) var(--ease); }
 .head-search:hover { border-color: var(--tp-teal); }
 .head-search span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .head-search .kbd { flex: none; }
-.head-actions { display: flex; align-items: center; gap: 10px; }
+.head-actions { display: flex; align-items: center; gap: 10px; flex: none; }
 .icon-btn.m-search { display: none; }
 /* 白昼 / 夜潮: show the icon of the theme you would switch to */
 .theme-btn .i-sun { display: none; }
 [data-theme="night"] .theme-btn .i-sun { display: block; }
 [data-theme="night"] .theme-btn .i-moon { display: none; }
-.bottle-btn { display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 14px 0 10px; border-radius: var(--pill); border: 2px solid var(--tp-line-2); background: var(--tp-card); color: var(--tp-ink); font-weight: 500; }
+.bottle-btn { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; height: 42px; padding: 0 14px 0 10px; border-radius: var(--pill); border: 2px solid var(--tp-line-2); background: var(--tp-card); color: var(--tp-ink); font-weight: 500; }
 .bottle-btn:hover { border-color: var(--tp-teal); }
 .bottle-btn svg.i { width: 20px; height: 20px; }
 .bottle-btn .count { min-width: 22px; height: 22px; border-radius: 11px; background: var(--tp-teal); color: var(--tp-on-teal); font: 900 12px/22px var(--tp-font-num); text-align: center; padding: 0 6px; }
@@ -77,10 +77,20 @@ html[data-viewer-pending] .head .user-slot[href="/login"] { visibility: hidden; 
 .fab-bottle .count { position: absolute; top: -6px; right: -6px; min-width: 24px; height: 24px; border-radius: 12px; background: var(--tp-teal); color: var(--tp-on-teal); font: 900 12px/24px var(--tp-font-num); text-align: center; padding: 0 6px; border: 2px solid var(--tp-bg); }
 .fab-bottle svg.i { width: 30px; height: 30px; }
 
+/* between phone and desktop (tablets, small laptops) the header keeps one line: labels never wrap, the
+   打包 label goes first, then the search field becomes the search button phones use */
 @media (max-width: 1100px) {
+  .head .wrap { gap: 14px; }
   .nav a { padding: 8px 10px; }
   .head-search { max-width: 260px; }
+  .bottle-btn .label { display: none; }
+  .bottle-btn { padding: 0 10px 0 8px; }
   .foot .wrap { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 960px) {
+  .head-search { display: none; }
+  .icon-btn.m-search { display: inline-grid; }
+  .head-actions { margin-left: auto; }
 }
 @media (max-width: 760px) {
   .nav, .head-search, .bottle-btn .label, .head .btn.user-slot { display: none; }
