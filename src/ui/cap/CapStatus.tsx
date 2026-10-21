@@ -34,12 +34,14 @@ export function CapStatus({ cap, className }: { cap: Pick<InvisibleCap, 'phase' 
   return (
     <div className={cx('cap-line', `is-${state}`, known && 'is-known', className)} role="status" aria-live="polite" title="在后台自动完成，不需要点击">
       <span className="cap-ico">{state === 'ready' ? <Icon name="check" /> : <Shield />}</span>
-      <span className="cap-txt">{TEXT[state]}</span>
-      {state === 'failed' ? (
-        <button type="button" className="cap-retry" onClick={cap.retry}>
-          重试
-        </button>
-      ) : null}
+      <span className="cap-txt">
+        {TEXT[state]}
+        {state === 'failed' ? (
+          <button type="button" className="cap-retry" onClick={cap.retry}>
+            重试
+          </button>
+        ) : null}
+      </span>
       <span className="cap-bar" aria-hidden="true">
         <i style={known ? ({ '--cap-p': cap.progress! / 100 } as CSSProperties) : undefined} />
       </span>

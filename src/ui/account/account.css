@@ -8,17 +8,55 @@
 /* ============ auth ============ */
 /* prototype: a full-screen split; here it fills the first screen under the site header. */
 .auth { margin: 0 0 8px; min-height: clamp(560px, calc(100svh - var(--head-h) - 56px), 820px); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); border-radius: var(--r-xl); overflow: hidden; border: 2px solid var(--tp-line); background: var(--tp-bg); box-shadow: var(--sh-soft); }
-.auth-art { position: relative; background: var(--tp-deep); color: #eaf7f3; padding: 48px; display: grid; align-content: space-between; gap: 24px; overflow: hidden; }
-.auth-art.purple { background: color-mix(in srgb, var(--tp-deep) 80%, var(--c-purple)); }
-.auth-art h2 { color: #fff; font-size: 40px; line-height: 1.2; max-width: 10em; margin-top: 22px; }
-.auth-art p { color: #a9cfc8; max-width: 26em; margin-top: 12px; line-height: 1.75; }
+/* The art side (AuthLayout.tsx): the copy on the left over a scrim in the panel's tone, a wall of
+   sticker columns behind it on the right. --art-bg is the tone (登录 / 找回密码 / 重置密码: the deep
+   tide; 注册 / 验证邮箱: a violet of its own), --art-ink the lead text on it (≥ 4.5:1). */
+.auth-art { --art-bg: var(--tp-deep); --art-ink: #a9cfc8; --art-accent: var(--tp-teal); --art-solid: 352px; position: relative; isolation: isolate; background: var(--art-bg); color: #eaf7f3; padding: 48px; display: grid; align-content: space-between; gap: 24px; overflow: hidden; }
+.auth-art.purple { --art-bg: #3a2b6c; --art-ink: #d6cbf5; --art-accent: #c9b2ff; color: #f3eeff; }
+[data-theme="night"] .auth-art.purple { --art-bg: #1e1638; --art-ink: #cfc2f2; }
+.auth-art .art-copy { position: relative; max-width: 300px; }
+.auth-art h2 { color: #fff; font-size: 40px; line-height: 1.2; margin-top: 22px; }
+.auth-art p { color: var(--art-ink); margin-top: 12px; line-height: 1.75; text-wrap: pretty; }
 .auth-art .perks { display: grid; gap: 10px; margin-top: 24px; }
 .auth-art .perks div { display: flex; gap: 10px; align-items: center; font-weight: 700; }
-.auth-art .perks svg.i { color: var(--tp-teal); }
-.auth-art .back { color: #a9cfc8; font-weight: 700; display: inline-flex; gap: 6px; align-items: center; justify-self: start; position: relative; }
+.auth-art .perks svg.i { color: var(--art-accent); }
+.auth-art p.art-stats { margin-top: 22px; font: 800 13px/1.5 var(--tp-font-num); letter-spacing: 0.02em; }
+.auth-art .back { color: var(--art-ink); font-weight: 700; display: inline-flex; gap: 6px; align-items: center; justify-self: start; position: relative; }
 .auth-art .back:hover { color: #fff; }
-.auth-art .ring { position: absolute; right: -70px; bottom: -70px; width: 300px; height: 300px; border-radius: 50%; border: 26px solid color-mix(in srgb, var(--tp-teal) 22%, transparent); pointer-events: none; }
-.auth-art .ring::after { content: ""; position: absolute; inset: 46px; border-radius: 50%; border: 18px solid color-mix(in srgb, var(--tp-sun) 20%, transparent); }
+
+/* the scrim: solid behind the copy (so its contrast is the tone's own), then thinning out over the wall;
+   a light fade at the top and bottom edges */
+.auth-art.has-wall::before { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background:
+  linear-gradient(180deg, color-mix(in srgb, var(--art-bg) 55%, transparent) 0, transparent 90px, transparent calc(100% - 90px), color-mix(in srgb, var(--art-bg) 55%, transparent) 100%),
+  linear-gradient(90deg, var(--art-bg) 0, var(--art-bg) var(--art-solid), color-mix(in srgb, var(--art-bg) 62%, transparent) calc(var(--art-solid) + 70px), color-mix(in srgb, var(--art-bg) 24%, transparent) calc(var(--art-solid) + 190px), color-mix(in srgb, var(--art-bg) 12%, transparent) 100%); }
+/* the wall: three columns of fixed-size wells, tilted a little; strip 1 (eager) is the right-hand one.
+   Each track holds its strip three times and moves by one copy per loop, the middle one the other way. */
+.art-wall { --well: 96px; --gap: 14px; position: absolute; z-index: -2; top: -90px; bottom: -90px; right: -18px; display: grid; grid-template-columns: repeat(3, var(--well)); column-gap: var(--gap); transform: rotate(-7deg); pointer-events: none; user-select: none; }
+.art-strip { grid-row: 1; min-width: 0; }
+.art-strip:nth-child(1) { grid-column: 3; }
+.art-strip:nth-child(2) { grid-column: 2; margin-top: calc(var(--well) * -0.55); }
+.art-strip:nth-child(3) { grid-column: 1; margin-top: calc(var(--well) * -0.2); }
+.art-strip:nth-child(n+4) { display: none; }
+.art-track { display: flex; flex-direction: column; animation: art-y 120s linear infinite; will-change: transform; }
+.art-strip:nth-child(2) .art-track { animation-direction: reverse; animation-duration: 140s; }
+.art-strip:nth-child(3) .art-track { animation-duration: 160s; }
+@keyframes art-y { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(0, calc(-100% / 3), 0); } }
+@keyframes art-x { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(calc(-100% / 3), 0, 0); } }
+/* wells like tiles elsewhere: light paper in both themes, clipped corners */
+.art-well { display: block; flex: none; width: var(--well); height: var(--well); margin: 0 0 var(--gap); padding: 9%; border-radius: 24px; overflow: hidden; background-color: var(--tp-well); background-image: radial-gradient(var(--tp-well-dot) 1.2px, transparent 1.3px); background-size: 12px 12px; box-shadow: 0 10px 22px -12px rgb(0 0 0 / 0.55); }
+.art-well img { display: block; width: 100%; height: 100%; object-fit: contain; }
+/* narrower desktops: the left-hand column would sit under the copy */
+@media (max-width: 1180px) and (min-width: 761px) {
+  .art-wall { grid-template-columns: repeat(2, var(--well)); }
+  .art-strip:nth-child(1) { grid-column: 2; }
+  .art-strip:nth-child(2) { grid-column: 1; }
+  .art-strip:nth-child(3) { display: none; }
+}
+/* still: a static wall */
+@media (prefers-reduced-motion: reduce) {
+  .art-track { animation: none; }
+}
+.is-still .art-track { animation: none; }
 .auth-form { display: grid; place-items: center; padding: 40px 24px; }
 /* one column: every child (and every row of the form) spans the card, so all left edges and widths match */
 .auth-card { width: min(420px, 100%); display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; animation: tp-fade var(--t) var(--ease) both; }
@@ -40,13 +78,13 @@
 /* Cap status line (src/ui/cap/CapStatus.tsx): one quiet line above the submit button, no frame. The
    height is fixed (text row, gap, 2px track) in every state; the track is always there and only shown
    while solving, so nothing under the line moves when the state changes. */
-.cap-line { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-rows: 20px 2px; column-gap: 8px; row-gap: 4px; align-items: center; height: 26px; margin: -4px 0 -6px; color: var(--tp-muted); font-size: 13px; line-height: 20px; font-weight: 600; cursor: default; }
+.cap-line { display: grid; grid-template-columns: 18px minmax(0, 1fr); grid-template-rows: 20px 2px; column-gap: 8px; row-gap: 4px; align-items: center; height: 26px; margin: -4px 0 -6px; color: var(--tp-muted); font-size: 13px; line-height: 20px; font-weight: 600; cursor: default; }
 .cap-line .cap-ico { grid-area: 1 / 1; display: grid; place-items: center; height: 20px; color: var(--tp-faint); transition: color var(--t) var(--ease); }
 .cap-line .cap-ico svg.i { width: 16px; height: 16px; }
-.cap-line .cap-txt { grid-area: 1 / 2; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.cap-line .cap-retry { grid-area: 1 / 3; height: 20px; padding: 0 4px; margin-right: -4px; border: 0; border-radius: 6px; background: none; color: var(--tp-teal-ink); font: inherit; font-weight: 800; line-height: 20px; cursor: pointer; }
+.cap-line .cap-txt { grid-area: 1 / 2; min-width: 0; white-space: nowrap; }
+.cap-line .cap-retry { height: 20px; margin-left: 6px; padding: 0 4px; border: 0; border-radius: 6px; background: none; color: var(--tp-teal-ink); font: inherit; font-weight: 800; line-height: 20px; vertical-align: top; cursor: pointer; }
 .cap-line .cap-retry:hover { text-decoration: underline; text-underline-offset: 3px; }
-.cap-line .cap-bar { grid-area: 2 / 2 / 3 / 4; height: 2px; border-radius: 2px; background: var(--tp-line); overflow: hidden; opacity: 0; transition: opacity var(--t) var(--ease); }
+.cap-line .cap-bar { grid-area: 2 / 2; height: 2px; border-radius: 2px; background: var(--tp-line); overflow: hidden; opacity: 0; transition: opacity var(--t) var(--ease); }
 .cap-line .cap-bar i { display: block; width: 100%; height: 100%; border-radius: inherit; background: var(--tp-teal); transform-origin: left center; transform: scaleX(var(--cap-p, 0)); transition: transform var(--t) var(--ease); }
 .cap-line.is-solving .cap-bar { opacity: 1; }
 /* before the solver reports progress: a short sweep, not a made-up percentage */
@@ -149,11 +187,23 @@
 @media (max-width: 760px) {
   /* edge to edge, like the prototype's phone frame */
   .auth { grid-template-columns: 1fr; margin: calc(-1 * var(--page-pt)) calc(-1 * var(--gutter)) 0; min-height: 0; border-radius: 0; border: 0; box-shadow: none; }
-  .auth-art { padding: 28px 20px 26px; gap: 8px; }
-  .auth-art h2 { font-size: 26px; }
-  .auth-art .perks, .auth-art .ring { display: none; }
+  .auth-art { padding: 24px 20px 22px; gap: 8px; }
+  .auth-art .art-copy { max-width: none; }
+  .auth-art h2 { font-size: 26px; margin-top: 10px; }
+  .auth-art .perks, .auth-art p.art-stats { display: none; }
   .auth-art p { margin-top: 8px; font-size: 13.5px; }
   .auth-art .logo-mark { width: 32px; height: 32px; }
+  /* two short rows drifting sideways beside the logo and title, above the lead; strips 3+ are not rendered */
+  .art-wall { --well: 46px; --gap: 8px; top: 12px; bottom: auto; right: -40px; left: 50%; grid-template-columns: none; grid-template-rows: repeat(2, var(--well)); column-gap: 0; row-gap: var(--gap); transform: rotate(-5deg); }
+  .art-strip:nth-child(n) { grid-column: 1; margin: 0; }
+  .art-strip:nth-child(1) { grid-row: 1; }
+  .art-strip:nth-child(2) { grid-row: 2; margin-left: calc(var(--well) * -0.5); }
+  .art-strip:nth-child(n+3) { display: none; }
+  .art-track { flex-direction: row; width: max-content; animation-name: art-x; animation-duration: 90s; }
+  .art-well { margin: 0 var(--gap) 0 0; padding: 5px; border-radius: 14px; box-shadow: 0 6px 14px -8px rgb(0 0 0 / 0.55); }
+  .auth-art.has-wall::before { background:
+    linear-gradient(180deg, transparent 0, transparent 104px, var(--art-bg) 128px),
+    linear-gradient(90deg, var(--art-bg) 0, var(--art-bg) 48%, color-mix(in srgb, var(--art-bg) 58%, transparent) 64%, color-mix(in srgb, var(--art-bg) 22%, transparent) 100%); }
   .auth-form { padding: 22px 16px 24px; align-items: start; }
   .me-h { padding-top: 0; gap: 14px; }
   .me-h .avatar { width: 64px; height: 64px; font-size: 24px; }

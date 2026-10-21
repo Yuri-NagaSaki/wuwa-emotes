@@ -1,13 +1,21 @@
 import type { ReactNode } from 'react'
 import { cx } from '../cx'
+import { fmtN } from '../format'
 import { Icon, type IconName } from '../Icon'
 import { AppLink } from '../link'
 import { LogoMark } from '../LogoMark'
+import { useOptionalSiteConfig } from '../site-config'
+import type { ArtSticker } from './art'
 
 // The auth split from the prototype (登录 / 注册 / 找回密码): an art panel on the left, the form card on
 // the right. Phones stack them edge to edge, the art panel reduced to the title, one sentence and the
 // way back. Everything in the card is one column: each child spans the card's full width (titles,
 // text, fields, notices, buttons and link rows alike), so no element ends short of the others.
+//
+// The art panel: a wall of real stickers (loaded by the route from the home data, art.ts) drifting
+// slowly in columns, under a scrim in the panel's tone that is solid behind the text. The wall is
+// decoration only (aria-hidden, absolutely placed, fixed-size wells), so it never moves the layout and
+// the form does not wait for it. Phones keep two short rows behind the title.
 
 const PERKS: [IconName, string][] = [
   ['heart', '收藏夹多端同步'],
@@ -16,16 +24,51 @@ const PERKS: [IconName, string][] = [
   ['bell', '审核结果和回复提醒'],
 ]
 
+/** Columns on a wide desktop (two on a narrow one); phones show the first two as rows. */
+const STRIPS = 3
+/** Copies of each strip in its track: one strip of stickers is shorter than the panel. */
+const COPIES = 3
+
 /**
- * `perks`: the login panel of the prototype (perks, the decoration and 回到首页), used by 登录, 找回密码
- * and 重置密码. Without it the panel is the register one: title and one sentence.
+ * The drifting wall. Strip k holds stickers k, k+3, …; each track repeats its strip COPIES times and
+ * moves by one copy per loop (CSS: .art-track). The first copy of the first two strips is eager (on
+ * screen on every size), everything else lazy: the duplicates reuse the same URLs, and strip 3 is not
+ * rendered on phones and narrow desktops (display: none), so its stickers are never fetched there.
  */
-export function AuthLayout({ title, lead, perks, tone, children }: { title: ReactNode; lead: ReactNode; perks?: boolean; tone?: 'purple'; children: ReactNode }) {
+function ArtWall({ stickers }: { stickers: ArtSticker[] }) {
+  const strips = Array.from({ length: STRIPS }, (_, s) => stickers.filter((_, i) => i % STRIPS === s))
+  return (
+    <div className="art-wall" aria-hidden="true">
+      {strips.map((list, s) => (
+        <div key={s} className="art-strip">
+          <div className="art-track">
+            {Array.from({ length: COPIES }, (_, copy) =>
+              list.map((st) => (
+                <span key={`${copy}-${st.id}`} className="art-well">
+                  <img src={st.src} width={st.w} height={st.h} alt="" decoding="async" loading={copy === 0 && s < 2 ? 'eager' : 'lazy'} fetchPriority="low" draggable={false} />
+                </span>
+              )),
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+/**
+ * `perks`: the login panel of the prototype (perks and 回到首页), used by 登录, 找回密码 and 重置密码.
+ * Without it the panel is the register one: title and one sentence. `tone`: purple for 注册 and
+ * 验证邮箱, the deep tide otherwise. `art`: the wall's stickers (none: the plain panel).
+ */
+export function AuthLayout({ title, lead, perks, tone, art, children }: { title: ReactNode; lead: ReactNode; perks?: boolean; tone?: 'purple'; art?: ArtSticker[]; children: ReactNode }) {
+  const stats = useOptionalSiteConfig()?.stats
   return (
     <div className="wrap">
       <div className="auth">
-        <div className={cx('auth-art', tone)}>
-          <div>
+        <div className={cx('auth-art', tone, art?.length ? 'has-wall' : null)}>
+          {art?.length ? <ArtWall stickers={art} /> : null}
+          <div className="art-copy">
             <LogoMark />
             <h2>{title}</h2>
             <p>{lead}</p>
@@ -39,15 +82,17 @@ export function AuthLayout({ title, lead, perks, tone, children }: { title: Reac
                 ))}
               </div>
             ) : null}
+            {stats && stats.emojis > 0 ? (
+              <p className="art-stats">
+                表情 {fmtN(stats.emojis)} 张 · 表情包 {fmtN(stats.packs)} 个
+              </p>
+            ) : null}
           </div>
           {perks ? (
-            <>
-              <span className="ring" aria-hidden="true" />
-              <AppLink to="/" className="back">
-                <Icon name="back" size="sm" />
-                回到首页
-              </AppLink>
-            </>
+            <AppLink to="/" className="back">
+              <Icon name="back" size="sm" />
+              回到首页
+            </AppLink>
           ) : null}
         </div>
         <div className="auth-form">

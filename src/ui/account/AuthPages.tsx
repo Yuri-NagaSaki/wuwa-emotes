@@ -7,6 +7,7 @@ import { useInvisibleCap, type InvisibleCap } from '../cap/useInvisibleCap'
 import { Check, Field, Input } from '../Field'
 import { AppLink } from '../link'
 import { useSiteConfig } from '../site-config'
+import type { ArtSticker } from './art'
 import { AuthAlt, AuthLayout, AuthNotice, PasswordMeter, SentPanel } from './AuthLayout'
 import { authClient, authErrorText, EMAIL_RE, passwordStrength, safeNext, STRENGTH_TEXT, withCap, type AuthFailure } from './auth-client'
 
@@ -113,7 +114,7 @@ function VerificationSent({ email, back, afterSignUp }: { email: string; back: R
 
 const LOGIN_ART = { title: <>潮水退了，<br />表情都还在。</>, lead: '下载不需要账号。登录后可以收藏、评论，也可以投稿自己的表情包。' }
 
-export function LoginPage({ next }: { next?: string }) {
+export function LoginPage({ next, art }: { next?: string; art?: ArtSticker[] }) {
   const { site } = useSiteConfig()
   const router = useRouter()
   const navigate = useNavigate()
@@ -159,7 +160,7 @@ export function LoginPage({ next }: { next?: string }) {
   }
 
   return (
-    <AuthLayout perks title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
+    <AuthLayout perks art={art} title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
       {sentTo ? (
         <VerificationSent
           email={sentTo}
@@ -221,7 +222,7 @@ export function LoginPage({ next }: { next?: string }) {
 
 // ---------- 注册 ----------
 
-export function RegisterPage({ next }: { next?: string }) {
+export function RegisterPage({ next, art }: { next?: string; art?: ArtSticker[] }) {
   const { site } = useSiteConfig()
   const router = useRouter()
   const navigate = useNavigate()
@@ -271,7 +272,7 @@ export function RegisterPage({ next }: { next?: string }) {
   }
 
   return (
-    <AuthLayout tone="purple" title={<>来{site.name}<br />安个家</>} lead="注册只需要邮箱。邮箱只用来验证和找回密码，不会公开。">
+    <AuthLayout tone="purple" art={art} title={<>来{site.name}<br />安个家</>} lead="注册只需要邮箱。邮箱只用来验证和找回密码，不会公开。">
       {sentTo ? (
         <VerificationSent
           email={sentTo}
@@ -328,7 +329,7 @@ export function RegisterPage({ next }: { next?: string }) {
 
 // ---------- 忘记密码 ----------
 
-export function ForgotPasswordPage() {
+export function ForgotPasswordPage({ art }: { art?: ArtSticker[] }) {
   const [email, setEmail] = useState('')
   const [emailErr, setEmailErr] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -356,7 +357,7 @@ export function ForgotPasswordPage() {
   }
 
   return (
-    <AuthLayout perks title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
+    <AuthLayout perks art={art} title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
       {sentTo ? (
         <>
           <SentPanel title="邮件已发出">
@@ -393,7 +394,7 @@ export function ForgotPasswordPage() {
 
 // ---------- 重置密码 ----------
 
-export function ResetPasswordPage({ token, error: linkError }: { token?: string; error?: string }) {
+export function ResetPasswordPage({ token, error: linkError, art }: { token?: string; error?: string; art?: ArtSticker[] }) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [busy, setBusy] = useState(false)
@@ -421,7 +422,7 @@ export function ResetPasswordPage({ token, error: linkError }: { token?: string;
 
   const invalid = linkError || !token
   return (
-    <AuthLayout perks title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
+    <AuthLayout perks art={art} title={LOGIN_ART.title} lead={LOGIN_ART.lead}>
       {invalid ? (
         <>
           <SentPanel icon="warn" bad title="链接无效或已过期">
