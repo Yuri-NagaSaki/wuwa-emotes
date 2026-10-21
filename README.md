@@ -67,7 +67,7 @@
 bun run test
 ```
 
-`bun run test` 依次运行 unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import 十组测试。除 unit、ui、pages 外，各组都需要上一节的本地服务（127.0.0.1:5432 的 PostgreSQL，127.0.0.1:9000 的 S3）。不需要浏览器：`tests/` 下的 `*-shots.ts`、`e2e-flow.ts`、`ui-smoke.ts` 是手动执行的脚本，不在测试集中。
+`bun run test` 依次运行 unit、ui、pages、integration、auth-mail、catalog、downloads、submissions 与 account、comments、admin、media 与 import 十一组测试。除 unit、ui、pages 外，各组都需要上一节的本地服务（127.0.0.1:5432 的 PostgreSQL，127.0.0.1:9000 的 S3）。不需要浏览器：`tests/` 下的 `*-shots.ts`、`e2e-flow.ts`、`ui-smoke.ts` 是手动执行的脚本，不在测试集中。
 
 - 用 `bun run test` 或 `bun run test:<组名>`，不要直接运行 `bun test`：各组的库名、桶名和环境变量由 `package.json` 的脚本设置，直接运行时所有组挤在一个进程里且缺少这些设置，测试会拒绝运行或报错。
 - 测试会删除并重建自己的数据库。库名必须匹配 `tests/integration/setup.ts` 中的规则 `^chaochi_(lane_[a-z0-9]+|test)(_[a-z0-9_]+)?$`，例如 `chaochi_test`、`chaochi_test_catalog`。media 与 import 组另有检查：库名必须含 `test`，S3 必须是本机地址。

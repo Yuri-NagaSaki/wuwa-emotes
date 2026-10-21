@@ -17,7 +17,7 @@
 9. **权限**：站长、管理员、用户三种角色。每个服务端函数都必须声明权限中间件，单元测试检查遗漏；最后一位站长由数据库触发器保护；每次写操作都写审计日志。
 10. **投稿**：所有注册用户都能投稿：草稿 → 审核中 → 已发布或已退回。待审核的图只经需要登录的 `/review-img` 预览，不进 CDN。用户投稿的图片只能经「投稿审核」上线，后台的「发布」不会绕过。
 11. **下载与风控**：默认对所有人开放，不需要登录；社区包允许下载原图，官方包只提供预览。限额和速率在后台「下载与风控」里配置，留空即不限制；另有两个紧急开关。可疑来源可以封禁或观察，可疑请求要先通过人机验证。v1 来源地址不出现在公开页面和 `CREDITS.txt` 里。
-12. **人机验证**：自托管的 Cap Standalone，在后台无感求解，不显示组件。服务端在注册、登录、申请重置密码、游客评论和被挑战的下载上校验令牌；重发验证邮件不需要人机验证，按 IP 限每 10 分钟 3 次。不依赖 Cloudflare 的挑战服务。
+12. **人机验证**：自托管的 Cap Standalone，在后台自动求解，不显示 Cap 组件，不需要点击；登录、注册、找回密码的提交按钮上方有一行状态文字。服务端在注册、登录、申请重置密码、游客评论和被挑战的下载上校验令牌；重发验证邮件不需要人机验证，按 IP 限每 10 分钟 3 次。不依赖 Cloudflare 的挑战服务。
 13. **评论**：楼中楼、贴纸 `:s[r-…]`、回应、举报。markdown-it 关闭 HTML，链接只放行白名单协议；游客评论需要人机验证；站长和管理员的评论不进审核。
 14. **不引入额外服务**：队列（pg-boss）、限流计数、会话和搜索（pg_trgm）都在 PostgreSQL 里，不用 Redis 和搜索引擎。
 15. **仓库公开**：仓库里没有服务器地址和密钥。密钥只在服务器的环境文件和开发机的 `.env.local` 里；CI 用 gitleaks 扫描全部历史，GitHub secret scanning 与 push protection 已开启。
@@ -438,7 +438,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 - **角色颜色**（`src/ui/pages/model.ts`）：`characters.theme_color`（调色板名或 CSS 颜色）有值时用它；没有时按 slug 做 31 进制哈希，从 13 个设计色里取一个。服务端和客户端结果相同，封面、标签和描边因此不会全是同一种颜色。
 - **动图播放**（`src/ui/playback.ts`）：网格默认显示 `p240`；指针悬停、键盘聚焦或位于视口中部时换成 `a160`。全页同时播放不超过 4 张：悬停的优先，其余按进入视口的先后，新滚入的等待而不是挤掉正在播放的。`prefers-reduced-motion`、Save-Data（或 `prefers-reduced-data`）、用户关闭「自动播放」时都不播放。
 - **页面外壳**：页头（含主题切换和「打包」按钮）、手机底部标签栏、页脚（显示目录总数）、站点公告条，模拟登录时置顶的「结束模拟」条，`Ctrl K` 命令面板（首次打开时才加载，联想来自 `suggestFn` 的进程内索引）。任何未匹配的地址都在站点外壳里渲染 404 页，并返回 404 状态码（`src/routes/_site/$.tsx`）。后台有独立外壳、按权限过滤的侧栏和顶部搜索（表情 ID 与 SHA-256 打开表情库，邮箱打开用户与权限，其余搜索表情包）。
-- **人机验证**：账号表单、游客评论和被挑战的下载都在后台求解（`src/ui/cap/invisible.ts`、`useInvisibleCap.ts`），不显示组件。表单出现时就开始工作量证明，提交时令牌通常已就绪，未就绪时按钮显示「验证中…」并等待；每次求解失败静默重试一次，仍失败时显示一行提示和「重试」。只因令牌被拒（过期或已用过）的请求换新令牌重发一次。`@cap.js/widget` 在需要时才加载，WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
+- **人机验证**：账号表单、游客评论和被挑战的下载都在后台求解（`src/ui/cap/invisible.ts`、`useInvisibleCap.ts`），不显示 Cap 组件。表单出现时就开始工作量证明，提交时令牌通常已就绪，未就绪时按钮显示「验证中…」并等待；每次求解失败静默重试一次。登录、注册、找回密码在提交按钮上方显示一行状态（`src/ui/cap/CapStatus.tsx`，高度固定，按钮不移动）：求解中「正在进行人机验证…」，下面 2 px 进度条跟随 Cap 自己的进度事件；完成后「已通过人机验证」；失败「人机验证没有完成」和「重试」。令牌放到 4 分钟时自动重新求解，被失败的提交用掉后也立即重新求解。游客评论不显示这一行，只在提交拿不到令牌时显示提示和「重试」。只因令牌被拒（过期或已用过）的请求换新令牌重发一次。`@cap.js/widget` 在需要时才加载，WASM 和 pako 后备从本站 `/cap/` 提供（构建时由 `scripts/copy-cap-assets.ts` 复制），不访问 jsDelivr。
 - **复制图片**（`src/ui/pages/clipboard.ts`）：剪贴板只能写入 PNG，静态贴纸先画到 canvas 再复制；动图复制后只剩一帧，所以提示改用「保存原图」。
 - **组件样张**：`/kit` 展示全部组件，只在开发环境存在。
 
@@ -590,6 +590,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 账号：
 
 - Better Auth 1.7.11，只启用邮箱密码（8–128 位）。配置了 `SMTP_URL` 与 `MAIL_FROM` 时，注册后发送验证邮件、未验证不能登录；没有配置时不要求验证，开发环境把邮件内容写进日志。生产的邮件经邮件服务商的 SMTP 从服务器发出，凭据只在服务器的环境文件里。
+- 用已有账号的邮箱再注册时，接口的回答和新注册一样（不暴露哪些邮箱注册过），Better Auth 本身不发信；`onExistingUserSignUp` 给这个邮箱发一封「这个邮箱已经注册过」的提醒，每个邮箱 10 分钟内最多一封，发送失败不占用这个名额。账号还没验证时，提醒里说明先验证，不附新的验证链接（这个账号的密码由第一次注册的人设定，验证链接会直接登录）。登录未验证的账号时不发信（没有开 `sendOnSignIn`），登录页提供「重新发送」；已经验证过的邮箱点「重新发送」也收不到信，页面写明这一点。测试见 `tests/auth-mail/`。
 - 验证邮件和重置密码邮件里的链接都是 1 小时内有效，邮件正文写明有效期（`src/server/auth/policy.ts`）。重置密码后，该账号在所有设备上的会话都失效（`revokeSessionsOnPasswordReset`）。
 - 会话 30 天，每天刷新一次。Drizzle 适配器使用复数表名；`tanstackStartCookies()` 放在插件列表最后。
 - Cloudflare 的缓存键忽略 Cookie，登录用户可能拿到边缘缓存里的匿名 HTML（第 2.1 节）。这只影响界面上显示的登录状态，不影响权限：每个服务端函数和需要登录的页面都在源站按会话 Cookie 检查，而这些响应从不共享缓存。
@@ -599,7 +600,7 @@ audit_logs       actor_id, actor_role, impersonated_by, action, target_type, tar
 人机验证：
 
 - 自托管 Cap Standalone。端点 `CAP_API_ENDPOINT`（路径里含站点键）与站点键 `CAP_SITE_KEY` 是公开配置，端点由根路由下发给浏览器；`CAP_SECRET_KEY` 只在服务器上，生产环境缺少它时配置校验报错（`src/server/env.ts`）。
-- 浏览器在后台向 Cap 服务器完成工作量证明，不显示组件（第 8.1 节），把得到的令牌放在 `x-cap-token` 头里随请求发送。服务端用密钥调用 `<CAP_API_ENDPOINT>siteverify`（5 秒超时）校验，令牌只能用一次。
+- 浏览器在后台向 Cap 服务器完成工作量证明，不显示 Cap 组件（第 8.1 节），把得到的令牌放在 `x-cap-token` 头里随请求发送。服务端用密钥调用 `<CAP_API_ENDPOINT>siteverify`（5 秒超时）校验，令牌只能用一次。
 - 校验位置：Better Auth 的 before 钩子保护 `CAP_PROTECTED_PATHS` 中的注册、登录、申请重置密码三个接口；游客评论；被挑战的下载（第 6.2 节）。重发验证邮件（`/send-verification-email`）不需要令牌：Better Auth 只给已存在且未验证的账号发信，这个接口另有每个 IP 每 10 分钟 3 次的限制，页面上还有 60 秒的冷却。
 - 任何错误都按失败处理：没有令牌或令牌无效返回 400（下载返回 428），Cap 服务不可用时账号接口和评论返回 503。
 - Cap 服务器上的 `CORS_ORIGIN` 只设为站点源（`deploy/README.md`）。`CAP_DISABLED=1` 只在非生产环境跳过校验，生产环境设置它时配置校验报错。
@@ -798,7 +799,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 
 ## 13. 测试与检查
 
-`bun run test` 依次运行十组测试：unit、ui、pages、integration、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 CI 的 `check` 作业在 cd1a907 上运行 822 个测试，全部通过。除 unit、ui、pages 外，各组都连本地（CI 中为服务容器）的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
+`bun run test` 依次运行十一组测试：unit、ui、pages、integration、auth-mail、catalog、downloads、submissions 与 account、comments、admin、media 与 import。2026-10-20 CI 的 `check` 作业在 cd1a907 上运行 822 个测试，全部通过。除 unit、ui、pages 外，各组都连本地（CI 中为服务容器）的 PostgreSQL 与 RustFS，每组使用自己的数据库和桶；测试拒绝使用生产桶 `wuwa`，库名必须匹配 `tests/integration/setup.ts` 的安全规则。运行方法见 `README.md`「测试」。
 
 其他检查：
 
@@ -849,7 +850,7 @@ pg-boss 的队列定义在 `src/server/jobs/queues.ts`，处理函数在 `src/se
 | D24 | 表情公开 = 已发布且衍生图就绪；包公开 = 至少有一张公开表情 | 页面上渲染的每个图片地址都存在 |
 | D25 | 瀑布流布局在服务端算好，由 CSS 按列宽定位 | 匿名 HTML 经 CDN 共享，服务端不知道视口；水合和图片加载都不移动布局 |
 | D26 | 贴纸的角色归属只由 `attribution.ts` 决定，整包复制的角色标签不算 | v1 在多角色包里给每张贴纸贴同一份角色列表，按它计数会让每个角色都「拥有」整包 |
-| D27 | 人机验证在后台无感求解，不显示组件 | 访客不用点击；令牌通常在提交前已经就绪 |
+| D27 | 人机验证在后台自动求解，不显示 Cap 组件；账号表单用一行状态文字说明进度 | 访客不用点击；令牌通常在提交前已经就绪；看得到验证在进行 |
 | D28 | 白昼与夜潮两套配色，贴纸底板始终是浅色纸面 | 很多贴纸有深色描边或不透明的白底 |
 
 ---

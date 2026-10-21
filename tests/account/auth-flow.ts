@@ -696,7 +696,10 @@ async function slowCapFlow(browser: Browser, vw: Viewport, email: string, report
   }
 }
 
-/** The Cap server fails: submit shows 验证中…, then one line with 重试; once it is back, 重试 signs in. */
+/**
+ * The Cap server fails: the status line above the button says 人机验证没有完成 with 重试; once the
+ * server is back, 重试 solves again (已通过人机验证) and 登录 signs in.
+ */
 async function capFailFlow(browser: Browser, vw: Viewport, email: string, report: Record<string, unknown>) {
   const l = await lane(browser, `capfail-${vw.tag}`, vw)
   const { page } = l
@@ -711,7 +714,9 @@ async function capFailFlow(browser: Browser, vw: Viewport, email: string, report
     const tries = cap.challenge - challengesBefore
     await shot(l, 'login-capfail')
     cap.fail = false
-    await clickText(page, '.auth-note button', '重试')
+    await clickText(page, '.cap-line button', '重试')
+    await waitText(page, '已通过人机验证')
+    await clickText(page, 'form button[type="submit"]', '登录')
     await waitPath(page, '/me')
     expectCap(l, '/sign-in/email', true)
     report[l.name] = { result: 'PASS', challengesOnSubmit: tries, issues: l.issues, consoleErrors: l.consoleErrors }

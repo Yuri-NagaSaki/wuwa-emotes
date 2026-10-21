@@ -10,7 +10,7 @@ import { log, maskEmails } from '../log'
 import { mailConfigured, sendMail } from '../mail'
 import { ac, authRoles } from './access'
 import { CAP_HEADER, capErrorMessage, verifyCapToken } from './cap'
-import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, mayNoticeExisting, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
+import { AUTH_RATE_RULES, CAP_PROTECTED_PATHS, durationText, forgetExistingNotice, mayNoticeExisting, RESET_PASSWORD_EXPIRES_IN, VERIFY_EMAIL_EXPIRES_IN } from './policy'
 import { guardProfileUpdate } from './profile-guard'
 import { signedInHintHook } from './signed-in-hint'
 
@@ -23,6 +23,14 @@ function authLog(level: 'debug' | 'info' | 'warn' | 'error', message: string, ..
     .filter((a): a is string => Boolean(a))
     .map((a) => maskEmails(a).slice(0, 300))
   log()[level](detail.length ? { detail } : {}, `auth: ${maskEmails(message)}`)
+}
+
+/** The 「这个邮箱已经注册过」 notice; an account that was never verified has to verify before 登录 works. */
+export function existingSignUpText(siteName: string, siteUrl: string, verified: boolean): string {
+  const head = `有人（可能是你）刚刚用这个邮箱在${siteName}注册。`
+  const tail = `忘记密码：${siteUrl}/forgot-password\n\n如果不是你本人操作，请忽略这封邮件，你的账号没有任何变化。`
+  if (verified) return `${head}这个邮箱已经有账号了，不需要再注册。\n\n直接登录：${siteUrl}/login\n${tail}`
+  return `${head}这个邮箱已经注册过，但还没有验证。\n\n登录时页面会提示邮箱未验证，点「重新发送」会收到新的验证邮件：${siteUrl}/login\n${tail}`
 }
 
 function createAuth() {
@@ -55,16 +63,15 @@ function createAuth() {
       // Signing up with an address that already has an account answers like a new sign-up (so the
       // form does not reveal which addresses are registered) and sends nothing by default. Tell the
       // owner of the address instead, so 「验证邮件已发出」 is never followed by an empty inbox.
+      // Not a fresh verification link for an unverified account: its password was chosen by whoever
+      // signed up first, and the link signs in. The notice sends them to 登录 (重新发送) or 忘记密码.
       onExistingUserSignUp: async ({ user }) => {
         if (!mayNoticeExisting(user.email)) return
         try {
-          await sendMail(
-            user.email,
-            `${e.SITE_NAME} · 这个邮箱已经注册过`,
-            `有人（可能是你）刚刚用这个邮箱在${e.SITE_NAME}注册。这个邮箱已经有账号了，不需要再注册。\n\n直接登录：${e.SITE_URL}/login\n忘记密码：${e.SITE_URL}/forgot-password\n\n如果不是你本人操作，请忽略这封邮件，你的账号没有任何变化。`,
-          )
+          await sendMail(user.email, `${e.SITE_NAME} · 这个邮箱已经注册过`, existingSignUpText(e.SITE_NAME, e.SITE_URL, user.emailVerified))
         } catch {
-          // already logged by sendMail; the sign-up answer must not change
+          // already logged by sendMail; the sign-up answer must not change. A later try may send it.
+          forgetExistingNotice(user.email)
         }
       },
       sendResetPassword: async ({ user, url }) => {

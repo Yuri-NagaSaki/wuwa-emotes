@@ -18,7 +18,7 @@ export async function sendMail(to: string, subject: string, text: string): Promi
   if (!t) {
     // Development without SMTP: print the message so links can be followed by hand.
     if (env().NODE_ENV !== 'production') log().info({ to, subject, text }, 'mail (not sent: SMTP not configured)')
-    else log().error({ to, subject }, 'mail: SMTP not configured; message dropped')
+    else log().error({ to: maskEmails(to), subject }, 'mail: SMTP not configured; message dropped')
     return
   }
   const started = Date.now()
