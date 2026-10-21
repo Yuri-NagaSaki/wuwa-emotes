@@ -1,8 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
+import { eq } from 'drizzle-orm'
 import { moderateComments, setPinned } from '#/server/comments/admin'
 import { MAX_STICKERS, REPLY_PREVIEW, ROOTS_PER_PAGE } from '#/server/comments/constants'
 import { listReplies, listThread, myComments, stickerSource } from '#/server/comments/read'
 import type { ThreadPage, ThreadRoot } from '#/server/comments/types'
+import { db, schema } from '#/server/db/client'
 import { deleteOwnComment, editComment, toggleReaction } from '#/server/comments/write'
 import { auditRows, commentRow, ctxOf, freshThread, insertComments, makeUser, post, ready, rejects, seedFixture, testDeps, type Fixture, type TestActor } from './fixture'
 
@@ -131,6 +133,27 @@ describe('visibility', () => {
     expect(page.formToken).toMatch(/^\d{13}\.[A-Za-z0-9_-]{32}$/)
     expect((await listThread(ctxOf(mod), { ...thread }, deps)).viewer?.staff).toBe(true)
     expect((await listThread(ctxOf(null), { ...thread }, deps)).viewer).toBeNull()
+  })
+
+  test('authors with a 头像 carry its 64 px URL; guests and users without one keep the letter', async () => {
+    const deps = testDeps({ settings: { firstCommentReview: false } })
+    const thread = await freshThread()
+    const pictured = await makeUser('pictured')
+    const hash = '0123456789abcdef'
+    await db().update(schema.users).set({ image: hash }).where(eq(schema.users.id, pictured.id))
+    const plain = await makeUser('plain')
+    // a value that is not a hash never becomes a URL
+    await db().update(schema.users).set({ image: 'https://example.test/x.png' }).where(eq(schema.users.id, plain.id))
+    const root = await post(deps, pictured, thread, '有头像')
+    await post(deps, plain, thread, '没有头像', { parentId: root.comment.id })
+    await post(deps, null, thread, '游客', { guestName: '小游客' })
+    const page = await listThread(ctxOf(null), { ...thread, sort: 'old' }, deps)
+    const authors = [page.items[0]!, ...page.items[0]!.replies, page.items[1]!].map((i) => [i.author?.name, i.author?.avatarUrl])
+    expect(authors).toEqual([
+      ['pictured', `/img/v1/avatar/${pictured.id}/${hash}-64.webp`],
+      ['plain', null],
+      ['小游客', null],
+    ])
   })
 })
 

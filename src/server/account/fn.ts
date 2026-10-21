@@ -2,9 +2,32 @@ import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 import { z } from 'zod'
 import { requireUser } from '../perm/fn'
+import { avatarFormFile } from './avatar-input'
 
-// 个人中心 server functions (summary, 通知, 结束模拟, 注销账号). Name, password and sessions go through
-// Better Auth's endpoints from the browser instead.
+// 个人中心 server functions (summary, 通知, 结束模拟, 注销账号, 头像). Name, password and sessions go
+// through Better Auth's endpoints from the browser instead; Better Auth never sets the avatar
+// (src/server/auth/profile-guard.ts).
+
+/**
+ * 更换头像: FormData with one `file`, the square crop the browser already resized (WebP or PNG). The
+ * server checks size and format, then re-encodes it (src/server/account/avatar.ts).
+ */
+export const setAvatarFn = createServerFn({ method: 'POST' })
+  .middleware([requireUser])
+  .validator((data: FormData) => avatarFormFile(data))
+  .handler(async ({ data, context }) => {
+    const { setAvatar } = await import('./avatar')
+    return setAvatar(context.viewer, new Uint8Array(await data.arrayBuffer()))
+  })
+
+/** 移除头像: back to the letter on a colour. */
+export const removeAvatarFn = createServerFn({ method: 'POST' })
+  .middleware([requireUser])
+  .validator(z.object({}).optional())
+  .handler(async ({ context }) => {
+    const { removeAvatar } = await import('./avatar')
+    return removeAvatar(context.viewer)
+  })
 
 export const getMeSummaryFn = createServerFn({ method: 'GET' })
   .middleware([requireUser])

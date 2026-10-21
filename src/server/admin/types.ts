@@ -244,6 +244,8 @@ export interface UserRow {
   id: string
   name: string
   email: string
+  /** 头像, 256 px; null shows the first letter */
+  avatarUrl: string | null
   role: Role
   submitMode: SubmitMode
   banned: boolean

@@ -8,6 +8,7 @@ import type { CommentStatus } from '../db/schema/community'
 import { setSetting, settingSchemas } from '../settings'
 import { HOT_THREAD_PER_HOUR, NEW_ACCOUNT_MS, QUEUE_PER_PAGE, REACTION_KEYS, type HoldReason } from './constants'
 import {
+  authorAvatar,
   authorName,
   badgeOf,
   decode,
@@ -80,6 +81,7 @@ interface QueueRow {
   author_id: string | null
   guest_name: string | null
   author_name: string | null
+  author_image: string | null
   author_role: string | null
   body_src: string
   status: CommentStatus
@@ -112,7 +114,7 @@ export async function commentQueue(actor: Actor | null, input: unknown, deps: Co
   let where = TAB_WHERE[tab]
   if (cursor) where = sql`${where} and ${keysetAfter(cols, decode(cursor, scope, cols).keys)}`
   const found = await rows<QueueRow & Record<string, string>>(sql`
-    select c.id, c.thread_type, c.thread_id, c.root_id, c.author_id, c.guest_name, u.name as author_name, u.role as author_role,
+    select c.id, c.thread_type, c.thread_id, c.root_id, c.author_id, c.guest_name, u.name as author_name, u.image as author_image, u.role as author_role,
       c.body_src, c.status, c.pinned, c.staff_badge, c.edited_at, c.deleted_at, c.created_at, c.ip_hash,
       ${keyTextSql(cols)},
       not exists (
@@ -160,6 +162,7 @@ export async function commentQueue(actor: Actor | null, input: unknown, deps: Co
         name,
         guest: !r.author_id && !!r.guest_name,
         color: avatarColor(name),
+        avatarUrl: authorAvatar(r),
         userId: r.author_id,
         role: r.author_role,
         banned: !!r.author_id && banned.has(r.author_id),

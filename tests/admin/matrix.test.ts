@@ -45,6 +45,7 @@ const EXPECTED: Record<string, Perm> = {
   adminUnbanUserFn: 'users',
   adminRevokeSessionsFn: 'users',
   adminImpersonateFn: 'users',
+  adminClearAvatarFn: 'users',
   adminStorageFn: 'storage',
   adminJobsFn: 'system',
   adminRetryJobFn: 'system',

@@ -6,8 +6,10 @@ import type { Viewer } from '../auth/session'
 import { db, schema } from '../db/client'
 import { favoriteTotal } from '../favorites/service'
 import { log } from '../log'
+import { avatarUrl } from '../media/keys'
 import { HttpError } from '../perm/fn'
 import { purgeSubmission } from '../submissions/cleanup'
+import { deleteAvatarFiles } from './avatar'
 import { unreadCount } from './notifications'
 
 // 个人中心: the header summary and 注销账号. Name, password and sessions are changed through Better
@@ -18,6 +20,8 @@ export interface MeSummary {
   name: string
   email: string
   emailVerified: boolean
+  /** 头像, 256 px (/img/v1/avatar/…), or null for the letter */
+  avatarUrl: string | null
   role: Role
   submitMode: 'review' | 'trusted' | 'blocked'
   joinedAt: string
@@ -44,6 +48,7 @@ export async function meSummary(viewer: Pick<Viewer, 'id'>): Promise<MeSummary> 
     name: u.name,
     email: u.email,
     emailVerified: u.emailVerified,
+    avatarUrl: avatarUrl(u.id, u.image, 256),
     role: u.role,
     submitMode: u.submitMode,
     joinedAt: u.createdAt.toISOString(),
@@ -68,12 +73,13 @@ const defaultDeps: DeleteAccountDeps = {
 /**
  * 注销账号: check the password, refuse for the last 站长, delete the user's unapproved submissions with
  * their files, then the user row (sessions, accounts, favorites, notifications cascade; packs and
- * comments keep their content with the owner set to null). Not reversible.
+ * comments keep their content with the owner set to null), then the 头像 files. Not reversible.
  */
 export async function deleteAccount(viewer: Pick<Viewer, 'id' | 'role' | 'impersonatedBy'>, password: string, deps: DeleteAccountDeps = defaultDeps): Promise<void> {
   if (viewer.impersonatedBy) throw new HttpError(403, '模拟登录时不能注销账号')
   const d = db()
   const { accounts, users, submissions } = schema
+  const [me] = await d.select({ image: users.image }).from(users).where(eq(users.id, viewer.id))
   const [cred] = await d
     .select({ hash: accounts.password })
     .from(accounts)
@@ -107,5 +113,7 @@ export async function deleteAccount(viewer: Pick<Viewer, 'id' | 'role' | 'impers
     log().warn({ err: text, userId: viewer.id }, 'account: delete refused')
     throw new HttpError(400, /active admin|站长/i.test(text) ? '你是最后一位站长，不能注销账号。' : '注销失败，请稍后再试')
   }
+  // only after the row is gone: the last-admin trigger can still roll the transaction back
+  await deleteAvatarFiles(viewer.id, me?.image)
   await audit(viewer, 'account.delete', { type: 'user', id: viewer.id }, { submissionsPurged: open.length })
 }

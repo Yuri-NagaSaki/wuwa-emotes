@@ -1,8 +1,12 @@
 import { createServerFn } from '@tanstack/react-start'
+import { eq } from 'drizzle-orm'
 import type { Role } from '#/shared/roles'
+import type { Viewer } from '../auth/session'
 import { getHome } from '../catalog/home'
+import { db, schema } from '../db/client'
 import { env } from '../env'
 import { log } from '../log'
+import { avatarUrl } from '../media/keys'
 import { publicFn, requireUser } from '../perm/fn'
 import { getSetting, siteIdentity } from '../settings'
 
@@ -15,6 +19,8 @@ export interface ViewerSummary {
   role: Role
   /** a 站长 is browsing as this user (模拟登录) */
   impersonated: boolean
+  /** 头像, 256 px (/img/v1/avatar/…); null shows the first letter */
+  avatarUrl: string | null
 }
 
 export interface PublicConfig {
@@ -48,16 +54,31 @@ async function readStats(): Promise<PublicConfig['stats']> {
   }
 }
 
+/** The viewer's 头像 URL (one primary-key read; Viewer itself does not carry users.image). */
+async function readAvatar(userId: string): Promise<string | null> {
+  try {
+    const [u] = await db().select({ image: schema.users.image }).from(schema.users).where(eq(schema.users.id, userId))
+    return avatarUrl(userId, u?.image, 256)
+  } catch (err) {
+    log().warn({ err: (err as Error).message }, 'ui: avatar unavailable for the header')
+    return null
+  }
+}
+
+async function summarize(v: Viewer): Promise<ViewerSummary> {
+  return { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy), avatarUrl: await readAvatar(v.id) }
+}
+
 export const getPublicConfig = createServerFn({ method: 'GET' })
   .middleware([publicFn])
   .handler(async ({ context }): Promise<PublicConfig> => {
-    const [{ site, announcement }, stats] = await Promise.all([readSite(), readStats()])
     const v = context.viewer
+    const [{ site, announcement }, stats, viewer] = await Promise.all([readSite(), readStats(), v ? summarize(v) : null])
     return {
       site,
       announcement,
       cap: { endpoint: env().CAP_API_ENDPOINT },
-      viewer: v ? { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) } : null,
+      viewer,
       stats,
     }
   })
@@ -65,7 +86,4 @@ export const getPublicConfig = createServerFn({ method: 'GET' })
 /** The signed-in viewer for the admin layout. Anonymous callers get 401 from requireUser. */
 export const getAdminViewer = createServerFn({ method: 'GET' })
   .middleware([requireUser])
-  .handler(async ({ context }): Promise<ViewerSummary> => {
-    const v = context.viewer
-    return { id: v.id, name: v.name, role: v.role, impersonated: Boolean(v.impersonatedBy) }
-  })
+  .handler(({ context }): Promise<ViewerSummary> => summarize(context.viewer))

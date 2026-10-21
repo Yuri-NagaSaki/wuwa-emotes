@@ -1,4 +1,4 @@
-import { derivedKey, imgUrl, type ImgRef, parseImgPath, parsePortraitPath, portraitKey } from './keys'
+import { avatarKey, derivedKey, imgUrl, type ImgRef, parseAvatarPath, parseImgPath, parsePortraitPath, portraitKey } from './keys'
 
 // /img: the only public path to images. Reads derived/v1/ (published emojis only) and
 // characters/v1/portraits/ (official character portraits, /img/v1/portrait/…).
@@ -71,7 +71,11 @@ export async function handleImg(request: Request, deps: ImgDeps): Promise<Respon
   if (!ref) {
     // character portraits: characters/v1/portraits/ only; public by nature, so no database lookup
     const portrait = parsePortraitPath(pathname)
-    return (portrait && (await serveObject(request, deps, portraitKey(portrait)))) || notFound()
+    if (portrait) return (await serveObject(request, deps, portraitKey(portrait))) || notFound()
+    // user avatars (/img/v1/avatar/…): avatars/v1/<userId>/<hash>-<size>.webp only, content-addressed,
+    // so no database lookup either
+    const avatar = parseAvatarPath(pathname)
+    return (avatar && (await serveObject(request, deps, avatarKey(avatar.userId, avatar.hash, avatar.size)))) || notFound()
   }
 
   const hit = await serveObject(request, deps, derivedKey(ref.variant, ref.packKey, ref.emojiId, ref.rev))

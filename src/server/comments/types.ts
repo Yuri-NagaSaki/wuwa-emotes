@@ -24,6 +24,8 @@ export interface CommentAuthor {
   guest: boolean
   /** Deterministic avatar color (a --c-* palette name). */
   color: string
+  /** 64 px 头像 (/img/v1/avatar/…-64.webp); null for guests, deleted accounts and users without one. */
+  avatarUrl: string | null
 }
 
 export interface ReactionCount {

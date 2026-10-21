@@ -9,6 +9,7 @@ import { CatalogInputError, decodeCursor, encodeCursor } from '../catalog/cursor
 import type { KeyCol } from '../catalog/sql'
 import type { CommentStatus, CommentThread } from '../db/schema/community'
 import { hashValue } from '../http/client'
+import { avatarUrl } from '../media/keys'
 import { getSetting, type SettingValue } from '../settings'
 import { BADGES, REACTION_KEYS, type Badge, type ReactionKey } from './constants'
 import { avatarColor, CommentError } from './moderation'
@@ -98,6 +99,8 @@ export interface CommentRow {
   deleted_at: Date | string | null
   created_at: Date | string
   author_name: string | null
+  /** users.image of the author (the 头像 hash) */
+  author_image: string | null
   /** author name of the parent, when parent ≠ root */
   reply_to: string | null
 }
@@ -105,7 +108,7 @@ export interface CommentRow {
 /** Select list for CommentRow; `c` = comments, joins users `u` and the parent `pc`/`pu`. */
 export const COMMENT_COLS = sql.raw(
   `c.id, c.thread_type, c.thread_id, c.parent_id, c.root_id, c.author_id, c.guest_name, c.body_src, c.status, ` +
-    `c.pinned, c.staff_badge, c.edited_at, c.deleted_at, c.created_at, u.name as author_name, ` +
+    `c.pinned, c.staff_badge, c.edited_at, c.deleted_at, c.created_at, u.name as author_name, u.image as author_image, ` +
     `case when c.parent_id is not null and c.parent_id <> c.root_id then coalesce(pu.name, pc.guest_name) end as reply_to`,
 )
 export const COMMENT_JOINS = sql.raw(
@@ -146,6 +149,11 @@ export function authorName(row: Pick<CommentRow, 'author_id' | 'author_name' | '
   return '已注销用户'
 }
 
+/** The author's 64 px 头像, or null (guests, deleted accounts, no avatar): those keep the letter. */
+export function authorAvatar(row: { author_id: string | null; author_image?: string | null }): string | null {
+  return row.author_id ? avatarUrl(row.author_id, row.author_image, 64) : null
+}
+
 export interface ItemOpts {
   viewerId: string | null
   editWindowMinutes: number
@@ -172,7 +180,7 @@ export function toItem(row: CommentRow, o: ItemOpts): CommentItem {
     rootId: nOrNull(row.root_id),
     parentId: nOrNull(row.parent_id),
     replyTo: shown ? (row.reply_to ?? null) : null,
-    author: shown ? { name, guest: !row.author_id && !!row.guest_name, color: avatarColor(name) } : null,
+    author: shown ? { name, guest: !row.author_id && !!row.guest_name, color: avatarColor(name), avatarUrl: authorAvatar(row) } : null,
     badge: shown ? badgeOf(row.staff_badge) : null,
     pinned: row.pinned,
     state,
