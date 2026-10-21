@@ -2,7 +2,7 @@ import { makePng, person, rejects, setup, sqlRows, type Person } from '../submis
 import { authCall, goodToken, SITE_URL } from '../integration/setup'
 import { runServerFn } from '../admin/harness'
 import { beforeAll, describe, expect, test } from 'bun:test'
-import sharp from 'sharp'
+import sharp, { type OutputInfo } from 'sharp'
 import { AVATAR_CHANGES_PER_HOUR, AVATAR_MAX_BYTES, removeAvatar, setAvatar } from '#/server/account/avatar'
 import { deleteAccount, meSummary } from '#/server/account/service'
 import { imgDeps } from '#/server/http/img-deps'
@@ -43,7 +43,7 @@ async function sidewaysJpeg(): Promise<Buffer> {
   return sharp(px, { raw: { width: w, height: h, channels: 3 } }).jpeg({ quality: 95 }).withMetadata({ orientation: 6 }).toBuffer()
 }
 
-function rgbAt(raw: { data: Buffer; info: sharp.OutputInfo }, x: number, y: number) {
+function rgbAt(raw: { data: Buffer; info: OutputInfo }, x: number, y: number) {
   const o = (y * raw.info.width + x) * raw.info.channels
   return [raw.data[o]!, raw.data[o + 1]!, raw.data[o + 2]!]
 }

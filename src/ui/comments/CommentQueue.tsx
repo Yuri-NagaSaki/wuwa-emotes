@@ -1,8 +1,9 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import type { CommentSettingsView } from '#/server/comments/admin'
 import { banCommenterFn, commentQueueFn, commentSettingsFn, moderateCommentsFn, pinCommentFn, saveCommentSettingsFn } from '#/server/comments/admin-fns'
 import { BADGE_LABELS, HOLD_REASON_LABELS, MAX_STICKERS, REACTION_KEYS, REACTION_LABELS, type ReactionKey } from '#/server/comments/constants'
 import type { ModerateAction, QueueItem, QueuePage, QueueTab } from '#/server/comments/types'
+import { Avatar } from '../Avatar'
 import { Button } from '../Button'
 import { Chip, Chips } from '../Chip'
 import { cx } from '../cx'
@@ -174,15 +175,6 @@ export function CommentQueue({ initialQueue, initialSettings, viewerRole }: Comm
   )
 }
 
-function Avatar({ name, color }: { name: string; color: string }) {
-  const c = `var(--c-${color})`
-  return (
-    <span className="avatar sm" aria-hidden="true" style={{ borderColor: c, background: `color-mix(in srgb, ${c} 30%, var(--tp-card))` } as CSSProperties}>
-      {[...name][0] ?? '?'}
-    </span>
-  )
-}
-
 interface QueueCardProps {
   item: QueueItem
   tab: QueueTab
@@ -230,7 +222,7 @@ function QueueCard({ item, tab, selected, onSelect, onAct, onPin, onBan, canBan,
         <Check checked={selected} onChange={onSelect}>
           <span className="sr">选择这条评论</span>
         </Check>
-        <Avatar name={item.author.name} color={item.author.color} />
+        <Avatar name={item.author.name} src={item.author.avatarUrl} color={item.author.color} size="sm" />
       </div>
       <div>
         <div className="cmt-h">

@@ -30,7 +30,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
         跳到正文
       </a>
       <AnnouncementBar text={announcement} />
-      <Header siteName={site.name} subtitle={site.subtitle} trayCount={trayCount} onTrayClick={() => tray.open()} onSearch={() => palette.open()} user={viewer ? { name: viewer.name } : null} />
+      <Header siteName={site.name} subtitle={site.subtitle} trayCount={trayCount} onTrayClick={() => tray.open()} onSearch={() => palette.open()} user={viewer ? { name: viewer.name, avatarUrl: viewer.avatarUrl } : null} />
       <main id="main" className={deepLink ? 'page no-enter' : 'page'}>
         {children}
       </main>
