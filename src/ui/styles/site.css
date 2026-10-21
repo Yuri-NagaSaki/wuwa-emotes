@@ -87,9 +87,23 @@ html[data-viewer-pending] .head .user-slot[href="/login"] { visibility: hidden; 
   .bottle-btn { height: 38px; padding: 0 10px 0 6px; }
   .tabbar { display: grid; }
   .fab-bottle.is-on { display: grid; }
-  .foot { margin-bottom: 0; padding-bottom: calc(96px + var(--safe-bottom)); }
-  .foot .wrap { grid-template-columns: 1fr; gap: 22px; }
   .announce .wrap { min-height: 34px; font-size: 12.5px; }
+}
+
+/* footer on phones: short and quiet. The logo row with its subtitle (no paragraph), the three link groups
+   as three columns of plain 13 px links under small headings, one base line that may wrap. The bottom
+   padding clears the tab bar (64 px, Tabbar.tsx) and the safe area, plus 6 px of air. */
+@media (max-width: 760px) {
+  .foot { margin: 44px 0 0; padding-bottom: calc(70px + var(--safe-bottom)); }
+  .foot .wrap { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 12px; padding-top: 12px; }
+  .foot .about { grid-column: 1 / -1; }
+  .foot .about p, .foot-base .lic { display: none; }
+  .foot .logo { margin-bottom: 0; }
+  .foot .logo-mark { width: 28px; height: 28px; }
+  .foot .logo-word b { font-size: 18px; }
+  .foot h4 { font-size: 12px; color: #93b9b2; margin-bottom: 6px; }
+  .foot ul { gap: 4px; font-size: 13px; line-height: 1.5; }
+  .foot-base { margin-top: 0; padding-top: 10px; gap: 2px 12px; font-size: 12px; }
 }
 
 /* ============ 投稿 and 打包清单 pages (prototype tp-v3.css) ============ */
