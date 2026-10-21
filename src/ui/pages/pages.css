@@ -134,13 +134,13 @@
 .pack-lower .cm-head, .rel-head { min-height: 38px; }
 .pack-comments { min-width: 0; }
 .pack-related { order: -1; display: grid; gap: 14px; align-content: start; }
-/* The column's height is known ahead (fixed rows: head 38 + gap 14 + the list, whose box is the row of
-   219 px cards + 16 px of room for focus rings; desktop n rows of 104 px with 4 px gaps + 16 px): the
-   column holds it before a client-side page renders the list (RelatedPacks.tsx), and off screen the
-   list skips style, layout and paint, so nothing moves either way. The list, not the column, is the
-   contained box: its own box already spans the bleed to the screen edges and the focus-ring room,
-   which paint containment would otherwise cut off. */
-.pack-related { --rel-list-h: 235px; min-height: calc(36px + var(--rel-list-h)); }
+/* The column's height is known ahead: head 38 + gap 14 + the list's content (fixed rows: one row of
+   219 px cards; desktop n rows of 104 px with 4 px gaps; the list's 8 px of focus-ring room above and
+   below is taken back by its margins). The column holds it before a client-side page renders the list
+   (RelatedPacks.tsx), and off screen the list skips style, layout and paint at that size, so nothing
+   moves either way. The list, not the column, is the contained box: its own box already spans the
+   bleed to the screen edges and the focus-ring room, which paint containment would otherwise cut. */
+.pack-related { --rel-list-h: 219px; min-height: calc(52px + var(--rel-list-h)); }
 .rel-head { display: flex; align-items: center; gap: 12px; }
 .rel-head h2 { font-size: 22px; }
 .rel-list { list-style: none; margin: 0; padding: 0; content-visibility: auto; contain-intrinsic-block-size: auto var(--rel-list-h); }
@@ -160,7 +160,7 @@
 .rel-item:hover .rel-cover { transform: translateY(-2px); border-color: color-mix(in srgb, var(--acc, var(--c-mint)) 70%, var(--tp-line)); }
 @media (min-width: 1100px) {
   .pack-lower.has-related { grid-template-columns: minmax(0, 1fr) 376px; column-gap: 40px; }
-  .pack-related { order: 0; --rel-list-h: calc(12px + var(--rel-n, 10) * 108px); }
+  .pack-related { order: 0; --rel-list-h: calc(var(--rel-n, 10) * 108px - 4px); }
   .rel-list { display: grid; gap: 4px; margin: -8px -16px; padding: 8px; }
   .rel-item { grid-template-columns: 88px minmax(0, 1fr); gap: 14px; align-items: center; padding: 8px; transition: background-color var(--t-fast) var(--ease); }
   .rel-item:hover { background: var(--tp-sand); }
